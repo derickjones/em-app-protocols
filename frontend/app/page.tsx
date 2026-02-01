@@ -93,15 +93,22 @@ export default function Home() {
         <div className="flex-1 flex flex-col items-center justify-center px-6 pb-32">
           {!hasSearched ? (
             <div className="w-full max-w-[800px] space-y-8">
-              {/* Greeting */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-blue-400" fill="currentColor" />
-                  <span className="text-xl text-gray-300">Hi Derick</span>
-                </div>
-                <h1 className="text-5xl font-normal text-white/90 tracking-tight">
-                  Where should we start?
+              {/* Logo */}
+              <div className="flex flex-col items-center space-y-2">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-wider text-white text-center">
+                  EMERGENCY MEDICINE APP
                 </h1>
+                {/* EKG Line */}
+                <svg viewBox="0 0 300 50" className="w-64 sm:w-80 h-10">
+                  <path
+                    d="M0,25 L90,25 L110,25 L125,10 L140,40 L155,5 L170,45 L185,25 L210,25 L300,25"
+                    stroke="#ef4444"
+                    strokeWidth="2.5"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </div>
 
               {/* Input Box */}
