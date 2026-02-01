@@ -12,9 +12,15 @@ interface Citation {
   relevance_score: number;
 }
 
+interface ProtocolImage {
+  page: number;
+  url: string;
+  protocol_id: string;
+}
+
 interface QueryResponse {
   answer: string;
-  images: string[];
+  images: ProtocolImage[];
   citations: Citation[];
   query_time_ms: number;
 }
@@ -203,17 +209,20 @@ export default function Home() {
                   Related Protocol Images
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {response.images.map((imageUrl, index) => (
+                  {response.images.map((image, index) => (
                     <div
                       key={index}
                       className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
                     >
                       <img
-                        src={imageUrl}
-                        alt={`Protocol diagram ${index + 1}`}
+                        src={image.url}
+                        alt={`${image.protocol_id} - Page ${image.page}`}
                         className="w-full h-auto"
                         loading="lazy"
                       />
+                      <div className="px-3 py-2 bg-gray-50 text-xs text-gray-600">
+                        {image.protocol_id} • Page {image.page}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -221,18 +230,28 @@ export default function Home() {
             )}
 
             {/* Citations */}
-            {response.citations && response.citations.length > 0 && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <h3 className="text-sm font-medium text-gray-600 mb-2">Sources</h3>
-                <ul className="space-y-1">
-                  {response.citations.map((citation, index) => (
-                    <li key={index} className="text-sm text-gray-500">
-                      • {citation.protocol_id} (relevance: {(citation.relevance_score * 100).toFixed(0)}%)
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {response.citations && response.citations.length > 0 && (() => {
+              // Filter and deduplicate citations
+              const uniqueCitations = response.citations
+                .filter(c => c.protocol_id !== 'extracted_text')
+                .filter((c, i, arr) => arr.findIndex(x => x.protocol_id === c.protocol_id) === i)
+                .sort((a, b) => b.relevance_score - a.relevance_score);
+              
+              if (uniqueCitations.length === 0) return null;
+              
+              return (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-gray-600 mb-2">Sources</h3>
+                  <ul className="space-y-1">
+                    {uniqueCitations.map((citation, index) => (
+                      <li key={index} className="text-sm text-gray-500">
+                        • {citation.protocol_id.replace(/_/g, ' ')} ({(citation.relevance_score * 100).toFixed(0)}% match)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
         )}
 
