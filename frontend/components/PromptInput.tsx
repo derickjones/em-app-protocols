@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowUp, Mic, MicOff } from "lucide-react";
+import { Plus, Mic, SlidersHorizontal } from "lucide-react";
 
 type PromptInputProps = {
   question: string;
@@ -19,7 +19,6 @@ export default function PromptInput({
   pinned = false,
 }: PromptInputProps) {
   const [listening, setListening] = useState(false);
-  const [interimTranscript, setInterimTranscript] = useState("");
 
   const handleMicClick = () => {
     setListening(!listening);
@@ -40,49 +39,62 @@ export default function PromptInput({
   return (
     <div
       className={`w-full flex justify-center ${
-        pinned ? "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 shadow-md z-50" : ""
+        pinned ? "fixed bottom-0 left-0 right-0 px-4 py-6 z-50 bg-gradient-to-t from-[#131314] to-transparent" : ""
       }`}
     >
-      <div className="w-full max-w-4xl">
-        <div className="relative mt-2">
-          <textarea
-            className="w-full p-4 pl-5 pr-20 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
-            placeholder="Enter a clinical question or use the mic..."
-            rows={2}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
+      <div className="w-full max-w-3xl">
+        {/* Input container */}
+        <div className="bg-[#1e1f20] border border-[#3c4043] rounded-3xl overflow-hidden hover:border-[#5f6368] transition-colors">
+          {/* Text input area */}
+          <div className="px-6 pt-5 pb-3">
+            <textarea
+              className="w-full bg-transparent text-white placeholder-[#9aa0a6] focus:outline-none text-base resize-none leading-relaxed"
+              placeholder="Ask about emergency protocols..."
+              rows={1}
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{ minHeight: '28px' }}
+            />
+          </div>
 
-          <button
-            onClick={handleMicClick}
-            title="Voice input"
-            className={`absolute right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl ${
-              listening ? "bg-red-200 text-red-700" : "bg-white text-gray-600"
-            } flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg`}
-          >
-            {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </button>
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-between px-4 pb-4">
+            <div className="flex items-center space-x-1">
+              {/* Plus button */}
+              <button
+                type="button"
+                className="w-10 h-10 flex items-center justify-center text-[#9aa0a6] hover:text-white hover:bg-[#3c4043] rounded-full transition-all duration-200"
+              >
+                <Plus className="w-5 h-5" strokeWidth={1.5} />
+              </button>
 
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            title="Submit"
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
-          >
-            {loading ? (
-              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <ArrowUp className="w-4 h-4" />
-            )}
-          </button>
+              {/* Tools button */}
+              <button
+                type="button"
+                className="flex items-center space-x-2 px-4 py-2 text-[#9aa0a6] hover:text-white hover:bg-[#3c4043] rounded-full transition-all duration-200"
+              >
+                <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
+                <span className="text-sm font-light">Tools</span>
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {/* Mic button */}
+              <button
+                type="button"
+                onClick={handleMicClick}
+                className={`w-10 h-10 flex items-center justify-center rounded-full transition-all duration-200 ${
+                  listening 
+                    ? "text-red-400 bg-red-500/20" 
+                    : "text-[#9aa0a6] hover:text-white hover:bg-[#3c4043]"
+                }`}
+              >
+                <Mic className="w-5 h-5" strokeWidth={1.5} />
+              </button>
+            </div>
+          </div>
         </div>
-
-        {interimTranscript && (
-          <p className="text-xs text-gray-500 italic mt-1 px-1 font-sans">
-            🎤 {interimTranscript}
-          </p>
-        )}
       </div>
     </div>
   );
