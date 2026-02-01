@@ -2,49 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #131314;
-  --foreground: #ffffff;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  background: #131314;
+  color: #fff;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar for dark theme */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
-  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: #3c4043;
   border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #5f6368;
 }
 
-/* Selection color */
+/* Selection */
 ::selection {
-  background: rgba(66, 133, 244, 0.3);
+  background: rgba(138, 180, 248, 0.3);
 }
 
-/* Focus styles */
+/* Remove focus outlines */
 *:focus {
   outline: none;
 }
 
-/* Smooth animations */
-* {
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+/* Prose overrides for dark mode */
+.prose {
+  --tw-prose-body: #e3e3e3;
+  --tw-prose-headings: #fff;
+  --tw-prose-links: #8ab4f8;
+  --tw-prose-bold: #fff;
+  --tw-prose-code: #8ab4f8;
 }

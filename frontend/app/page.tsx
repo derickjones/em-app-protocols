@@ -1,28 +1,15 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Sparkles, Menu, SquarePen, Mic, Plus, SlidersHorizontal, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import PromptInput from "@/components/PromptInput";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
-interface Citation {
-  protocol_id: string;
-  source_uri: string;
-  relevance_score: number;
-}
-
-interface ProtocolImage {
-  page: number;
-  url: string;
-  protocol_id: string;
-}
-
 interface QueryResponse {
   answer: string;
-  images: ProtocolImage[];
-  citations: Citation[];
+  images: { page: number; url: string; protocol_id: string }[];
+  citations: { protocol_id: string; source_uri: string; relevance_score: number }[];
   query_time_ms: number;
 }
 
@@ -35,7 +22,6 @@ export default function Home() {
 
   const handleSubmit = async () => {
     if (!question.trim() || loading) return;
-
     setLoading(true);
     setError(null);
     setHasSearched(true);
@@ -46,11 +32,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: question.trim() }),
       });
-
-      if (!res.ok) {
-        throw new Error(`Error: ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(`Error: ${res.status}`);
       const data: QueryResponse = await res.json();
       setResponse(data);
     } catch (err) {
@@ -68,183 +50,173 @@ export default function Home() {
     setHasSearched(false);
   };
 
-  // Get unique citations
-  const uniqueCitations = response?.citations
-    ? Array.from(
-        new Map(
-          response.citations
-            .filter((c) => c.protocol_id !== "extracted_text")
-            .map((c) => [c.protocol_id, c])
-        ).values()
-      )
-    : [];
-
-  // Quick action buttons
   const quickActions = [
-    { emoji: "��", label: "ACLS protocols" },
+    { emoji: "🫀", label: "ACLS protocols" },
     { emoji: "🩺", label: "Trauma assessment" },
     { emoji: "💊", label: "Drug dosing" },
     { emoji: "⚡", label: "Stroke pathway" },
+    { emoji: "🧠", label: "Neuro exam" },
   ];
 
   return (
-    <main className="min-h-screen bg-[#131314] text-white">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex items-center justify-between">
-        <button 
-          onClick={resetSearch}
-          className="text-lg font-medium text-white/90 hover:text-white transition-colors cursor-pointer"
-        >
-          EM Protocols
+    <div className="min-h-screen bg-[#131314] text-white flex">
+      {/* Left Sidebar */}
+      <div className="w-16 flex-shrink-0 flex flex-col items-center py-4 border-r border-white/10">
+        <button className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors">
+          <Menu className="w-5 h-5" />
         </button>
-        
-        <div className="flex items-center space-x-3">
-          <span className="text-xs text-[#9aa0a6] px-2 py-1 bg-[#1e1f20] rounded-full border border-[#3c4043]">
-            PRO
-          </span>
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-sm font-medium">
-            D
-          </div>
-        </div>
-      </header>
+        <button className="w-10 h-10 mt-4 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors">
+          <SquarePen className="w-5 h-5" />
+        </button>
+      </div>
 
-      {/* Main content */}
-      <div className="flex flex-col items-center justify-center min-h-screen px-4 pb-32">
-        {!hasSearched ? (
-          /* Welcome state */
-          <div className="w-full max-w-3xl space-y-8 -mt-16">
-            {/* Greeting */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2 text-[#9aa0a6]">
-                <Sparkles className="w-5 h-5 text-blue-400" />
-                <span className="text-lg">Hi there</span>
-              </div>
-              <h1 className="text-4xl md:text-5xl font-light text-white/90">
-                Where should we start?
-              </h1>
-            </div>
-
-            {/* Input */}
-            <PromptInput
-              question={question}
-              setQuestion={setQuestion}
-              onSubmit={handleSubmit}
-              loading={loading}
-            />
-
-            {/* Quick actions */}
-            <div className="flex flex-wrap gap-3 justify-center pt-4">
-              {quickActions.map((action, i) => (
-                <button
-                  key={i}
-                  onClick={() => setQuestion(action.label)}
-                  className="flex items-center space-x-2 px-5 py-3 bg-[#1e1f20] border border-[#3c4043] rounded-full text-sm text-[#e3e3e3] hover:bg-[#2d2e2f] hover:border-[#5f6368] transition-all duration-200"
-                >
-                  <span>{action.emoji}</span>
-                  <span>{action.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          /* Results state */
-          <div className="w-full max-w-3xl pt-24 space-y-6">
-            {/* User question */}
-            <div className="flex justify-end">
-              <div className="bg-[#1e1f20] border border-[#3c4043] rounded-2xl px-5 py-3 max-w-[80%]">
-                <p className="text-white/90">{question}</p>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <header className="h-16 flex items-center justify-between px-6 border-b border-white/5">
+          <button onClick={resetSearch} className="text-xl font-normal text-white hover:text-white/80 transition-colors">
+            EM Protocols
+          </button>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400 px-2.5 py-1 bg-white/5 rounded-full border border-white/10">
+              PRO
+            </span>
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-500 p-0.5">
+              <div className="w-full h-full rounded-full bg-[#131314] flex items-center justify-center text-sm font-medium">
+                D
               </div>
             </div>
+          </div>
+        </header>
 
-            {/* AI Response */}
-            <div className="space-y-4">
-              {loading ? (
-                <div className="flex items-center space-x-3 text-[#9aa0a6]">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        {/* Center Content */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6 pb-32">
+          {!hasSearched ? (
+            <div className="w-full max-w-[800px] space-y-8">
+              {/* Greeting */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-6 h-6 text-blue-400" fill="currentColor" />
+                  <span className="text-xl text-gray-300">Hi Derick</span>
+                </div>
+                <h1 className="text-5xl font-normal text-white/90 tracking-tight">
+                  Where should we start?
+                </h1>
+              </div>
+
+              {/* Input Box */}
+              <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] hover:border-[#5f6368] transition-colors overflow-hidden">
+                {/* Input Field */}
+                <div className="px-6 pt-5 pb-2">
+                  <input
+                    type="text"
+                    placeholder="Ask about emergency protocols..."
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                    className="w-full bg-transparent text-white text-lg placeholder-[#8e9193] focus:outline-none"
+                  />
+                </div>
+
+                {/* Toolbar */}
+                <div className="flex items-center justify-between px-4 pb-4">
+                  <div className="flex items-center gap-1">
+                    <button className="w-10 h-10 flex items-center justify-center text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
+                      <Plus className="w-5 h-5" />
+                    </button>
+                    <button className="flex items-center gap-2 px-4 h-10 text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
+                      <SlidersHorizontal className="w-4 h-4" />
+                      <span className="text-sm">Tools</span>
+                    </button>
                   </div>
-                  <span className="text-sm">Searching protocols...</span>
+                  <div className="flex items-center gap-1">
+                    <button className="flex items-center gap-1 px-3 h-10 text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
+                      <span className="text-sm">Pro</span>
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button className="w-10 h-10 flex items-center justify-center text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
+                      <Mic className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                {quickActions.map((action, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setQuestion(action.label);
+                    }}
+                    className="flex items-center gap-2 px-5 py-3 bg-[#1e1f20] border border-[#3c4043] rounded-full text-[15px] text-[#c4c7c5] hover:bg-[#2c2d2e] hover:border-[#5f6368] transition-all"
+                  >
+                    <span>{action.emoji}</span>
+                    <span>{action.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Results View */
+            <div className="w-full max-w-[800px] pt-8 space-y-6">
+              {/* User Question */}
+              <div className="flex justify-end">
+                <div className="bg-[#2f3133] rounded-2xl px-5 py-3 max-w-[80%]">
+                  <p className="text-white">{question}</p>
+                </div>
+              </div>
+
+              {/* Response */}
+              {loading ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                  <span className="text-sm text-gray-400">Searching protocols...</span>
                 </div>
               ) : error ? (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-5 py-4">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-2xl px-5 py-4">
                   <p className="text-red-400">{error}</p>
                 </div>
               ) : response ? (
-                <div className="space-y-4">
-                  {/* Response time badge */}
-                  <div className="flex items-center space-x-2 text-xs text-[#9aa0a6]">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Sparkles className="w-4 h-4 text-blue-400" />
-                    <span>Response in {response.query_time_ms}ms</span>
+                    <span>{response.query_time_ms}ms</span>
                   </div>
-                  
-                  {/* Answer */}
-                  <div className="prose prose-invert prose-sm max-w-none">
-                    <ReactMarkdown
-                      components={{
-                        h1: ({ children }) => <h1 className="text-xl font-semibold text-white mb-4">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-lg font-medium text-white mt-6 mb-3">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-base font-medium text-white mt-4 mb-2">{children}</h3>,
-                        p: ({ children }) => <p className="text-[#e3e3e3] leading-relaxed mb-4">{children}</p>,
-                        ul: ({ children }) => <ul className="space-y-2 mb-4">{children}</ul>,
-                        ol: ({ children }) => <ol className="space-y-2 mb-4 list-decimal list-inside">{children}</ol>,
-                        li: ({ children }) => <li className="text-[#e3e3e3]">{children}</li>,
-                        strong: ({ children }) => <strong className="text-white font-medium">{children}</strong>,
-                        code: ({ children }) => <code className="bg-[#1e1f20] px-2 py-1 rounded text-sm text-blue-300">{children}</code>,
-                      }}
-                    >
-                      {response.answer}
-                    </ReactMarkdown>
+                  <div className="prose prose-invert prose-p:text-[#e3e3e3] prose-headings:text-white max-w-none">
+                    <ReactMarkdown>{response.answer}</ReactMarkdown>
                   </div>
-
-                  {/* Citations */}
-                  {uniqueCitations.length > 0 && (
-                    <div className="pt-4 border-t border-[#3c4043]">
-                      <p className="text-xs text-[#9aa0a6] mb-3">Sources</p>
-                      <div className="flex flex-wrap gap-2">
-                        {uniqueCitations.map((citation, i) => (
-                          <span
-                            key={i}
-                            className="px-3 py-1.5 bg-[#1e1f20] border border-[#3c4043] rounded-full text-xs text-[#9aa0a6]"
-                          >
-                            {citation.protocol_id}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Images */}
-                  {response.images && response.images.length > 0 && (
-                    <div className="pt-4 border-t border-[#3c4043]">
-                      <p className="text-xs text-[#9aa0a6] mb-3">Related diagrams</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {response.images.slice(0, 4).map((img, i) => (
-                          <div key={i} className="rounded-xl overflow-hidden border border-[#3c4043]">
-                            <img src={img.url} alt={`Protocol diagram ${i + 1}`} className="w-full" />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Input (when searching) */}
+        {hasSearched && (
+          <div className="fixed bottom-0 left-16 right-0 p-6 bg-gradient-to-t from-[#131314] via-[#131314] to-transparent">
+            <div className="max-w-[800px] mx-auto">
+              <div className="bg-[#1e1f20] rounded-full border border-[#3c4043] flex items-center px-4 py-2">
+                <input
+                  type="text"
+                  placeholder="Ask a follow-up..."
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  className="flex-1 bg-transparent text-white placeholder-[#8e9193] focus:outline-none px-2"
+                />
+                <button className="w-9 h-9 flex items-center justify-center text-[#9aa0a6] hover:bg-[#3c4043] rounded-full">
+                  <Mic className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
-
-      {/* Pinned input when in results */}
-      {hasSearched && (
-        <PromptInput
-          question={question}
-          setQuestion={setQuestion}
-          onSubmit={handleSubmit}
-          loading={loading}
-          pinned
-        />
-      )}
-    </main>
+    </div>
   );
 }
