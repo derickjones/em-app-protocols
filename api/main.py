@@ -3,7 +3,8 @@ EM Protocol RAG API
 FastAPI backend for querying emergency medicine protocols
 """
 
-from fastapi import FastAPI, HTTPException, Query
+import os
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -215,50 +216,73 @@ class UploadURLRequest(BaseModel):
     filename: str = Field(..., description="PDF filename")
 
 class UploadURLResponse(BaseModel):
-    """Response with signed upload URL"""
+    """Response with upload info"""
     upload_url: str
     gcs_path: str
-    expires_in: int
+    method: str
 
 @app.post("/upload-url", response_model=UploadURLResponse)
-async def get_upload_url(request: UploadURLRequest):
+async def get_upload_url(request: UploadURLRequest, http_request: Request):
     """
-    Generate a signed URL for uploading a PDF to GCS.
-    The upload will trigger the Cloud Function to process the PDF.
+    Returns the API endpoint for uploading PDFs.
+    Upload PDFs via POST to /upload with multipart form data.
+    """
+    # Sanitize filename
+    safe_filename = request.filename.replace(" ", "_")
+    if not safe_filename.lower().endswith(".pdf"):
+        safe_filename += ".pdf"
+    
+    gcs_path = f"gs://clinical-assistant-457902-protocols-raw/{request.org_id}/{safe_filename}"
+    
+    # Get base URL from request
+    base_url = str(http_request.base_url).rstrip('/')
+    
+    return UploadURLResponse(
+        upload_url=f"{base_url}/upload",
+        gcs_path=gcs_path,
+        method="POST multipart/form-data with 'file' and 'org_id' fields"
+    )
+
+
+@app.post("/upload")
+async def upload_pdf(
+    file: UploadFile = File(...),
+    org_id: str = Form(...)
+):
+    """
+    Upload a PDF protocol directly.
+    The file will be saved to GCS and trigger processing.
     """
     from google.cloud import storage
-    from datetime import timedelta
+    
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
     
     try:
         # Sanitize filename
-        safe_filename = request.filename.replace(" ", "_")
-        if not safe_filename.lower().endswith(".pdf"):
-            safe_filename += ".pdf"
+        safe_filename = file.filename.replace(" ", "_")
         
-        # GCS path in the raw protocols bucket (triggers Cloud Function)
+        # Upload to GCS (triggers Cloud Function)
         bucket_name = "clinical-assistant-457902-protocols-raw"
-        blob_path = f"{request.org_id}/{safe_filename}"
+        blob_path = f"{org_id}/{safe_filename}"
         
-        # Generate signed URL
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
         
-        url = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(minutes=15),
-            method="PUT",
-            content_type="application/pdf",
-        )
+        # Read file content
+        content = await file.read()
+        blob.upload_from_string(content, content_type="application/pdf")
         
-        return UploadURLResponse(
-            upload_url=url,
-            gcs_path=f"gs://{bucket_name}/{blob_path}",
-            expires_in=900  # 15 minutes in seconds
-        )
+        return {
+            "status": "success",
+            "message": "PDF uploaded successfully. Processing will begin shortly.",
+            "gcs_path": f"gs://{bucket_name}/{blob_path}",
+            "protocol_id": safe_filename.replace(".pdf", "").replace(".PDF", "")
+        }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate upload URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
 # Run with: uvicorn main:app --reload

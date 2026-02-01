@@ -70,32 +70,20 @@ export default function AdminPage() {
       return;
     }
 
-    setUploadStatus({ status: "uploading", message: "Uploading PDF...", progress: 0 });
+    setUploadStatus({ status: "uploading", message: "Uploading PDF...", progress: 25 });
 
     try {
-      // Get signed upload URL from API
-      const urlRes = await fetch(`${API_URL}/upload-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          org_id: orgId,
-          filename: file.name,
-        }),
-      });
-
-      if (!urlRes.ok) {
-        throw new Error("Failed to get upload URL");
-      }
-
-      const { upload_url, gcs_path } = await urlRes.json();
+      // Create form data for multipart upload
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("org_id", orgId);
 
       setUploadStatus({ status: "uploading", message: "Uploading to cloud storage...", progress: 50 });
 
-      // Upload directly to GCS
-      const uploadRes = await fetch(upload_url, {
-        method: "PUT",
-        headers: { "Content-Type": "application/pdf" },
-        body: file,
+      // Upload directly to API
+      const uploadRes = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: formData,
       });
 
       if (!uploadRes.ok) {
