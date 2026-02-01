@@ -10,7 +10,12 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-roboto), system-ui, -apple-system, sans-serif;
+}
+
+/* Title font - Orbitron */
+.font-title {
+  font-family: var(--font-orbitron), system-ui, sans-serif;
 }
 
 /* Custom scrollbar */
