@@ -6,10 +6,16 @@ import ReactMarkdown from "react-markdown";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
+interface Citation {
+  protocol_id: string;
+  source_uri: string;
+  relevance_score: number;
+}
+
 interface QueryResponse {
   answer: string;
   images: string[];
-  citations: string[];
+  citations: Citation[];
   query_time_ms: number;
 }
 
@@ -221,7 +227,7 @@ export default function Home() {
                 <ul className="space-y-1">
                   {response.citations.map((citation, index) => (
                     <li key={index} className="text-sm text-gray-500">
-                      • {citation}
+                      • {citation.protocol_id} (relevance: {(citation.relevance_score * 100).toFixed(0)}%)
                     </li>
                   ))}
                 </ul>
