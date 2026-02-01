@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Clock, FileText, AlertCircle } from "lucide-react";
+import { Search, Clock, FileText, AlertCircle, Settings } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
@@ -77,6 +78,17 @@ export default function Home() {
 
   return (
     <main className="flex flex-col items-center min-h-screen px-4 py-8">
+      {/* Admin Link */}
+      <div className="absolute top-4 right-4">
+        <Link 
+          href="/admin" 
+          className="flex items-center gap-2 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+        >
+          <Settings className="w-4 h-4" />
+          Admin
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="w-full max-w-3xl">
         <div className="flex flex-col items-center mb-8">

@@ -209,6 +209,58 @@ async def get_protocol_images(org_id: str, protocol_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class UploadURLRequest(BaseModel):
+    """Request for generating upload URL"""
+    org_id: str = Field(..., description="Organization ID")
+    filename: str = Field(..., description="PDF filename")
+
+class UploadURLResponse(BaseModel):
+    """Response with signed upload URL"""
+    upload_url: str
+    gcs_path: str
+    expires_in: int
+
+@app.post("/upload-url", response_model=UploadURLResponse)
+async def get_upload_url(request: UploadURLRequest):
+    """
+    Generate a signed URL for uploading a PDF to GCS.
+    The upload will trigger the Cloud Function to process the PDF.
+    """
+    from google.cloud import storage
+    from datetime import timedelta
+    
+    try:
+        # Sanitize filename
+        safe_filename = request.filename.replace(" ", "_")
+        if not safe_filename.lower().endswith(".pdf"):
+            safe_filename += ".pdf"
+        
+        # GCS path in the raw protocols bucket (triggers Cloud Function)
+        bucket_name = "clinical-assistant-457902-protocols-raw"
+        blob_path = f"{request.org_id}/{safe_filename}"
+        
+        # Generate signed URL
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(minutes=15),
+            method="PUT",
+            content_type="application/pdf",
+        )
+        
+        return UploadURLResponse(
+            upload_url=url,
+            gcs_path=f"gs://{bucket_name}/{blob_path}",
+            expires_in=900  # 15 minutes in seconds
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate upload URL: {str(e)}")
+
+
 # Run with: uvicorn main:app --reload
 if __name__ == "__main__":
     import uvicorn
