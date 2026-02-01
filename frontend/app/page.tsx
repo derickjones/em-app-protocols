@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Menu, SquarePen, Mic, Plus, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { Sparkles, Menu, SquarePen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
@@ -112,40 +112,24 @@ export default function Home() {
               </div>
 
               {/* Input Box */}
-              <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] hover:border-[#5f6368] transition-colors overflow-hidden">
-                {/* Input Field */}
-                <div className="px-6 pt-5 pb-2">
-                  <input
-                    type="text"
-                    placeholder="Ask about emergency protocols..."
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                    className="w-full bg-transparent text-white text-lg placeholder-[#8e9193] focus:outline-none"
-                  />
-                </div>
-
-                {/* Toolbar */}
-                <div className="flex items-center justify-between px-4 pb-4">
-                  <div className="flex items-center gap-1">
-                    <button className="w-10 h-10 flex items-center justify-center text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
-                      <Plus className="w-5 h-5" />
-                    </button>
-                    <button className="flex items-center gap-2 px-4 h-10 text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
-                      <SlidersHorizontal className="w-4 h-4" />
-                      <span className="text-sm">Tools</span>
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button className="flex items-center gap-1 px-3 h-10 text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
-                      <span className="text-sm">Pro</span>
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                    <button className="w-10 h-10 flex items-center justify-center text-[#9aa0a6] hover:bg-[#3c4043] rounded-full transition-colors">
-                      <Mic className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
+              <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] hover:border-[#5f6368] transition-colors flex items-center px-6 py-4">
+                <input
+                  type="text"
+                  placeholder="Ask about emergency protocols..."
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  className="flex-1 bg-transparent text-white text-lg placeholder-[#8e9193] focus:outline-none"
+                />
+                <button
+                  onClick={handleSubmit}
+                  disabled={!question.trim()}
+                  className="w-10 h-10 flex items-center justify-center text-[#9aa0a6] hover:text-white disabled:text-[#5f6368] transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                  </svg>
+                </button>
               </div>
 
               {/* Quick Actions */}
@@ -216,8 +200,14 @@ export default function Home() {
                   onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                   className="flex-1 bg-transparent text-white placeholder-[#8e9193] focus:outline-none px-2"
                 />
-                <button className="w-9 h-9 flex items-center justify-center text-[#9aa0a6] hover:bg-[#3c4043] rounded-full">
-                  <Mic className="w-5 h-5" />
+                <button
+                  onClick={handleSubmit}
+                  disabled={!question.trim()}
+                  className="w-9 h-9 flex items-center justify-center text-[#9aa0a6] hover:text-white disabled:text-[#5f6368] transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                  </svg>
                 </button>
               </div>
             </div>
