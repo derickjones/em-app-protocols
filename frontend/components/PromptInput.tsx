@@ -141,14 +141,14 @@ export default function PromptInput({
   return (
     <div
       className={`w-full flex justify-center ${
-        pinned ? "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 shadow-md z-50" : ""
+        pinned ? "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 shadow-md z-50" : ""
       }`}
     >
       <div className="w-full max-w-4xl">
-        <div className="relative">
+        <div className="relative mt-2">
           <textarea
-            className="w-full p-4 pl-5 pr-24 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
-            placeholder="Ask a clinical question..."
+            className="w-full p-4 pl-5 pr-20 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+            placeholder="Enter a clinical question or use the mic..."
             rows={2}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -159,31 +159,30 @@ export default function PromptInput({
           <button
             onClick={handleMicClick}
             title="Voice input"
-            className={`absolute right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-              isListening
-                ? "bg-red-100 text-red-600 animate-pulse"
-                : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
-            }`}
+            className={`absolute right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl ${
+              isListening ? "bg-red-200 text-red-700" : "bg-white text-gray-600"
+            } flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg`}
           >
-            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
 
           {/* Submit button */}
           <button
             onClick={handleSubmit}
             disabled={loading || !question.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black text-white flex items-center justify-center hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105"
+            title="Submit"
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
           >
             {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
-              <ArrowUp className="w-5 h-5" />
+              <ArrowUp className="w-4 h-4" />
             )}
           </button>
         </div>
 
         {interimTranscript && (
-          <p className="text-xs text-gray-500 italic mt-2 px-2">
+          <p className="text-xs text-gray-500 italic mt-1 px-1 font-sans">
             🎤 {interimTranscript}
           </p>
         )}

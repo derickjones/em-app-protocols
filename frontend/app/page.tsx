@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Clock, FileText, Menu, X } from "lucide-react";
+import { Clock, FileText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
 import PromptInput from "@/components/PromptInput";
@@ -84,34 +84,31 @@ export default function Home() {
     : [];
 
   return (
-    <main className="relative flex flex-col items-center justify-start min-h-screen px-4 sm:px-6 py-6 bg-white text-gray-900">
+    <main className="relative flex flex-col items-center justify-start min-h-screen px-4 sm:px-6 py-6 bg-white text-gray-900 font-sans">
       {/* Header */}
       <div className="sticky top-0 z-50 w-full bg-white px-4 pt-4 border-b border-gray-100 pb-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           {/* Left: Hamburger Menu */}
-          <div className="flex items-center space-x-3 relative">
-            <button 
-              onClick={() => setMenuOpen(!menuOpen)} 
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              {menuOpen ? (
-                <X className="w-5 h-5" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
+          <div className="flex items-center space-x-3">
+            <button onClick={() => setMenuOpen(!menuOpen)} className="p-1">
+              <div className="space-y-1">
+                <span className="block w-5 h-0.5 bg-black" />
+                <span className="block w-5 h-0.5 bg-black" />
+                <span className="block w-5 h-0.5 bg-black" />
+              </div>
             </button>
             
             {/* Dropdown Menu */}
             {menuOpen && (
               <div 
                 ref={menuRef} 
-                className="absolute top-12 left-0 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50"
+                className="absolute top-8 left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
               >
-                <div className="p-2">
+                <div className="p-3 border-b border-gray-100">
                   <Link
                     href="/admin"
                     onClick={() => setMenuOpen(false)}
-                    className="flex items-center space-x-3 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="flex items-center space-x-3 w-full px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <FileText className="w-4 h-4" />
                     <span>Admin Panel</span>
@@ -126,7 +123,7 @@ export default function Home() {
             <h1
               onClick={hasSearched ? resetSearch : undefined}
               className={`font-title font-bold tracking-wide transition-all duration-300 cursor-pointer ${
-                hasSearched ? "text-xl hover:text-blue-600" : "text-2xl sm:text-4xl"
+                hasSearched ? "text-xl ml-6" : "text-4xl"
               }`}
             >
               emergency medicine app
@@ -146,7 +143,7 @@ export default function Home() {
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-4xl w-full mt-8 space-y-8 pb-40">
+      <div className="max-w-4xl w-full mt-10 space-y-10 pb-40">
         {/* Search Input - only show at top when not searched */}
         {!hasSearched && (
           <div className="w-full">
