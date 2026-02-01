@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import { ArrowUp, Mic, MicOff } from "lucide-react";
 
 type PromptInputProps = {
@@ -11,48 +11,6 @@ type PromptInputProps = {
   pinned?: boolean;
 };
 
-// Web Speech API types
-interface SpeechRecognitionEvent {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionResultList {
-  length: number;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
-interface SpeechRecognitionErrorEvent {
-  error: string;
-}
-
-interface ISpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => ISpeechRecognition;
-    webkitSpeechRecognition: new () => ISpeechRecognition;
-  }
-}
-
 export default function PromptInput({
   question,
   setQuestion,
@@ -61,69 +19,9 @@ export default function PromptInput({
   pinned = false,
 }: PromptInputProps) {
   const [isListening, setIsListening] = useState(false);
-  const [interimTranscript, setInterimTranscript] = useState("");
-  const recognitionRef = useRef<ISpeechRecognition | null>(null);
-
-  useEffect(() => {
-    // Check for browser support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-
-      recognitionRef.current.onresult = (event) => {
-        let interim = "";
-        let final = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            final += transcript;
-          } else {
-            interim += transcript;
-          }
-        }
-
-        if (final) {
-          setQuestion((prev) => prev + final);
-          setInterimTranscript("");
-        } else {
-          setInterimTranscript(interim);
-        }
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
-        setIsListening(false);
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-        setInterimTranscript("");
-      };
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, [setQuestion]);
 
   const handleMicClick = () => {
-    if (!recognitionRef.current) {
-      alert("Speech recognition not supported in this browser");
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      recognitionRef.current.start();
-      setIsListening(true);
-    }
+    setIsListening(!isListening);
   };
 
   const handleSubmit = () => {
@@ -131,8 +29,8 @@ export default function PromptInput({
     onSubmit();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleSubmit();
     }
@@ -140,16 +38,25 @@ export default function PromptInput({
 
   return (
     <div
-      className={`w-full flex justify-center ${
-        pinned ? "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 shadow-md z-50" : ""
+      className={`w-full ${
+        pinned
+          ? "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 shadow-lg z-50"
+          : ""
       }`}
     >
-      <div className="w-full max-w-4xl">
-        <div className="relative mt-2">
-          <textarea
-            className="w-full p-4 pl-5 pr-20 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+      <div className="w-full max-w-4xl mx-auto">
+        {/* Input container - pill shape with blue glow */}
+        <div
+          className="relative flex items-center bg-gray-50 rounded-full border-2 border-gray-200 shadow-lg hover:shadow-xl transition-shadow duration-200 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-50"
+          style={{
+            boxShadow: "0 4px 20px rgba(59, 130, 246, 0.15)",
+          }}
+        >
+          {/* Text input */}
+          <input
+            type="text"
+            className="flex-1 bg-transparent py-4 px-6 text-gray-800 placeholder-gray-400 focus:outline-none text-base"
             placeholder="Enter a clinical question or use the mic..."
-            rows={2}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -157,35 +64,35 @@ export default function PromptInput({
 
           {/* Mic button */}
           <button
+            type="button"
             onClick={handleMicClick}
-            title="Voice input"
-            className={`absolute right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl ${
-              isListening ? "bg-red-200 text-red-700" : "bg-white text-gray-600"
-            } flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg`}
+            className={`flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center mr-1 transition-all duration-200 ${
+              isListening
+                ? "bg-red-100 text-red-600"
+                : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-100"
+            }`}
           >
-            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {isListening ? (
+              <MicOff className="w-5 h-5" />
+            ) : (
+              <Mic className="w-5 h-5" />
+            )}
           </button>
 
-          {/* Submit button */}
+          {/* Submit button - black circle */}
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={loading || !question.trim()}
-            title="Submit"
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
+            className="flex-shrink-0 w-11 h-11 rounded-full bg-black text-white flex items-center justify-center mr-2 hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200"
           >
             {loading ? (
-              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
-              <ArrowUp className="w-4 h-4" />
+              <ArrowUp className="w-5 h-5" />
             )}
           </button>
         </div>
-
-        {interimTranscript && (
-          <p className="text-xs text-gray-500 italic mt-1 px-1 font-sans">
-            🎤 {interimTranscript}
-          </p>
-        )}
       </div>
     </div>
   );
