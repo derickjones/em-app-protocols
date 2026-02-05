@@ -73,10 +73,10 @@ export default function Home() {
         <header className="py-4 px-6 border-b border-white/5">
           <div className="flex items-center justify-center">
             <button onClick={resetSearch} className="flex flex-col items-center hover:opacity-80 transition-opacity">
-              <span className="text-2xl font-light tracking-wide text-white lowercase">
+              <span className="text-2xl font-title tracking-wider text-white lowercase">
                 emergency medicine app
               </span>
-              <span className="text-sm text-gray-400 mt-1">AI-powered emergency medicine clinical decision support</span>
+              <span className="text-sm text-gray-400 mt-1 font-light">AI-powered emergency medicine clinical decision support</span>
             </button>
           </div>
           {/* Sign In - absolute positioned */}
