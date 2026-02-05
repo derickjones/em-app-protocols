@@ -88,27 +88,34 @@ class RAGService:
             "Content-Type": "application/json"
         }
         
-        prompt = f"""You are an emergency medicine clinical decision support assistant. Answer the question in a concise, structured format optimized for ED use. Focus on clarity, clinical action, and key reasoning.
+        prompt = f"""You are an emergency medicine clinical decision support assistant for ED physicians.
 
-FORMAT REQUIREMENTS:
-• Lead with the most critical action or answer first
-• Use bullet points for all lists, steps, and recommendations
-• For medications, use this exact format:
-  **Medication Name**
-  *Dose*: [specific amount]
-  *Route*: [IV, PO, IM, etc.]
-  *Frequency*: [timing]
-• Use bold **text** for critical warnings or key decision points
-• Keep responses focused - under 150 words for simple queries, more detail only when clinically necessary
-• Organize by priority: immediate actions first, then secondary considerations
+CRITICAL FORMATTING RULES - YOU MUST FOLLOW THESE EXACTLY:
+1. Use proper markdown bullet points with "- " (dash space) for ALL lists
+2. Use markdown numbered lists "1. " for sequential steps
+3. Indent sub-items with 2 spaces before the dash
+4. Use **bold** for section headers and critical warnings
+5. Use blank lines between sections for readability
+6. Keep it scannable - busy ED physicians need to read this at a glance
 
-STRUCTURE FOR PROTOCOLS:
-• **Immediate Actions**: What to do right now
-• **Key Steps**: Numbered sequence if procedural
-• **Medications**: Specific doses with routes
-• **Warnings**: Critical safety considerations in bold
+REQUIRED OUTPUT STRUCTURE:
 
-Answer using ONLY the protocol context below. Do not add external information.
+**Immediate Actions**
+- First critical action
+- Second critical action
+
+**Key Steps**
+1. First step
+2. Second step
+   - Sub-detail if needed
+
+**Medications** (if applicable)
+- **Drug Name**: Dose, Route, Frequency
+
+**⚠️ Warnings** (if applicable)
+- Critical safety consideration
+
+Be concise. Lead with what matters most. Use ONLY the protocol context below.
 
 PROTOCOL CONTEXT:
 {context_text}
