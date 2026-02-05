@@ -161,23 +161,23 @@ export default function Home() {
 
                   {/* Citations - shown prominently after answer */}
                   {response.citations.length > 0 && (
-                    <div className="mt-6 p-4 bg-[#1e1f20] rounded-xl border border-[#3c4043]">
-                      <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                    <div className="mt-8 p-5 bg-[#1e1f20] rounded-xl border border-[#3c4043]">
+                      <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
                         <svg className="w-5 h-5 text-[#8ab4f8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         Source Protocols
                       </h3>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-col gap-3">
                         {response.citations.map((cite, idx) => (
                           <a
                             key={idx}
                             href={cite.source_uri}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-[#2d2e30] border border-[#5f6368] rounded-lg text-[#8ab4f8] hover:bg-[#3c3d3f] hover:border-[#8ab4f8] transition-all font-medium"
+                            className="flex items-center gap-3 px-4 py-3 bg-[#2d2e30] border border-[#5f6368] rounded-lg text-[#8ab4f8] hover:bg-[#3c3d3f] hover:border-[#8ab4f8] transition-all font-medium"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
                             {cite.protocol_id.replace(/_/g, " ")}
