@@ -123,6 +123,41 @@ async def query_protocols(request: QueryRequest):
         
         query_time_ms = int((time.time() - start_time) * 1000)
         
+        # Build deduplicated citations with PDF URLs
+        seen_protocols = set()
+        citations = []
+        for c in result.get("citations", []):
+            source = c["source"]
+            # Extract protocol info from path like:
+            # gs://bucket/org_id/protocol_id/extracted_text.txt or
+            # gs://bucket/rag-input/protocol_id.txt
+            parts = source.replace("gs://", "").split("/")
+            
+            if "rag-input" in source:
+                # Format: bucket/rag-input/protocol_id.txt
+                protocol_id = parts[-1].replace(".txt", "")
+                org_id = "demo-hospital"  # Default org for rag-input files
+            elif len(parts) >= 4:
+                # Format: bucket/org_id/protocol_id/extracted_text.txt
+                org_id = parts[1]
+                protocol_id = parts[2]
+            else:
+                continue
+            
+            # Skip duplicates and extracted_text entries
+            if protocol_id in seen_protocols or protocol_id == "extracted_text":
+                continue
+            seen_protocols.add(protocol_id)
+            
+            # Build public PDF URL
+            pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{org_id}/{protocol_id}.pdf"
+            
+            citations.append(Citation(
+                protocol_id=protocol_id,
+                source_uri=pdf_url,
+                relevance_score=c["score"]
+            ))
+        
         return QueryResponse(
             answer=result["answer"],
             images=[
@@ -133,14 +168,7 @@ async def query_protocols(request: QueryRequest):
                 )
                 for img in result.get("images", [])
             ],
-            citations=[
-                Citation(
-                    protocol_id=c["source"].split("/")[-1].replace(".txt", ""),
-                    source_uri=c["source"],
-                    relevance_score=c["score"]
-                )
-                for c in result.get("citations", [])
-            ],
+            citations=citations,
             query_time_ms=query_time_ms
         )
         

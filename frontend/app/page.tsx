@@ -181,36 +181,20 @@ export default function Home() {
                     <div className="space-y-3 pt-4 border-t border-white/10">
                       <h3 className="text-sm font-medium text-gray-400">Sources</h3>
                       <div className="flex flex-wrap gap-2">
-                        {(() => {
-                          // Deduplicate citations by protocol_id
-                          const seen = new Set<string>();
-                          return response.citations
-                            .filter((cite) => {
-                              if (seen.has(cite.protocol_id) || cite.protocol_id === "extracted_text") {
-                                return false;
-                              }
-                              seen.add(cite.protocol_id);
-                              return true;
-                            })
-                            .map((cite, idx) => {
-                              // Build PDF URL: gs://bucket/org/protocol.pdf -> https://storage.googleapis.com/bucket/org/protocol.pdf
-                              const pdfUrl = `https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/demo-hospital/${cite.protocol_id}.pdf`;
-                              return (
-                                <a
-                                  key={idx}
-                                  href={pdfUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#1e1f20] border border-[#3c4043] rounded-lg text-sm text-[#8ab4f8] hover:bg-[#2c2d2e] hover:border-[#5f6368] transition-all"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                  {cite.protocol_id.replace(/_/g, " ")}
-                                </a>
-                              );
-                            });
-                        })()}
+                        {response.citations.map((cite, idx) => (
+                          <a
+                            key={idx}
+                            href={cite.source_uri}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#1e1f20] border border-[#3c4043] rounded-lg text-sm text-[#8ab4f8] hover:bg-[#2c2d2e] hover:border-[#5f6368] transition-all"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {cite.protocol_id.replace(/_/g, " ")}
+                          </a>
+                        ))}
                       </div>
                     </div>
                   )}
