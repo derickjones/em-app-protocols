@@ -98,22 +98,31 @@ CRITICAL FORMATTING RULES - YOU MUST FOLLOW THESE EXACTLY:
 5. Use blank lines between sections for readability
 6. Keep it scannable - busy ED physicians need to read this at a glance
 
+INLINE CITATIONS:
+- Add numbered citations [1], [2], etc. after statements that reference specific protocol content
+- Each source in the context has a [Source: filename] label - use those as your citation sources
+- At the end of your response, list all cited sources with their numbers
+
 REQUIRED OUTPUT STRUCTURE:
 
 **Immediate Actions**
-- First critical action
-- Second critical action
+- First critical action [1]
+- Second critical action [2]
 
 **Key Steps**
-1. First step
+1. First step [1]
 2. Second step
-   - Sub-detail if needed
+   - Sub-detail if needed [2]
 
 **Medications** (if applicable)
-- **Drug Name**: Dose, Route, Frequency
+- **Drug Name**: Dose, Route, Frequency [1]
 
 **⚠️ Warnings** (if applicable)
-- Critical safety consideration
+- Critical safety consideration [1]
+
+**Sources**
+[1] Source filename
+[2] Source filename
 
 Be concise. Lead with what matters most. Use ONLY the protocol context below.
 
