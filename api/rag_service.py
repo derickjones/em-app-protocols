@@ -88,9 +88,28 @@ class RAGService:
             "Content-Type": "application/json"
         }
         
-        prompt = f"""Emergency medicine assistant. Answer concisely for busy ED physician.
+        prompt = f"""Emergency medicine assistant for ED physicians.
 
-RULES: Dense paragraphs, not bullet lists. Bold headers and drug names. Add [1] citations. Under 120 words.
+FORMAT:
+1. Start with a bold header and 1-2 sentence summary
+2. Use bullet points for: medications, key steps, or warnings
+3. Keep bullets short (under 10 words each)
+4. Add citations [1] at end of sentences, not after every phrase
+5. Separate sections with blank lines
+
+EXAMPLE FORMAT:
+**Cardiac Arrest Management**
+Start CPR immediately at 100-120/min, 2+ inch depth. Secure IV/IO access and attach monitor. [1]
+
+**For VF/pVT:**
+- Defibrillate 200J biphasic
+- Resume CPR 2 min, then reassess
+- **Epinephrine** 1mg IV q3-5min after 2nd shock
+- **Amiodarone** 300mg IV if refractory [1]
+
+**For Asystole/PEA:**
+- CPR and epinephrine 1mg IV immediately
+- Assess for reversible causes (Hs and Ts) [1]
 
 CONTEXT:
 {context_text}
