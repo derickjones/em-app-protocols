@@ -72,91 +72,65 @@ class RAGService:
         
         return contexts
     
-    def _generate_with_rag_grounding(self, query: str) -> Dict:
-        """Generate answer using Gemini with RAG grounding - handles retrieval and citations automatically"""
+    def _generate_answer(self, query: str, contexts: List[Dict]) -> str:
+        """Generate answer using Gemini (fast - no grounding overhead)"""
+        # Build context string with source labels for citation
+        context_text = "\n\n---\n".join([
+            f"[{i+1}] {c['text']}"
+            for i, c in enumerate(contexts)
+        ])
         
-        # Use v1beta1 for RAG grounding features
-        url = f"https://{self.location}-aiplatform.googleapis.com/v1beta1/projects/{self.project_id}/locations/{self.location}/publishers/google/models/gemini-2.0-flash:generateContent"
+        # Gemini endpoint (us-central1 for low latency)
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent"
         
         headers = {
             "Authorization": f"Bearer {self._get_access_token()}",
             "Content-Type": "application/json"
         }
         
-        system_prompt = """You are an emergency medicine clinical decision support assistant for ED physicians.
+        prompt = f"""You are an emergency medicine clinical decision support assistant for ED physicians.
 
 FORMATTING RULES:
-1. Use proper markdown bullet points with "- " (dash space) for ALL lists
-2. Use markdown numbered lists "1. " for sequential steps  
-3. Indent sub-items with 2 spaces before the dash
-4. Use **bold** for section headers and critical warnings
-5. Use blank lines between sections for readability
-6. Keep it scannable - busy ED physicians need to read this at a glance
+- Use markdown bullet points "- " for lists
+- Use numbered lists "1. " for sequential steps
+- Use **bold** for headers and critical warnings
+- Keep it scannable for busy ED physicians
 
 STRUCTURE:
-- **Immediate Actions**: What to do right now
-- **Key Steps**: Numbered sequence if procedural
-- **Medications**: Drug name, dose, route, frequency
-- **Warnings**: Critical safety considerations in bold
+**Immediate Actions**
+- Critical action [1]
 
-Be concise. Lead with what matters most."""
+**Key Steps**
+1. Step one [1]
+2. Step two [2]
+
+**Medications** (if applicable)
+- **Drug**: dose, route, frequency [1]
+
+Add citation numbers [1], [2] etc. after statements referencing that source.
+
+PROTOCOL CONTEXT:
+{context_text}
+
+QUESTION: {query}
+
+ANSWER:"""
 
         payload = {
-            "contents": [{"role": "user", "parts": [{"text": query}]}],
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,
-                "maxOutputTokens": 1000
-            },
-            "tools": [{
-                "retrieval": {
-                    "vertexRagStore": {
-                        "ragCorpora": [self.corpus_name],
-                        "similarityTopK": 5
-                    }
-                }
-            }]
+                "maxOutputTokens": 800
+            }
         }
         
         response = requests.post(url, headers=headers, json=payload)
         
         if response.status_code != 200:
-            raise Exception(f"Gemini RAG generation failed: {response.status_code} - {response.text}")
+            raise Exception(f"Gemini generation failed: {response.status_code} - {response.text}")
         
         result = response.json()
-        
-        # Extract answer
-        answer = result["candidates"][0]["content"]["parts"][0]["text"]
-        
-        # Extract grounding metadata for citations
-        grounding_metadata = result["candidates"][0].get("groundingMetadata", {})
-        grounding_chunks = grounding_metadata.get("groundingChunks", [])
-        grounding_supports = grounding_metadata.get("groundingSupports", [])
-        
-        # Build citations from grounding metadata
-        citations = []
-        seen_sources = set()
-        
-        for chunk in grounding_chunks:
-            if "retrievedContext" in chunk:
-                source_uri = chunk["retrievedContext"].get("uri", "")
-                if source_uri and source_uri not in seen_sources:
-                    seen_sources.add(source_uri)
-                    citations.append({
-                        "source": source_uri,
-                        "title": chunk["retrievedContext"].get("title", ""),
-                        "score": 1.0  # Grounding doesn't return scores directly
-                    })
-        
-        # Get contexts for image extraction
-        contexts = [{"source": c["source"]} for c in citations]
-        
-        return {
-            "answer": answer,
-            "contexts": contexts,
-            "citations": citations,
-            "grounding_supports": grounding_supports
-        }
+        return result["candidates"][0]["content"]["parts"][0]["text"]
     
     def _get_protocol_metadata(self, source_uri: str) -> Optional[Dict]:
         """Get metadata for a protocol from its source URI"""
@@ -219,12 +193,12 @@ Be concise. Lead with what matters most."""
     
     def query(self, query: str, include_images: bool = True) -> Dict:
         """
-        Execute a full RAG query using Gemini with RAG grounding
+        Execute a full RAG query (fast two-step approach)
         
         Returns:
             dict with answer, images, citations
         """
-        # Step 1: Retrieve contexts first - needed for images and proper citation URIs
+        # Step 1: Retrieve contexts from RAG corpus
         contexts = self._retrieve_contexts(query)
         
         if not contexts:
@@ -234,23 +208,15 @@ Be concise. Lead with what matters most."""
                 "citations": []
             }
         
-        # Step 2: Use Gemini with RAG grounding for the answer (handles inline citations automatically)
-        result = self._generate_with_rag_grounding(query)
-        answer = result["answer"]
+        # Step 2: Generate answer with Gemini (fast, no grounding overhead)
+        answer = self._generate_answer(query, contexts)
         
-        if not answer or answer.strip() == "":
-            return {
-                "answer": "No relevant protocols found for this query.",
-                "images": [],
-                "citations": []
-            }
-        
-        # Step 3: Get images from the retrieved contexts
+        # Step 3: Get images from contexts
         images = []
         if include_images:
             images = self._get_images_from_contexts(contexts)
         
-        # Step 4: Build citations from retrieved contexts (has proper gs:// URIs)
+        # Step 4: Build citations
         citations = [
             {
                 "source": ctx["source"],
