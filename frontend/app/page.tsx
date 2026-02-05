@@ -34,6 +34,8 @@ export default function Home() {
       });
       if (!res.ok) throw new Error(`Error: ${res.status}`);
       const data: QueryResponse = await res.json();
+      console.log("API Response:", data);
+      console.log("Citations:", data.citations);
       setResponse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch response");
