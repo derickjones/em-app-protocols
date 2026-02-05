@@ -161,7 +161,7 @@ export default function Home() {
 
                   {/* Citations - shown prominently after answer */}
                   {response.citations.length > 0 && (
-                    <div className="mt-10 p-6 bg-[#1a1b1c] rounded-2xl border border-[#3c4043] shadow-lg">
+                    <div className="mt-12 mb-8 p-6 bg-[#1a1b1c] rounded-2xl border border-[#3c4043] shadow-lg">
                       <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-5 flex items-center gap-2">
                         <svg className="w-4 h-4 text-[#8ab4f8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -190,9 +190,9 @@ export default function Home() {
 
                   {/* Protocol Images */}
                   {response.images.length > 0 && (
-                    <div className="mt-10 space-y-4">
+                    <div className="mt-8 mb-12 space-y-5">
                       <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Related Diagrams</h3>
-                      <div className="grid gap-4">
+                      <div className="grid gap-6">
                         {response.images.map((img, idx) => (
                           <div key={idx} className="bg-[#1e1f20] rounded-xl overflow-hidden border border-[#3c4043]">
                             <img
@@ -200,7 +200,7 @@ export default function Home() {
                               alt={`Protocol diagram from ${img.protocol_id}, page ${img.page}`}
                               className="w-full"
                             />
-                            <div className="px-4 py-2 text-xs text-gray-400 border-t border-[#3c4043]">
+                            <div className="px-4 py-3 text-xs text-gray-400 border-t border-[#3c4043]">
                               {img.protocol_id} · Page {img.page}
                             </div>
                           </div>

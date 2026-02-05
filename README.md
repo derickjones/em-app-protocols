@@ -580,6 +580,75 @@ For questions or support:
 
 ---
 
-**Last Updated**: January 23, 2026  
-**Version**: 0.1.0 (Pre-MVP)  
-**Status**: Planning Phase
+**Last Updated**: February 4, 2026  
+**Version**: 0.2.0 (MVP In Progress)  
+**Status**: Active Development
+
+---
+
+## 📈 Progress & Changelog
+
+### **v0.2.0** - February 4, 2026
+🎉 **Major Milestone: Working MVP with RAG + Frontend**
+
+#### ✅ Completed Features
+- **Backend API (FastAPI on Cloud Run)**
+  - Vertex AI RAG integration with corpus retrieval
+  - Gemini 2.0 Flash for answer generation
+  - Fast two-step RAG approach (~3-4 second responses)
+  - Image extraction from protocol metadata
+  - PDF citation URLs with clickable links
+  - Deployed: `https://em-protocol-api-930035889332.us-central1.run.app`
+
+- **Frontend (Next.js on Vercel)**
+  - Modern dark UI inspired by Google Gemini
+  - Real-time search with loading states
+  - Markdown rendering for formatted answers
+  - Bullet points and structured formatting
+  - Source Protocols section with citation numbers [1], [2]
+  - Related Diagrams section with protocol images
+  - Responsive input bar (home + fixed bottom after search)
+  - Custom fonts (Orbitron titles, Roboto body)
+  - Deployed: `https://em-app-protocols.vercel.app`
+
+- **RAG Pipeline**
+  - Vertex AI RAG corpus configured (us-west4)
+  - Protocol PDFs processed and indexed
+  - Text extraction with page/source tracking
+  - Image extraction and GCS storage
+
+- **Prompt Engineering**
+  - ED-optimized response formatting
+  - Markdown bullet points and bold headers
+  - Inline numeric citations [1], [2]
+  - Concise responses under 150 words
+
+#### 🔧 Recent Improvements (Feb 4)
+- Optimized RAG for speed (3-4s responses, down from 15s)
+- Improved markdown formatting with balanced paragraphs/bullets
+- Added prose list styles for proper bullet rendering
+- Enhanced Source Protocols UI with citation numbers
+- Better visual separation between sections
+- Fixed input text alignment in search bubble
+
+#### 📋 Known Issues
+- Input text occasionally clips on left edge (minor)
+- Response formatting varies by query type
+
+#### 🚧 In Progress
+- Response formatting consistency
+- Input field polish
+
+#### 📅 Next Up
+- Multi-organization support
+- Admin upload interface
+- Firebase authentication
+- Performance optimization (<2s target)
+
+---
+
+### **v0.1.0** - January 23, 2026
+- Initial project setup
+- Architecture planning
+- GCP project configuration
+- README documentation
