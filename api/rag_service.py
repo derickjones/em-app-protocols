@@ -74,10 +74,10 @@ class RAGService:
     
     def _generate_answer(self, query: str, contexts: List[Dict]) -> str:
         """Generate answer using Gemini (fast - no grounding overhead)"""
-        # Build context string with source labels for citation
-        context_text = "\n\n---\n".join([
-            f"[{i+1}] {c['text']}"
-            for i, c in enumerate(contexts)
+        # Build context string - limit to top 3 for speed
+        context_text = "\n---\n".join([
+            f"[{i+1}] {c['text'][:1500]}"
+            for i, c in enumerate(contexts[:3])
         ])
         
         # Gemini endpoint (us-central1 for low latency)
@@ -88,39 +88,21 @@ class RAGService:
             "Content-Type": "application/json"
         }
         
-        prompt = f"""You are an emergency medicine clinical decision support assistant for ED physicians.
+        prompt = f"""Emergency medicine assistant. Answer concisely for busy ED physician.
 
-FORMATTING RULES:
-- Use markdown bullet points "- " for lists
-- Use numbered lists "1. " for sequential steps
-- Use **bold** for headers and critical warnings
-- Keep it scannable for busy ED physicians
+RULES: Dense paragraphs, not bullet lists. Bold headers and drug names. Add [1] citations. Under 120 words.
 
-STRUCTURE:
-**Immediate Actions**
-- Critical action [1]
-
-**Key Steps**
-1. Step one [1]
-2. Step two [2]
-
-**Medications** (if applicable)
-- **Drug**: dose, route, frequency [1]
-
-Add citation numbers [1], [2] etc. after statements referencing that source.
-
-PROTOCOL CONTEXT:
+CONTEXT:
 {context_text}
 
-QUESTION: {query}
-
-ANSWER:"""
+Q: {query}
+A:"""
 
         payload = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": 800
+                "temperature": 0.2,
+                "maxOutputTokens": 400
             }
         }
         
