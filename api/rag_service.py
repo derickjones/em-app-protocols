@@ -224,12 +224,19 @@ Be concise. Lead with what matters most."""
         Returns:
             dict with answer, images, citations
         """
-        # Use Gemini with RAG grounding - single API call handles retrieval + generation + citations
-        result = self._generate_with_rag_grounding(query)
+        # Step 1: Retrieve contexts first - needed for images and proper citation URIs
+        contexts = self._retrieve_contexts(query)
         
+        if not contexts:
+            return {
+                "answer": "No relevant protocols found for this query.",
+                "images": [],
+                "citations": []
+            }
+        
+        # Step 2: Use Gemini with RAG grounding for the answer (handles inline citations automatically)
+        result = self._generate_with_rag_grounding(query)
         answer = result["answer"]
-        citations = result["citations"]
-        contexts = result["contexts"]
         
         if not answer or answer.strip() == "":
             return {
@@ -238,10 +245,19 @@ Be concise. Lead with what matters most."""
                 "citations": []
             }
         
-        # Get images (if requested)
+        # Step 3: Get images from the retrieved contexts
         images = []
-        if include_images and contexts:
+        if include_images:
             images = self._get_images_from_contexts(contexts)
+        
+        # Step 4: Build citations from retrieved contexts (has proper gs:// URIs)
+        citations = [
+            {
+                "source": ctx["source"],
+                "score": ctx["score"]
+            }
+            for ctx in contexts
+        ]
         
         return {
             "answer": answer,
