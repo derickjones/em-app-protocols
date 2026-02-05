@@ -207,25 +207,25 @@ export default function Home() {
         {/* Bottom Input (when searching) */}
         {hasSearched && (
           <div className="fixed bottom-0 left-16 right-0 p-8 bg-gradient-to-t from-[#131314] via-[#131314]/95 to-transparent pointer-events-none">
-            <div className="max-w-[800px] mx-auto pointer-events-auto">
-              <div className="bg-[#1e1f20] rounded-full border border-[#3c4043] hover:border-[#5f6368] focus-within:border-[#8ab4f8] focus-within:shadow-[0_0_0_1px_rgba(138,180,248,0.3)] transition-all flex items-center px-6 py-4 gap-4">
+            <div className="max-w-[720px] mx-auto pointer-events-auto">
+              <div className="bg-[#1e1f20] rounded-3xl border border-[#3c4043] hover:border-[#5f6368] focus-within:border-[#8ab4f8] focus-within:shadow-[0_0_0_1px_rgba(138,180,248,0.3)] transition-all flex items-center px-8 py-5 gap-4">
                 <input
                   type="text"
                   placeholder="Ask a follow-up question..."
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                  className="flex-1 bg-transparent text-white text-lg placeholder-[#8e9193] focus:outline-none"
+                  className="flex-1 bg-transparent text-white text-xl placeholder-[#8e9193] focus:outline-none"
                 />
-                <button className="w-10 h-10 flex-shrink-0 flex items-center justify-center text-[#9aa0a6] hover:text-white hover:bg-white/10 rounded-full transition-all">
-                  <Mic className="w-5 h-5" />
+                <button className="w-12 h-12 flex-shrink-0 flex items-center justify-center text-[#9aa0a6] hover:text-white hover:bg-white/10 rounded-full transition-all">
+                  <Mic className="w-6 h-6" />
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={!question.trim()}
-                  className="w-10 h-10 flex-shrink-0 flex items-center justify-center bg-white text-[#131314] rounded-full hover:bg-gray-200 disabled:bg-[#3c4043] disabled:text-[#5f6368] transition-all"
+                  className="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white text-[#131314] rounded-full hover:bg-gray-200 disabled:bg-[#3c4043] disabled:text-[#5f6368] transition-all"
                 >
-                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
                     <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" />
                   </svg>
                 </button>
