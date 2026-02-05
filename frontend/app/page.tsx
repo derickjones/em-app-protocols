@@ -102,14 +102,14 @@ export default function Home() {
           {!hasSearched ? (
             <div className="w-full max-w-[720px] animate-fade-in -mt-20">
               {/* Input Box */}
-              <div className="bg-[#1e1f20] rounded-3xl border border-[#3c4043] hover:border-[#5f6368] focus-within:border-[#8ab4f8] focus-within:shadow-[0_0_0_1px_rgba(138,180,248,0.3)] transition-all px-8 py-5 flex items-center gap-4">
+              <div className="bg-[#1e1f20] rounded-3xl border border-[#3c4043] hover:border-[#5f6368] focus-within:border-[#8ab4f8] focus-within:shadow-[0_0_0_1px_rgba(138,180,248,0.3)] transition-all px-6 py-5 flex items-center gap-3">
                 <input
                   type="text"
                   placeholder="Enter a clinical question..."
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                  className="flex-1 bg-transparent text-white text-xl placeholder-[#8e9193] focus:outline-none"
+                  className="flex-1 bg-transparent text-white text-xl placeholder-[#8e9193] focus:outline-none min-w-0 pl-2"
                 />
                 <button className="w-12 h-12 flex-shrink-0 flex items-center justify-center text-[#9aa0a6] hover:text-white hover:bg-white/10 rounded-full transition-all">
                   <Mic className="w-6 h-6" />
@@ -161,26 +161,27 @@ export default function Home() {
 
                   {/* Citations - shown prominently after answer */}
                   {response.citations.length > 0 && (
-                    <div className="mt-8 p-5 bg-[#1e1f20] rounded-xl border border-[#3c4043]">
-                      <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                        <svg className="w-5 h-5 text-[#8ab4f8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="mt-10 p-6 bg-[#1a1b1c] rounded-2xl border border-[#3c4043] shadow-lg">
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-5 flex items-center gap-2">
+                        <svg className="w-4 h-4 text-[#8ab4f8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         Source Protocols
                       </h3>
-                      <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-2">
                         {response.citations.map((cite, idx) => (
                           <a
                             key={idx}
                             href={cite.source_uri}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-3 px-4 py-3 bg-[#2d2e30] border border-[#5f6368] rounded-lg text-[#8ab4f8] hover:bg-[#3c3d3f] hover:border-[#8ab4f8] transition-all font-medium"
+                            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#8ab4f8] hover:bg-[#2d2e30] transition-all font-medium text-sm"
                           >
-                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <span className="w-6 h-6 flex items-center justify-center bg-[#2d2e30] rounded text-xs text-gray-400">[{idx + 1}]</span>
+                            {cite.protocol_id.replace(/_/g, " ")}
+                            <svg className="w-4 h-4 ml-auto flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
-                            {cite.protocol_id.replace(/_/g, " ")}
                           </a>
                         ))}
                       </div>
@@ -189,8 +190,8 @@ export default function Home() {
 
                   {/* Protocol Images */}
                   {response.images.length > 0 && (
-                    <div className="space-y-4 pt-4 border-t border-white/10">
-                      <h3 className="text-sm font-medium text-gray-400">Related Diagrams</h3>
+                    <div className="mt-10 space-y-4">
+                      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Related Diagrams</h3>
                       <div className="grid gap-4">
                         {response.images.map((img, idx) => (
                           <div key={idx} className="bg-[#1e1f20] rounded-xl overflow-hidden border border-[#3c4043]">
@@ -217,14 +218,14 @@ export default function Home() {
         {hasSearched && (
           <div className="fixed bottom-0 left-16 right-0 p-8 bg-gradient-to-t from-[#131314] via-[#131314]/95 to-transparent pointer-events-none">
             <div className="w-full flex justify-center pointer-events-auto">
-              <div className="w-full max-w-[720px] bg-[#1e1f20] rounded-3xl border border-[#3c4043] hover:border-[#5f6368] focus-within:border-[#8ab4f8] focus-within:shadow-[0_0_0_1px_rgba(138,180,248,0.3)] transition-all flex items-center px-8 py-5 gap-4">
+              <div className="w-full max-w-[720px] bg-[#1e1f20] rounded-3xl border border-[#3c4043] hover:border-[#5f6368] focus-within:border-[#8ab4f8] focus-within:shadow-[0_0_0_1px_rgba(138,180,248,0.3)] transition-all flex items-center px-6 py-5 gap-3">
                 <input
                   type="text"
                   placeholder="Ask a follow-up question..."
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                  className="flex-1 bg-transparent text-white text-xl placeholder-[#8e9193] focus:outline-none"
+                  className="flex-1 bg-transparent text-white text-xl placeholder-[#8e9193] focus:outline-none min-w-0 pl-2"
                 />
                 <button className="w-12 h-12 flex-shrink-0 flex items-center justify-center text-[#9aa0a6] hover:text-white hover:bg-white/10 rounded-full transition-all">
                   <Mic className="w-6 h-6" />
