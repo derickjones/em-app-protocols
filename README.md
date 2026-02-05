@@ -635,15 +635,55 @@ For questions or support:
 - Input text occasionally clips on left edge (minor)
 - Response formatting varies by query type
 
-#### 🚧 In Progress
-- Response formatting consistency
-- Input field polish
+---
 
-#### 📅 Next Up
-- Multi-organization support
-- Admin upload interface
-- Firebase authentication
-- Performance optimization (<2s target)
+## 🚀 NEXT SESSION: Multi-Tenancy Setup
+
+### Recommended Approach
+Set up the multi-tenant foundation, then validate with a **real pilot organization** (e.g., a telemedicine practice at a specific hospital) before scaling.
+
+### Session Goals
+1. **Set up Firebase Auth** - Login/signup flow
+2. **Create first real organization** - e.g., "Teladoc EM" or "Memorial Telemed"
+3. **Create org-specific RAG corpus** - Isolated from demo data
+4. **Test admin upload flow** - Upload their actual protocols
+5. **Validate end-to-end** - Login → Query → See org-specific results
+
+### Pre-Session Checklist
+- [ ] Have pilot org name and contact ready
+- [ ] Get 3-5 sample protocols from pilot org (PDF)
+- [ ] Review `docs/ADMIN_MULTITENANCY_PLAN.md`
+- [ ] Have GCP project access ready
+
+### Files to Reference
+- `docs/ADMIN_MULTITENANCY_PLAN.md` - Full architecture plan
+- `api/rag_service.py` - Current RAG implementation
+- `frontend/app/page.tsx` - Current UI
+
+### Key Decisions Needed
+1. **Auth provider**: Firebase Auth (recommended) vs Auth0
+2. **Pilot org details**: Name, admin email, protocols to upload
+3. **RAG corpus strategy**: Confirm one corpus per org
+
+### Estimated Time
+- Firebase Auth setup: 2-3 hours
+- First org + RAG corpus: 1-2 hours  
+- Admin upload UI (basic): 3-4 hours
+- End-to-end testing: 1-2 hours
+- **Total: 1 full day (~8 hours)**
+
+---
+
+#### 🚧 Current State (Feb 4, 2026)
+- Working single-tenant demo with sample protocols
+- Frontend + API deployed and functional
+- Multi-tenancy plan documented, not implemented
+
+#### 📅 What's After Multi-Tenancy
+- User invite flow
+- Analytics dashboard
+- Subscription tiers
+- Production hardening
 
 ---
 

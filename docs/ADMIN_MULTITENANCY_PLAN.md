@@ -47,7 +47,6 @@ This document outlines how administrators upload and manage protocols, and how u
   - slug: "memorial-hospital"
   - logo_url: "gs://..."
   - subscription_tier: "professional"
-  - rag_corpus_id: "123456789"  // Vertex AI RAG corpus for this org
   - created_at: timestamp
   - settings: {
       allow_user_signup: false,
@@ -55,23 +54,35 @@ This document outlines how administrators upload and manage protocols, and how u
       max_protocols: 100
     }
 
-  /protocols/{protocolId}
-    - title: "ACLS Cardiac Arrest Algorithm"
-    - filename: "ACLS_2025.pdf"
-    - uploaded_by: "userId"
-    - upload_date: timestamp
-    - status: "ready" | "processing" | "failed"
-    - page_count: 12
-    - image_count: 5
-    - category: "Cardiac"
-    - tags: ["ACLS", "cardiac arrest", "CPR"]
-    - pdf_url: "gs://protocols-raw/memorial-hospital/..."
-    - last_updated: timestamp
+  /themes/{themeId}  // Content themes within an org
+    - name: "Protocols"
+    - slug: "protocols"
+    - description: "Clinical protocols and guidelines"
+    - icon: "clipboard-list"
+    - color: "#3B82F6"  // Blue
+    - rag_corpus_id: "123456789"  // Each theme has its own RAG corpus
+    - is_default: true
+    - order: 1
+    - created_at: timestamp
+    
+    /content/{contentId}  // Content items within a theme
+      - title: "ACLS Cardiac Arrest Algorithm"
+      - filename: "ACLS_2025.pdf"
+      - uploaded_by: "userId"
+      - upload_date: timestamp
+      - status: "ready" | "processing" | "failed"
+      - page_count: 12
+      - image_count: 5
+      - category: "Cardiac"
+      - tags: ["ACLS", "cardiac arrest", "CPR"]
+      - pdf_url: "gs://..."
+      - last_updated: timestamp
 
   /users/{userId}
     - email: "dr.smith@memorial.org"
     - display_name: "Dr. Sarah Smith"
     - role: "admin" | "user"
+    - theme_access: ["protocols", "education", "telemed"]  // Which themes user can access
     - created_at: timestamp
     - last_login: timestamp
     - invited_by: "adminUserId"
@@ -82,22 +93,55 @@ This document outlines how administrators upload and manage protocols, and how u
   - role: "admin"
 ```
 
-### Storage Structure
+### Example Themes for a Practice
+
+| Theme | Description | Use Case |
+|-------|-------------|----------|
+| **Protocols** | Clinical guidelines, algorithms | "How do I treat sepsis?" |
+| **Education** | Training materials, CME content | "Explain the pathophysiology of DKA" |
+| **Telemed** | Telemedicine-specific workflows | "Virtual exam documentation requirements" |
+| **Policies** | HR, compliance, procedures | "What's the PTO policy?" |
+| **Formulary** | Drug information, dosing | "Pediatric amoxicillin dosing" |
+
+### Theme Toggle UI
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Memorial Hospital                                       │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  [📋 Protocols ▼]  ← Theme selector dropdown             │
+│   ├─ 📋 Protocols (selected)                             │
+│   ├─ 📚 Education                                        │
+│   ├─ 🖥️ Telemed                                          │
+│   └─ 📜 Policies                                         │
+│                                                          │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │  Enter a clinical question...                        ││
+│  └─────────────────────────────────────────────────────┘│
+│                                                          │
+│  Searching: Protocols corpus                             │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Storage Structure (Updated)
 
 ```
 Cloud Storage:
-├── protocols-raw/
+├── content-raw/
 │   └── {org-id}/
-│       └── {protocol-id}.pdf
+│       └── {theme-id}/
+│           └── {content-id}.pdf
 │
-├── protocols-processed/
+├── content-processed/
 │   └── {org-id}/
-│       └── {protocol-id}/
-│           ├── extracted_text.txt
-│           ├── metadata.json
-│           └── images/
-│               ├── page_1_img_1.png
-│               └── page_2_img_1.png
+│       └── {theme-id}/
+│           └── {content-id}/
+│               ├── extracted_text.txt
+│               ├── metadata.json
+│               └── images/
+│                   ├── page_1_img_1.png
+│                   └── page_2_img_1.png
 │
 └── org-assets/
     └── {org-id}/
@@ -106,14 +150,33 @@ Cloud Storage:
 
 ### RAG Corpus Strategy
 
-**Option A: One Corpus Per Organization** ✅ Recommended
-- Complete data isolation
-- Easy to delete org data
-- Slight overhead for corpus management
-- Each org has their own `rag_corpus_id`
+**Recommended: One Corpus Per Theme Per Organization** ✅
 
-**Option B: Single Corpus with Metadata Filtering**
-- All docs in one corpus with `org_id` metadata
+```
+Organization: Memorial Hospital
+├── Corpus: memorial-protocols     (rag_corpus_id: "111...")
+├── Corpus: memorial-education     (rag_corpus_id: "222...")
+├── Corpus: memorial-telemed       (rag_corpus_id: "333...")
+└── Corpus: memorial-policies      (rag_corpus_id: "444...")
+```
+
+**Benefits:**
+- Complete data isolation between orgs AND themes
+- User switches theme → queries different corpus
+- Easy to manage permissions per theme
+- Clean deletion (delete corpus = delete all theme content)
+- No risk of cross-contamination in search results
+
+**Trade-offs:**
+- More corpora to manage
+- Slightly higher overhead
+- Worth it for clean separation
+
+**Alternative: Single Corpus with Theme Metadata**
+- All docs in one corpus with `theme_id` metadata filter
+- Simpler but less isolated
+- Risk: filter bypass could leak data
+- Not recommended for sensitive separation
 - Filter queries by `org_id`
 - Risk: metadata filter bypass = data leak
 - Not recommended for HIPAA
@@ -165,55 +228,78 @@ Cloud Storage:
 
 ## 📤 Admin Upload Flow
 
-### UI: Admin Dashboard
+### UI: Admin Dashboard (with Themes)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Memorial Hospital - Admin Dashboard                     │
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
-│  [📁 Protocols]  [👥 Users]  [📊 Analytics]  [⚙️ Settings]│
+│  Theme: [� Protocols ▼]  ← Admin selects which theme   │
+│                                                          │
+│  [� Content]  [🎨 Themes]  [👥 Users]  [⚙️ Settings]    │
 │                                                          │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  📤 Upload New Protocol                              ││
+│  │  📤 Upload to: Protocols                             ││
 │  │  ┌─────────────────────────────────────────────────┐││
 │  │  │  Drag & drop PDF here or click to browse        │││
-│  │  │                                                  │││
-│  │  │         [Choose File]                           │││
 │  │  └─────────────────────────────────────────────────┘││
 │  └─────────────────────────────────────────────────────┘│
 │                                                          │
-│  📋 Current Protocols (24)                               │
+│  📋 Protocols Content (24 items)                         │
 │  ┌──────────────────────────────────────────────────────┐│
 │  │ ✅ ACLS Cardiac Arrest 2025    │ 12 pages │ Delete  ││
 │  │ ✅ Sepsis Bundle Protocol      │  8 pages │ Delete  ││
 │  │ ⏳ Stroke Protocol (processing)│    --    │ Cancel  ││
-│  │ ✅ Trauma Algorithm            │ 15 pages │ Delete  ││
 │  └──────────────────────────────────────────────────────┘│
+│                                                          │
+│  [🎨 Manage Themes] → Create new themes, edit colors    │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Upload Processing Pipeline
+### Theme Management UI (Admin Only)
 
 ```
-1. Admin selects PDF file
-2. Frontend validates:
+┌─────────────────────────────────────────────────────────┐
+│  Manage Themes                                           │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  [+ Create New Theme]                                    │
+│                                                          │
+│  ┌──────────────────────────────────────────────────────┐│
+│  │ 📋 Protocols    │ 24 items │ Default │ Edit │ Delete││
+│  │ 📚 Education    │ 12 items │         │ Edit │ Delete││
+│  │ 🖥️ Telemed      │  8 items │         │ Edit │ Delete││
+│  │ 📜 Policies     │ 15 items │         │ Edit │ Delete││
+│  └──────────────────────────────────────────────────────┘│
+│                                                          │
+│  Note: Deleting a theme removes all its content and     │
+│  RAG corpus. This cannot be undone.                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Upload Processing Pipeline (with Themes)
+
+```
+1. Admin selects theme (e.g., "Protocols")
+2. Admin uploads PDF file
+3. Frontend validates:
    - File type (PDF only)
    - File size (< 50MB)
-   - Org hasn't hit protocol limit
+   - Theme content limit not exceeded
    
-3. Frontend uploads to Cloud Storage:
-   gs://protocols-raw/{org-id}/{protocol-id}.pdf
+4. Frontend uploads to Cloud Storage:
+   gs://content-raw/{org-id}/{theme-id}/{content-id}.pdf
    
-4. Frontend creates Firestore doc:
-   /organizations/{org-id}/protocols/{protocol-id}
+5. Frontend creates Firestore doc:
+   /organizations/{org-id}/themes/{theme-id}/content/{content-id}
    status: "processing"
    
-5. Cloud Function triggered by GCS upload:
+6. Cloud Function triggered by GCS upload:
    a. Extract text with Document AI
    b. Extract images
    c. Store processed content
-   d. Add to org's RAG corpus
+   d. Add to theme's RAG corpus (theme.rag_corpus_id)
    e. Update Firestore: status = "ready"
    
 6. Admin UI updates in real-time (Firestore listener)
@@ -234,42 +320,82 @@ Cloud Storage:
 
 ---
 
-## 🔍 User Query Flow (Multi-Tenant)
+## 🔍 User Query Flow (Multi-Tenant with Themes)
 
 ```
-1. User sends query: "STEMI treatment"
-2. API receives request with JWT token
-3. Backend extracts org_id from token: "memorial-hospital"
-4. Backend looks up org's rag_corpus_id
-5. Query ONLY that org's RAG corpus
-6. Return results with org-specific citations
-7. User sees only their org's protocols
+1. User selects theme from dropdown: "Protocols"
+2. User sends query: "STEMI treatment"
+3. API receives request with JWT token + theme_id
+4. Backend extracts org_id from token: "memorial-hospital"
+5. Backend validates user has access to theme
+6. Backend looks up theme's rag_corpus_id
+7. Query ONLY that theme's RAG corpus
+8. Return results with theme-specific citations
+9. User sees only content from selected theme
+```
+
+### User Theme Toggle Experience
+
+```
+User opens app → Defaults to "Protocols" theme
+User queries: "STEMI treatment" → Gets protocol results
+
+User clicks theme dropdown → Selects "Education"
+Theme indicator changes: "📚 Education"
+User queries: "STEMI pathophysiology" → Gets education content
+
+User switches to "Telemed"
+User queries: "Virtual cardiac exam" → Gets telemed workflows
 ```
 
 ### API Endpoint Changes
 
 ```python
-# Current (single tenant)
-@app.post("/query")
-async def query_protocols(request: QueryRequest):
-    result = rag_service.query(request.query)
-    return result
+# Request now includes theme_id
+class QueryRequest(BaseModel):
+    query: str
+    theme_id: str  # Which theme to search
 
-# Multi-tenant version
+# Multi-tenant + multi-theme version
 @app.post("/query")
 async def query_protocols(
     request: QueryRequest,
     current_user: User = Depends(get_current_user)  # From JWT
 ):
-    # Get org's RAG corpus
-    org = get_organization(current_user.org_id)
+    # Validate user has access to this theme
+    theme = get_theme(current_user.org_id, request.theme_id)
+    if request.theme_id not in current_user.theme_access:
+        raise HTTPException(403, "No access to this theme")
     
-    # Query org-specific corpus
+    # Query theme-specific corpus
     result = rag_service.query(
         query=request.query,
-        corpus_id=org.rag_corpus_id
+        corpus_id=theme.rag_corpus_id
     )
     return result
+```
+
+### Frontend Theme State
+
+```typescript
+// Theme stored in React state
+const [currentTheme, setCurrentTheme] = useState<Theme>(defaultTheme);
+
+// Query includes theme
+const handleQuery = async (query: string) => {
+  const response = await fetch('/api/query', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      theme_id: currentTheme.id
+    }),
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  // ... handle response
+};
 ```
 
 ---
