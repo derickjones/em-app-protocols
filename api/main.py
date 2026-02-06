@@ -4,7 +4,7 @@ FastAPI backend for querying emergency medicine protocols
 """
 
 import os
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -12,6 +12,7 @@ import time
 
 from rag_service import RAGService
 from protocol_service import ProtocolService
+from auth_service import get_current_user, get_optional_user, UserProfile, require_bundle_access
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -39,7 +40,7 @@ protocol_service = ProtocolService()
 class QueryRequest(BaseModel):
     """Request model for protocol queries"""
     query: str = Field(..., description="The question to ask", min_length=3, max_length=500)
-    org_id: str = Field(default="demo-hospital", description="Organization ID")
+    bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
 
 class ImageInfo(BaseModel):
@@ -82,6 +83,15 @@ class HealthResponse(BaseModel):
     version: str
     rag_corpus: str
 
+class UserProfileResponse(BaseModel):
+    """User profile response"""
+    uid: str
+    email: str
+    orgId: Optional[str]
+    orgName: Optional[str]
+    role: str
+    bundleAccess: List[str]
+
 
 # ----- Endpoints -----
 
@@ -105,12 +115,29 @@ async def health_check():
     )
 
 
+# ----- Auth Endpoints -----
+
+@app.get("/auth/me", response_model=UserProfileResponse)
+async def get_current_user_profile(user: UserProfile = Depends(get_current_user)):
+    """
+    Get current user's profile
+    Creates user if first login with valid domain
+    """
+    return UserProfileResponse(**user.to_dict())
+
+
+# ----- Query Endpoints -----
+
 @app.post("/query", response_model=QueryResponse)
-async def query_protocols(request: QueryRequest):
+async def query_protocols(
+    request: QueryRequest,
+    user: Optional[UserProfile] = Depends(get_optional_user)
+):
     """
     Query protocols with AI-powered search
     
     Returns an answer with citations and relevant images.
+    Requires authentication for org-scoped queries.
     """
     start_time = time.time()
     

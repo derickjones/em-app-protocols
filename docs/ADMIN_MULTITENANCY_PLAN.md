@@ -8,11 +8,34 @@ This document outlines how administrators upload and manage protocols, and how u
 
 ## 🎯 Goals
 
-1. **Organization Isolation** - Each healthcare org sees only their protocols
+1. **Organization Isolation** - Each hospital/practice sees only their protocols
 2. **Role-Based Access** - Admins manage content, users query it
 3. **Simple Onboarding** - Easy for new orgs to get started
 4. **Secure by Default** - HIPAA-compliant from day one
 5. **Scalable** - Support 100s of organizations
+
+---
+
+## 🏗️ Core Concepts
+
+### Hierarchy
+
+```
+Hospital/Practice (Organization)
+└── Protocol Bundles
+    ├── Practice Protocols    (ED clinical guidelines, ACLS, sepsis)
+    ├── Nursing Protocols     (nursing-specific workflows)
+    ├── Telemed Protocols     (telemedicine procedures)
+    ├── Pediatric Protocols   (peds-specific guidelines)
+    └── Trauma Protocols      (trauma center specific)
+```
+
+### Why Protocol Bundles?
+- Different departments/roles need different content
+- A nurse might only need "Nursing Protocols"
+- A telemed physician needs "Telemed Protocols" 
+- Users can toggle between bundles they have access to
+- Each bundle has its own RAG corpus for clean separation
 
 ---
 
@@ -54,18 +77,18 @@ This document outlines how administrators upload and manage protocols, and how u
       max_protocols: 100
     }
 
-  /themes/{themeId}  // Content themes within an org
-    - name: "Protocols"
-    - slug: "protocols"
+  /bundles/{bundleId}  // Protocol Bundles within an org
+    - name: "Practice Protocols"
+    - slug: "practice"
     - description: "Clinical protocols and guidelines"
     - icon: "clipboard-list"
     - color: "#3B82F6"  // Blue
-    - rag_corpus_id: "123456789"  // Each theme has its own RAG corpus
+    - rag_corpus_id: "123456789"  // Each bundle has its own RAG corpus
     - is_default: true
     - order: 1
     - created_at: timestamp
     
-    /content/{contentId}  // Content items within a theme
+    /content/{contentId}  // Content items within a bundle
       - title: "ACLS Cardiac Arrest Algorithm"
       - filename: "ACLS_2025.pdf"
       - uploaded_by: "userId"
@@ -82,7 +105,7 @@ This document outlines how administrators upload and manage protocols, and how u
     - email: "dr.smith@memorial.org"
     - display_name: "Dr. Sarah Smith"
     - role: "admin" | "user"
-    - theme_access: ["protocols", "education", "telemed"]  // Which themes user can access
+    - bundle_access: ["practice", "nursing", "telemed"]  // Which bundles user can access
     - created_at: timestamp
     - last_login: timestamp
     - invited_by: "adminUserId"
@@ -93,34 +116,37 @@ This document outlines how administrators upload and manage protocols, and how u
   - role: "admin"
 ```
 
-### Example Themes for a Practice
+### Example Protocol Bundles for a Hospital
 
-| Theme | Description | Use Case |
-|-------|-------------|----------|
-| **Protocols** | Clinical guidelines, algorithms | "How do I treat sepsis?" |
-| **Education** | Training materials, CME content | "Explain the pathophysiology of DKA" |
-| **Telemed** | Telemedicine-specific workflows | "Virtual exam documentation requirements" |
-| **Policies** | HR, compliance, procedures | "What's the PTO policy?" |
-| **Formulary** | Drug information, dosing | "Pediatric amoxicillin dosing" |
+| Bundle | Description | Use Case |
+|--------|-------------|----------|
+| **Practice Protocols** | ED clinical guidelines, ACLS, sepsis | "How do I treat sepsis?" |
+| **Nursing Protocols** | Nursing-specific workflows, assessments | "Sepsis nursing assessment checklist" |
+| **Telemed Protocols** | Telemedicine procedures | "Virtual cardiac exam requirements" |
+| **Pediatric Protocols** | Peds-specific guidelines | "Pediatric sepsis criteria" |
+| **Trauma Protocols** | Trauma center specific | "Massive transfusion protocol" |
 
-### Theme Toggle UI
+### Bundle Selector UI
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Memorial Hospital                                       │
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
-│  [📋 Protocols ▼]  ← Theme selector dropdown             │
-│   ├─ 📋 Protocols (selected)                             │
-│   ├─ 📚 Education                                        │
-│   ├─ 🖥️ Telemed                                          │
-│   └─ 📜 Policies                                         │
+│  [📋 Practice Protocols ▼]  ← Bundle selector dropdown   │
+│   ├─ 🏥 All Bundles (hospital-wide search)              │
+│   ├─ ────────────────                                   │
+│   ├─ 📋 Practice Protocols (selected)                   │
+│   ├─ 🏥 Nursing Protocols                               │
+│   ├─ 🖥️ Telemed Protocols                               │
+│   ├─ 👶 Pediatric Protocols                             │
+│   └─ � Trauma Protocols                                │
 │                                                          │
 │  ┌─────────────────────────────────────────────────────┐│
 │  │  Enter a clinical question...                        ││
 │  └─────────────────────────────────────────────────────┘│
 │                                                          │
-│  Searching: Protocols corpus                             │
+│  Searching: Practice Protocols                           │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -130,12 +156,12 @@ This document outlines how administrators upload and manage protocols, and how u
 Cloud Storage:
 ├── content-raw/
 │   └── {org-id}/
-│       └── {theme-id}/
+│       └── {bundle-id}/
 │           └── {content-id}.pdf
 │
 ├── content-processed/
 │   └── {org-id}/
-│       └── {theme-id}/
+│       └── {bundle-id}/
 │           └── {content-id}/
 │               ├── extracted_text.txt
 │               ├── metadata.json
@@ -150,21 +176,23 @@ Cloud Storage:
 
 ### RAG Corpus Strategy
 
-**Recommended: One Corpus Per Theme Per Organization** ✅
+**Recommended: One Corpus Per Bundle Per Organization** ✅
 
 ```
 Organization: Memorial Hospital
-├── Corpus: memorial-protocols     (rag_corpus_id: "111...")
-├── Corpus: memorial-education     (rag_corpus_id: "222...")
-├── Corpus: memorial-telemed       (rag_corpus_id: "333...")
-└── Corpus: memorial-policies      (rag_corpus_id: "444...")
+├── Corpus: memorial-practice     (rag_corpus_id: "111...")
+├── Corpus: memorial-nursing      (rag_corpus_id: "222...")
+├── Corpus: memorial-telemed      (rag_corpus_id: "333...")
+├── Corpus: memorial-pediatric    (rag_corpus_id: "444...")
+└── Corpus: memorial-trauma       (rag_corpus_id: "555...")
 ```
 
 **Benefits:**
-- Complete data isolation between orgs AND themes
-- User switches theme → queries different corpus
-- Easy to manage permissions per theme
-- Clean deletion (delete corpus = delete all theme content)
+- Complete data isolation between orgs AND bundles
+- User switches bundle → queries different corpus
+- "All Bundles" search → queries multiple corpora in parallel
+- Easy to manage permissions per bundle
+- Clean deletion (delete corpus = delete all bundle content)
 - No risk of cross-contamination in search results
 
 **Trade-offs:**
@@ -172,8 +200,8 @@ Organization: Memorial Hospital
 - Slightly higher overhead
 - Worth it for clean separation
 
-**Alternative: Single Corpus with Theme Metadata**
-- All docs in one corpus with `theme_id` metadata filter
+**Alternative: Single Corpus with Bundle Metadata**
+- All docs in one corpus with `bundle_id` metadata filter
 - Simpler but less isolated
 - Risk: filter bypass could leak data
 - Not recommended for sensitive separation
@@ -228,16 +256,16 @@ Organization: Memorial Hospital
 
 ## 📤 Admin Upload Flow
 
-### UI: Admin Dashboard (with Themes)
+### UI: Admin Dashboard (with Bundles)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Memorial Hospital - Admin Dashboard                     │
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
-│  Theme: [� Protocols ▼]  ← Admin selects which theme   │
+│  Bundle: [� Protocols ▼]  ← Select bundle   │
 │                                                          │
-│  [� Content]  [🎨 Themes]  [👥 Users]  [⚙️ Settings]    │
+│  [� Content]  [🎨 Bundles]  [👥 Users]  [⚙️ Settings]    │
 │                                                          │
 │  ┌─────────────────────────────────────────────────────┐│
 │  │  📤 Upload to: Protocols                             ││
@@ -253,53 +281,54 @@ Organization: Memorial Hospital
 │  │ ⏳ Stroke Protocol (processing)│    --    │ Cancel  ││
 │  └──────────────────────────────────────────────────────┘│
 │                                                          │
-│  [🎨 Manage Themes] → Create new themes, edit colors    │
+│  [🎨 Manage Bundles] → Create new bundles, configure    │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Theme Management UI (Admin Only)
+### Bundle Management UI (Admin Only)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Manage Themes                                           │
+│  Manage Protocol Bundles                                 │
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
-│  [+ Create New Theme]                                    │
+│  [+ Create New Bundle]                                   │
 │                                                          │
 │  ┌──────────────────────────────────────────────────────┐│
-│  │ 📋 Protocols    │ 24 items │ Default │ Edit │ Delete││
-│  │ 📚 Education    │ 12 items │         │ Edit │ Delete││
-│  │ 🖥️ Telemed      │  8 items │         │ Edit │ Delete││
-│  │ 📜 Policies     │ 15 items │         │ Edit │ Delete││
+│  │ 📋 Practice Protocols │ 24 items │ Default │ Edit   ││
+│  │ 🏥 Nursing Protocols  │ 12 items │         │ Edit   ││
+│  │ 🖥️ Telemed Protocols  │  8 items │         │ Edit   ││
+│  │ 👶 Pediatric Protocols│ 15 items │         │ Edit   ││
+│  │ � Trauma Protocols   │ 10 items │         │ Edit   ││
 │  └──────────────────────────────────────────────────────┘│
 │                                                          │
-│  Note: Deleting a theme removes all its content and     │
+│  Note: Deleting a bundle removes all its content and    │
 │  RAG corpus. This cannot be undone.                     │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Upload Processing Pipeline (with Themes)
+### Upload Processing Pipeline (with Bundles)
 
 ```
-1. Admin selects theme (e.g., "Protocols")
+1. Admin selects bundle (e.g., "Practice Protocols")
 2. Admin uploads PDF file
 3. Frontend validates:
    - File type (PDF only)
    - File size (< 50MB)
-   - Theme content limit not exceeded
+   - Bundle content limit not exceeded
    
 4. Frontend uploads to Cloud Storage:
-   gs://content-raw/{org-id}/{theme-id}/{content-id}.pdf
+   gs://content-raw/{org-id}/{bundle-id}/{content-id}.pdf
    
 5. Frontend creates Firestore doc:
-   /organizations/{org-id}/themes/{theme-id}/content/{content-id}
+   /organizations/{org-id}/bundles/{bundle-id}/content/{content-id}
    status: "processing"
    
 6. Cloud Function triggered by GCS upload:
    a. Extract text with Document AI
    b. Extract images
    c. Store processed content
-   d. Add to theme's RAG corpus (theme.rag_corpus_id)
+   d. Add to bundle's RAG corpus (bundle.rag_corpus_id)
    e. Update Firestore: status = "ready"
    
 6. Admin UI updates in real-time (Firestore listener)
@@ -320,82 +349,215 @@ Organization: Memorial Hospital
 
 ---
 
-## 🔍 User Query Flow (Multi-Tenant with Themes)
+## 🔍 User Query Flow (Multi-Tenant with Bundles)
 
 ```
-1. User selects theme from dropdown: "Protocols"
+1. User selects bundle(s): "Practice Protocols" or "All Bundles"
 2. User sends query: "STEMI treatment"
-3. API receives request with JWT token + theme_id
+3. API receives request with JWT token + bundle_ids
 4. Backend extracts org_id from token: "memorial-hospital"
-5. Backend validates user has access to theme
-6. Backend looks up theme's rag_corpus_id
-7. Query ONLY that theme's RAG corpus
-8. Return results with theme-specific citations
-9. User sees only content from selected theme
+5. Backend validates user has access to requested bundles
+6. If single bundle: Query that bundle's RAG corpus
+   If "all" or multiple: Query each corpus in parallel
+7. Merge results, re-rank by relevance
+8. Return results with bundle-specific citations (each citation shows which bundle)
+9. User sees content from selected bundle(s)
 ```
 
-### User Theme Toggle Experience
+### User Bundle Toggle Experience
 
 ```
-User opens app → Defaults to "Protocols" theme
+User opens app → Defaults to "Practice Protocols" bundle
 User queries: "STEMI treatment" → Gets protocol results
 
-User clicks theme dropdown → Selects "Education"
-Theme indicator changes: "📚 Education"
-User queries: "STEMI pathophysiology" → Gets education content
+User clicks bundle dropdown → Selects "Nursing Protocols"
+Bundle indicator changes: "🏥 Nursing Protocols"
+User queries: "STEMI nursing care" → Gets nursing content
 
-User switches to "Telemed"
-User queries: "Virtual cardiac exam" → Gets telemed workflows
+User switches to "All Bundles" (hospital-wide search)
+User queries: "sepsis management" → Gets results from ALL bundles
+```
+
+---
+
+## 🔍 Hospital-Level Search (Cross-Bundle Query)
+
+### Concept
+
+Users can search **across all bundles** or **selected bundles** within their hospital, not just one at a time.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Memorial Hospital                                       │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  Search In: [🏥 All Bundles ▼]  ← Bundle selector       │
+│   ├─ 🏥 All Bundles (search everything)                 │
+│   ├─ ────────────────                                   │
+│   ├─ 📋 Practice Protocols                              │
+│   ├─ 🏥 Nursing Protocols                               │
+│   ├─ 🖥️ Telemed Protocols                               │
+│   ├─ 👶 Pediatric Protocols                             │
+│   └─ 🚨 Trauma Protocols                                │
+│                                                          │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │  sepsis management                                   ││
+│  └─────────────────────────────────────────────────────┘│
+│                                                          │
+│  Searching: All hospital bundles                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Search Results with Bundle Badges
+
+When searching across multiple bundles, results show which bundle each citation came from:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Answer:                                                 │
+│                                                          │
+│  Sepsis management involves early recognition [1],       │
+│  IV antibiotic administration within 1 hour [2], and    │
+│  nursing assessment q15 minutes during resuscitation [3].│
+│                                                          │
+│  ─────────────────────────────────────────────────────  │
+│                                                          │
+│  📚 Source Protocols:                                    │
+│  ┌──────────────────────────────────────────────────────┐│
+│  │ [1] Sepsis Bundle Protocol                           ││
+│  │     📋 Practice Protocols                            ││
+│  │                                                       ││
+│  │ [2] Antibiotic Administration Guidelines             ││
+│  │     📋 Practice Protocols                            ││
+│  │                                                       ││
+│  │ [3] Sepsis Nursing Assessment Checklist              ││
+│  │     🏥 Nursing Protocols  ← Different bundle!        ││
+│  └──────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+```
+
+### Multi-Bundle Query Implementation
+
+**Option A: Parallel Corpus Queries (Recommended)**
+Query each bundle's corpus in parallel, merge and re-rank results.
+
+```python
+async def query_multiple_bundles(
+    query: str,
+    bundle_ids: List[str],  # ["practice", "nursing"] or ["all"]
+    org_id: str
+) -> QueryResult:
+    # Resolve "all" to list of all accessible bundle IDs
+    if "all" in bundle_ids:
+        bundle_ids = get_user_accessible_bundles(org_id, user)
+    
+    # Query each bundle's corpus in parallel
+    tasks = []
+    for bundle_id in bundle_ids:
+        corpus_id = get_bundle_corpus_id(org_id, bundle_id)
+        tasks.append(query_single_corpus(query, corpus_id, bundle_id))
+    
+    # Wait for all queries to complete
+    results = await asyncio.gather(*tasks)
+    
+    # Merge results, keeping top N by relevance score
+    merged = merge_and_rank_results(results, top_n=5)
+    
+    # Generate unified answer from merged contexts
+    answer = await generate_answer(query, merged.contexts)
+    
+    return QueryResult(
+        answer=answer,
+        citations=merged.citations,  # Each citation has bundle_id
+        images=merged.images
+    )
+```
+
+**Option B: Metadata Filtering (Single Corpus per Org)**
+Less recommended, but simpler - all docs in one corpus with bundle metadata.
+
+```python
+# Filter by bundle_id metadata
+result = rag_corpus.query(
+    query=query,
+    filter={"bundle_id": {"$in": bundle_ids}}
+)
 ```
 
 ### API Endpoint Changes
 
 ```python
-# Request now includes theme_id
+# Request now supports multiple bundles
 class QueryRequest(BaseModel):
     query: str
-    theme_id: str  # Which theme to search
+    bundle_ids: List[str] = ["default"]  # Single bundle OR multiple OR ["all"]
 
-# Multi-tenant + multi-theme version
+# Example requests:
+# Single bundle:  {"query": "STEMI", "bundle_ids": ["practice"]}
+# Multi-bundle:   {"query": "sepsis", "bundle_ids": ["practice", "nursing"]}
+# All bundles:    {"query": "sepsis", "bundle_ids": ["all"]}
+
 @app.post("/query")
 async def query_protocols(
     request: QueryRequest,
-    current_user: User = Depends(get_current_user)  # From JWT
+    current_user: User = Depends(get_current_user)
 ):
-    # Validate user has access to this theme
-    theme = get_theme(current_user.org_id, request.theme_id)
-    if request.theme_id not in current_user.theme_access:
-        raise HTTPException(403, "No access to this theme")
+    # Validate user has access to requested bundles
+    for bundle_id in request.bundle_ids:
+        if bundle_id != "all" and bundle_id not in current_user.bundle_access:
+            raise HTTPException(403, f"No access to bundle: {bundle_id}")
     
-    # Query theme-specific corpus
-    result = rag_service.query(
+    # Query across bundles
+    result = await rag_service.query_multiple_bundles(
         query=request.query,
-        corpus_id=theme.rag_corpus_id
+        bundle_ids=request.bundle_ids,
+        org_id=current_user.org_id
     )
     return result
 ```
 
-### Frontend Theme State
+### Frontend Bundle State
 
 ```typescript
-// Theme stored in React state
-const [currentTheme, setCurrentTheme] = useState<Theme>(defaultTheme);
+// Selected bundles stored in React state
+// Can be a single bundle, multiple, or "all"
+const [selectedBundles, setSelectedBundles] = useState<string[]>(["practice"]);
 
-// Query includes theme
+// UI helper for display
+const isAllBundles = selectedBundles.includes("all");
+const bundleLabel = isAllBundles 
+  ? "All Bundles" 
+  : selectedBundles.length === 1 
+    ? bundles.find(b => b.id === selectedBundles[0])?.name 
+    : `${selectedBundles.length} Bundles`;
+
+// Query includes selected bundles
 const handleQuery = async (query: string) => {
   const response = await fetch('/api/query', {
     method: 'POST',
     body: JSON.stringify({
       query,
-      theme_id: currentTheme.id
+      bundle_ids: selectedBundles  // ["practice"] or ["practice", "nursing"] or ["all"]
     }),
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
     }
   });
-  // ... handle response
+  
+  const data = await response.json();
+  // Each citation includes bundle_id for badge display
+  // data.citations = [{ title: "...", bundle_id: "practice", bundle_name: "Practice Protocols" }]
 };
+
+// Bundle selector component
+<BundleSelector
+  bundles={userBundles}
+  selected={selectedBundles}
+  onChange={setSelectedBundles}
+  allowMultiple={true}
+  showAllOption={true}
+/>
 ```
 
 ---

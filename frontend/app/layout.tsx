@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Orbitron, Roboto } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth-context";
 
 const orbitron = Orbitron({
   variable: "--font-orbitron",
@@ -27,7 +28,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${orbitron.variable} ${roboto.variable} antialiased`}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
