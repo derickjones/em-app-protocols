@@ -19,6 +19,8 @@ interface UploadStatus {
   status: "idle" | "uploading" | "processing" | "success" | "error";
   message: string;
   progress?: number;
+  totalFiles?: number;
+  completedFiles?: number;
 }
 
 export default function AdminPage() {
@@ -60,82 +62,100 @@ export default function AdminPage() {
     }
   };
 
-  // Handle file upload
+  // Handle file upload - supports multiple files
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    if (file.type !== "application/pdf") {
-      setUploadStatus({ status: "error", message: "Please upload a PDF file" });
+    // Filter for PDF files only
+    const pdfFiles = Array.from(files).filter(file => file.type === "application/pdf");
+    
+    if (pdfFiles.length === 0) {
+      setUploadStatus({ status: "error", message: "Please upload PDF files only" });
       return;
     }
 
-    setUploadStatus({ status: "uploading", message: "Uploading PDF...", progress: 25 });
+    const totalFiles = pdfFiles.length;
+    let completedFiles = 0;
+    let failedFiles: string[] = [];
 
-    try {
-      // Create form data for multipart upload
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("org_id", orgId);
+    setUploadStatus({ 
+      status: "uploading", 
+      message: `Uploading ${totalFiles} file(s)...`, 
+      progress: 0,
+      totalFiles,
+      completedFiles: 0
+    });
 
-      setUploadStatus({ status: "uploading", message: "Uploading to cloud storage...", progress: 50 });
+    // Upload files sequentially to avoid overwhelming the server
+    for (const file of pdfFiles) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("org_id", orgId);
 
-      // Upload directly to API
-      const uploadRes = await fetch(`${API_URL}/upload`, {
-        method: "POST",
-        body: formData,
-      });
+        setUploadStatus({ 
+          status: "uploading", 
+          message: `Uploading: ${file.name}...`, 
+          progress: Math.round((completedFiles / totalFiles) * 100),
+          totalFiles,
+          completedFiles
+        });
 
-      if (!uploadRes.ok) {
-        throw new Error("Failed to upload file");
+        const uploadRes = await fetch(`${API_URL}/upload`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          failedFiles.push(file.name);
+        } else {
+          completedFiles++;
+        }
+
+        setUploadStatus({ 
+          status: "processing", 
+          message: `Processing: ${file.name}...`, 
+          progress: Math.round((completedFiles / totalFiles) * 100),
+          totalFiles,
+          completedFiles
+        });
+
+      } catch (err) {
+        failedFiles.push(file.name);
       }
+    }
 
+    // Final status
+    if (failedFiles.length === 0) {
       setUploadStatus({ 
-        status: "processing", 
-        message: "Processing PDF... This may take a minute.",
-        progress: 75 
+        status: "success", 
+        message: `Successfully uploaded ${completedFiles} protocol(s)! Processing may take a moment.`,
+        totalFiles,
+        completedFiles
       });
-
-      // Poll for completion (check if protocol appears in list)
-      const protocolId = file.name.replace(".pdf", "").replace(/[^a-zA-Z0-9_-]/g, "_");
-      let attempts = 0;
-      const maxAttempts = 30; // 30 seconds max
-
-      const checkInterval = setInterval(async () => {
-        attempts++;
-        try {
-          const checkRes = await fetch(`${API_URL}/protocols?org_id=${orgId}`);
-          if (checkRes.ok) {
-            const data = await checkRes.json();
-            const found = data.protocols?.find((p: Protocol) => p.protocol_id === protocolId);
-            if (found) {
-              clearInterval(checkInterval);
-              setUploadStatus({ status: "success", message: "Protocol uploaded and indexed!" });
-              setProtocols(data.protocols);
-              setTimeout(() => setUploadStatus({ status: "idle", message: "" }), 3000);
-            }
-          }
-        } catch (err) {
-          // Keep polling
-        }
-
-        if (attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          setUploadStatus({ 
-            status: "success", 
-            message: "Upload complete! Processing may still be in progress." 
-          });
-          fetchProtocols();
-          setTimeout(() => setUploadStatus({ status: "idle", message: "" }), 3000);
-        }
-      }, 1000);
-
-    } catch (err) {
+    } else if (completedFiles > 0) {
+      setUploadStatus({ 
+        status: "success", 
+        message: `Uploaded ${completedFiles}/${totalFiles}. Failed: ${failedFiles.join(", ")}`,
+        totalFiles,
+        completedFiles
+      });
+    } else {
       setUploadStatus({ 
         status: "error", 
-        message: err instanceof Error ? err.message : "Upload failed" 
+        message: `All uploads failed. Please try again.` 
       });
     }
+
+    // Refresh protocols list after a delay
+    setTimeout(() => {
+      fetchProtocols();
+    }, 2000);
+
+    // Clear status after 5 seconds
+    setTimeout(() => {
+      setUploadStatus({ status: "idle", message: "" });
+    }, 5000);
   };
 
   // Drag and drop handlers
@@ -277,6 +297,7 @@ export default function AdminPage() {
               <input
                 type="file"
                 accept=".pdf"
+                multiple
                 onChange={(e) => handleUpload(e.target.files)}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 disabled={uploadStatus.status === "uploading" || uploadStatus.status === "processing"}
@@ -287,10 +308,10 @@ export default function AdminPage() {
                   <>
                     <Upload className="w-12 h-12 mx-auto text-[#9aa0a6] mb-4" />
                     <p className="text-lg font-medium text-white mb-1">
-                      Drop PDF here or click to upload
+                      Drop PDFs here or click to upload
                     </p>
                     <p className="text-sm text-[#9aa0a6]">
-                      Protocol will be automatically processed and indexed
+                      Multiple protocols can be uploaded at once
                     </p>
                   </>
                 )}
@@ -301,7 +322,12 @@ export default function AdminPage() {
                     <p className="text-lg font-medium text-[#8ab4f8] mb-1">
                       {uploadStatus.message}
                     </p>
-                    {uploadStatus.progress && (
+                    {uploadStatus.totalFiles && uploadStatus.totalFiles > 1 && (
+                      <p className="text-sm text-[#9aa0a6] mb-2">
+                        {uploadStatus.completedFiles || 0} of {uploadStatus.totalFiles} files completed
+                      </p>
+                    )}
+                    {uploadStatus.progress !== undefined && (
                       <div className="w-64 mx-auto bg-[#3c4043] rounded-full h-2 mt-3">
                         <div 
                           className="bg-[#8ab4f8] h-2 rounded-full transition-all"
