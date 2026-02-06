@@ -67,6 +67,14 @@ def verify_firebase_token(token: str) -> dict:
         )
 
 
+def check_email_verified(decoded_token: dict) -> bool:
+    """
+    Check if the user's email is verified.
+    Google sign-in users are always verified.
+    """
+    return decoded_token.get("email_verified", False)
+
+
 def get_org_by_domain(email_domain: str) -> Optional[dict]:
     """
     Look up organization by email domain
@@ -158,6 +166,34 @@ async def get_current_user(
     
     token = credentials.credentials
     decoded = verify_firebase_token(token)
+    user = get_or_create_user(decoded)
+    
+    return user
+
+
+async def get_verified_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> UserProfile:
+    """
+    FastAPI dependency to get current authenticated AND email-verified user
+    Use this for endpoints that require verified email
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
+    
+    token = credentials.credentials
+    decoded = verify_firebase_token(token)
+    
+    # Check email verification
+    if not check_email_verified(decoded):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before accessing this resource"
+        )
+    
     user = get_or_create_user(decoded)
     
     return user

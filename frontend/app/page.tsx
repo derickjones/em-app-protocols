@@ -23,11 +23,19 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const { user, userProfile, loading: authLoading, signOut, getIdToken } = useAuth();
+  const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
+  const [verificationSent, setVerificationSent] = useState(false);
 
   const handleSubmit = async () => {
     if (!question.trim() || loading) return;
+    
+    // Check if user needs to verify email
+    if (user && !emailVerified) {
+      setError("Please verify your email before searching. Check your inbox for a verification link.");
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     setHasSearched(true);
@@ -76,6 +84,16 @@ export default function Home() {
   const handleSignOut = async () => {
     await signOut();
     setShowUserMenu(false);
+  };
+
+  const handleResendVerification = async () => {
+    try {
+      await resendVerificationEmail();
+      setVerificationSent(true);
+      setTimeout(() => setVerificationSent(false), 5000);
+    } catch {
+      // Error handled in auth context
+    }
   };
 
   // Show loading state while auth is initializing
@@ -174,6 +192,29 @@ export default function Home() {
             )}
           </div>
         </header>
+
+        {/* Email Verification Banner */}
+        {user && !emailVerified && (
+          <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-6 py-3">
+            <div className="max-w-[800px] mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-yellow-500 text-sm">
+                  Please verify your email to search protocols. Check your inbox for a verification link.
+                </span>
+              </div>
+              <button
+                onClick={handleResendVerification}
+                disabled={verificationSent}
+                className="text-sm text-yellow-400 hover:text-yellow-300 disabled:text-yellow-600 transition-colors"
+              >
+                {verificationSent ? "Email sent!" : "Resend email"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Center Content */}
         <div className={`flex-1 flex flex-col items-center px-8 ${!hasSearched ? 'justify-center' : 'overflow-y-auto'}`}>

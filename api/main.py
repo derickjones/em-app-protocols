@@ -12,7 +12,7 @@ import time
 
 from rag_service import RAGService
 from protocol_service import ProtocolService
-from auth_service import get_current_user, get_optional_user, UserProfile, require_bundle_access
+from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_bundle_access, verify_firebase_token, check_email_verified
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -131,13 +131,13 @@ async def get_current_user_profile(user: UserProfile = Depends(get_current_user)
 @app.post("/query", response_model=QueryResponse)
 async def query_protocols(
     request: QueryRequest,
-    user: Optional[UserProfile] = Depends(get_optional_user)
+    user: Optional[UserProfile] = Depends(get_verified_user)
 ):
     """
     Query protocols with AI-powered search
     
     Returns an answer with citations and relevant images.
-    Requires authentication for org-scoped queries.
+    Requires authentication AND verified email for org-scoped queries.
     """
     start_time = time.time()
     

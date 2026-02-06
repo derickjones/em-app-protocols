@@ -13,6 +13,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
+  sendEmailVerification,
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 
@@ -30,11 +31,13 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   error: string | null;
+  emailVerified: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
+  resendVerificationEmail: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -104,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
+      // Send verification email
+      await sendEmailVerification(result.user);
       // Profile will be created by backend based on domain validation
       const profile = await fetchUserProfile(result.user);
       setUserProfile(profile);
@@ -137,6 +142,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user.getIdToken();
   };
 
+  const resendVerificationEmail = async () => {
+    if (!user) return;
+    try {
+      await sendEmailVerification(user);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to send verification email";
+      setError(message);
+      throw err;
+    }
+  };
+
+  // Check if email is verified (Google sign-in is always verified)
+  const emailVerified = user?.emailVerified ?? false;
+
   return (
     <AuthContext.Provider
       value={{
@@ -144,11 +163,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userProfile,
         loading,
         error,
+        emailVerified,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
         signOut,
         getIdToken,
+        resendVerificationEmail,
       }}
     >
       {children}
