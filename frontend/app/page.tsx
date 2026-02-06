@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, FolderOpen, Check } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
@@ -177,6 +177,46 @@ export default function Home() {
       }
       return next;
     });
+  };
+
+  // Get icon for bundle based on name or index
+  const getBundleIcon = (bundleName: string, index: number, isSelected: boolean) => {
+    const iconClass = `w-4 h-4 ${isSelected ? 'text-white' : ''}`;
+    
+    // Match bundle names to relevant icons
+    const nameLower = bundleName.toLowerCase();
+    if (nameLower.includes('cardiac') || nameLower.includes('acls') || nameLower.includes('heart')) {
+      return <Heart className={`${iconClass} ${!isSelected ? 'text-red-500' : ''}`} />;
+    }
+    if (nameLower.includes('trauma') || nameLower.includes('injury')) {
+      return <Zap className={`${iconClass} ${!isSelected ? 'text-orange-500' : ''}`} />;
+    }
+    if (nameLower.includes('neuro') || nameLower.includes('stroke') || nameLower.includes('brain')) {
+      return <Brain className={`${iconClass} ${!isSelected ? 'text-purple-500' : ''}`} />;
+    }
+    if (nameLower.includes('ortho') || nameLower.includes('fracture') || nameLower.includes('bone')) {
+      return <Bone className={`${iconClass} ${!isSelected ? 'text-gray-400' : ''}`} />;
+    }
+    if (nameLower.includes('peds') || nameLower.includes('pediatric')) {
+      return <ShieldPlus className={`${iconClass} ${!isSelected ? 'text-pink-500' : ''}`} />;
+    }
+    if (nameLower.includes('med') || nameLower.includes('pharm') || nameLower.includes('drug')) {
+      return <Pill className={`${iconClass} ${!isSelected ? 'text-green-500' : ''}`} />;
+    }
+    if (nameLower.includes('procedure') || nameLower.includes('injection')) {
+      return <Syringe className={`${iconClass} ${!isSelected ? 'text-cyan-500' : ''}`} />;
+    }
+    
+    // Cycle through icons for generic bundles
+    const icons = [
+      <Activity key="activity" className={`${iconClass} ${!isSelected ? 'text-red-500' : ''}`} />,
+      <Stethoscope key="stethoscope" className={`${iconClass} ${!isSelected ? 'text-blue-500' : ''}`} />,
+      <Heart key="heart" className={`${iconClass} ${!isSelected ? 'text-red-500' : ''}`} />,
+      <Cross key="cross" className={`${iconClass} ${!isSelected ? 'text-emerald-500' : ''}`} />,
+      <Zap key="zap" className={`${iconClass} ${!isSelected ? 'text-yellow-500' : ''}`} />,
+      <Brain key="brain" className={`${iconClass} ${!isSelected ? 'text-purple-500' : ''}`} />,
+    ];
+    return icons[index % icons.length];
   };
 
   // Toggle bundle selection
@@ -732,7 +772,7 @@ export default function Home() {
               {selectedHospital && allHospitals[selectedHospital] && Object.keys(allHospitals[selectedHospital]).length > 0 && (
                 <div className="mt-6">
                   <div className="flex flex-wrap gap-3 justify-center">
-                    {Object.keys(allHospitals[selectedHospital]).map(bundle => {
+                    {Object.keys(allHospitals[selectedHospital]).map((bundle, index) => {
                       const bundleKey = `${selectedHospital}/${bundle}`;
                       const isSelected = selectedBundles.has(bundleKey);
                       return (
@@ -749,7 +789,7 @@ export default function Home() {
                                 : 'bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200 hover:border-gray-300'
                           }`}
                         >
-                          <FolderOpen className={`w-4 h-4 ${isSelected ? 'text-white' : darkMode ? 'text-yellow-500' : 'text-yellow-600'}`} />
+                          {getBundleIcon(bundle, index, isSelected)}
                           <span>{bundle}</span>
                         </button>
                       );
