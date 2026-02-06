@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen } from "lucide-react";
+import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database } from "lucide-react";
 import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
@@ -44,6 +44,8 @@ export default function AdminPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: "idle", message: "" });
   const [dragActive, setDragActive] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexStatus, setReindexStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
 
   const orgId = hospitalId && bundleName ? `${hospitalId}/${bundleName}` : hospitalId;
 
@@ -136,6 +138,37 @@ export default function AdminPage() {
     e.preventDefault();
     if (hospitalId.trim() && bundleName.trim()) {
       setIsAuthenticated(true);
+    }
+  };
+
+  const handleReindexRAG = async () => {
+    if (!confirm("Re-index all protocols in RAG? This will clear and rebuild the search index.")) {
+      return;
+    }
+    
+    setReindexing(true);
+    setReindexStatus({ type: null, message: "" });
+    
+    try {
+      const res = await fetch(`${API_URL}/admin/reindex-rag`, {
+        method: "POST",
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setReindexStatus({ 
+          type: "success", 
+          message: `${data.message || `Cleared ${data.deleted} files, indexing ${data.files_to_index} files`}` 
+        });
+      } else {
+        const error = await res.text();
+        setReindexStatus({ type: "error", message: `Failed: ${error}` });
+      }
+    } catch (err) {
+      console.error("Reindex error:", err);
+      setReindexStatus({ type: "error", message: "Failed to connect to API" });
+    } finally {
+      setReindexing(false);
     }
   };
 
@@ -356,27 +389,46 @@ export default function AdminPage() {
         </header>
 
         <div className="px-6 pt-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode("upload")}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                viewMode === "upload"
-                  ? "bg-[#8ab4f8] text-[#131314]"
-                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
-              }`}
-            >
-              Upload Protocols
-            </button>
-            <button
-              onClick={() => setViewMode("browse")}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                viewMode === "browse"
-                  ? "bg-[#8ab4f8] text-[#131314]"
-                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
-              }`}
-            >
-              Browse All Hospitals
-            </button>
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setViewMode("upload")}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  viewMode === "upload"
+                    ? "bg-[#8ab4f8] text-[#131314]"
+                    : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+                }`}
+              >
+                Upload Protocols
+              </button>
+              <button
+                onClick={() => setViewMode("browse")}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  viewMode === "browse"
+                    ? "bg-[#8ab4f8] text-[#131314]"
+                    : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+                }`}
+              >
+                Browse All Hospitals
+              </button>
+            </div>
+            
+            {/* Re-index RAG Button */}
+            <div className="flex items-center gap-3">
+              {reindexStatus.type && (
+                <span className={`text-sm ${reindexStatus.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                  {reindexStatus.message}
+                </span>
+              )}
+              <button
+                onClick={handleReindexRAG}
+                disabled={reindexing}
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border border-[#3c4043] text-[#9aa0a6] hover:text-white hover:bg-[#3c4043] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Database className={`w-4 h-4 ${reindexing ? "animate-pulse" : ""}`} />
+                {reindexing ? "Re-indexing..." : "Re-index RAG"}
+              </button>
+            </div>
           </div>
         </div>
 
