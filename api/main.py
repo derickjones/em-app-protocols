@@ -157,7 +157,7 @@ async def query_protocols(
         for c in result.get("citations", []):
             source = c["source"]
             # Extract protocol info from path like:
-            # gs://bucket/org_id/protocol_id/extracted_text.txt or
+            # gs://bucket/org_id/bundle_id/protocol_id/extracted_text.txt or
             # gs://bucket/rag-input/protocol_id.txt
             parts = source.replace("gs://", "").split("/")
             
@@ -165,9 +165,16 @@ async def query_protocols(
                 # Format: bucket/rag-input/protocol_id.txt
                 protocol_id = parts[-1].replace(".txt", "")
                 org_id = "demo-hospital"  # Default org for rag-input files
-            elif len(parts) >= 4:
-                # Format: bucket/org_id/protocol_id/extracted_text.txt
+                bundle_id = None
+            elif len(parts) >= 5:
+                # Format: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
                 org_id = parts[1]
+                bundle_id = parts[2]
+                protocol_id = parts[3]
+            elif len(parts) >= 4:
+                # Legacy format: bucket/org_id/protocol_id/extracted_text.txt
+                org_id = parts[1]
+                bundle_id = None
                 protocol_id = parts[2]
             else:
                 continue
@@ -177,8 +184,11 @@ async def query_protocols(
                 continue
             seen_protocols.add(protocol_id)
             
-            # Build public PDF URL
-            pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{org_id}/{protocol_id}.pdf"
+            # Build public PDF URL (include bundle if present)
+            if bundle_id:
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{org_id}/{bundle_id}/{protocol_id}.pdf"
+            else:
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{org_id}/{protocol_id}.pdf"
             
             citations.append(Citation(
                 protocol_id=protocol_id,

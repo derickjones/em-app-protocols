@@ -143,12 +143,31 @@ A:"""
     
     def _get_protocol_metadata(self, source_uri: str) -> Optional[Dict]:
         """Get metadata for a protocol from its source URI"""
-        # Parse source URI to get org_id and protocol_id
-        # Format: gs://bucket/org_id/protocol_id/extracted_text.txt
+        # Parse source URI to get org_id, bundle_id, and protocol_id
+        # Format: gs://bucket/org_id/bundle_id/protocol_id/extracted_text.txt
         try:
             if source_uri.startswith("gs://"):
                 parts = source_uri.split("/")
-                if len(parts) >= 5:
+                if len(parts) >= 6:
+                    # New format with bundle: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
+                    org_id = parts[3]
+                    bundle_id = parts[4]
+                    protocol_id = parts[5]
+                    
+                    cache_key = f"{org_id}/{bundle_id}/{protocol_id}"
+                    if cache_key in self._metadata_cache:
+                        return self._metadata_cache[cache_key]
+                    
+                    bucket = self.storage_client.bucket(PROCESSED_BUCKET)
+                    blob = bucket.blob(f"{org_id}/{bundle_id}/{protocol_id}/metadata.json")
+                    
+                    if blob.exists():
+                        content = blob.download_as_string()
+                        metadata = json.loads(content)
+                        self._metadata_cache[cache_key] = metadata
+                        return metadata
+                elif len(parts) >= 5:
+                    # Legacy format: bucket/org_id/protocol_id/extracted_text.txt
                     org_id = parts[3]
                     protocol_id = parts[4]
                     

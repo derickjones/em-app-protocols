@@ -490,8 +490,91 @@ export default function Home() {
           )}
         </div>
 
-        {/* Sidebar Footer - User Auth */}
+        {/* Sidebar Footer */}
         <div className={`p-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
+          {/* Dark/Light Mode Toggle */}
+          <div className="flex items-center justify-between px-1 mb-4">
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Light</span>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
+                darkMode ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-300 ${
+                  darkMode ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Dark</span>
+          </div>
+
+          {/* Hospital Selector */}
+          {user && Object.keys(allHospitals).length > 0 && (
+            <div className="mb-4">
+              <p className={`text-xs font-medium mb-2 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Logged into
+              </p>
+              <div className="relative">
+                <button
+                  onClick={() => setShowHospitalDropdown(!showHospitalDropdown)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                    darkMode 
+                      ? 'bg-neutral-800 border-neutral-700 hover:border-neutral-600' 
+                      : 'bg-white border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                  <span className={`flex-1 text-left text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {selectedHospital ? selectedHospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Select hospital...'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${darkMode ? 'text-gray-500' : 'text-gray-400'} ${showHospitalDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showHospitalDropdown && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setShowHospitalDropdown(false)}
+                    />
+                    <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
+                      {Object.keys(allHospitals).map((hospital) => (
+                        <button
+                          key={hospital}
+                          onClick={() => {
+                            setSelectedHospital(hospital);
+                            setShowHospitalDropdown(false);
+                            // Clear bundle selection when switching hospitals
+                            setSelectedBundles(new Set());
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                            selectedHospital === hospital
+                              ? darkMode 
+                                ? 'bg-blue-900/30 text-blue-400' 
+                                : 'bg-blue-50 text-blue-700'
+                              : darkMode 
+                                ? 'text-gray-300 hover:bg-neutral-800' 
+                                : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <Building2 className="w-4 h-4 flex-shrink-0" />
+                          <span className="flex-1 text-left truncate">
+                            {hospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          </span>
+                          {selectedHospital === hospital && (
+                            <Check className="w-4 h-4 flex-shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* User Auth - at bottom */}
           {user ? (
             <div className="relative">
               <button
@@ -562,90 +645,6 @@ export default function Home() {
               <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Sign in with Google</span>
             </button>
           )}
-
-          {/* Hospital Selector */}
-          {user && Object.keys(allHospitals).length > 0 && (
-            <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
-              <p className={`text-xs font-medium mb-2 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Logged into
-              </p>
-              <div className="relative">
-                <button
-                  onClick={() => setShowHospitalDropdown(!showHospitalDropdown)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                    darkMode 
-                      ? 'bg-neutral-800 border-neutral-700 hover:border-neutral-600' 
-                      : 'bg-white border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                  <span className={`flex-1 text-left text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                    {selectedHospital ? selectedHospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Select hospital...'}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${darkMode ? 'text-gray-500' : 'text-gray-400'} ${showHospitalDropdown ? 'rotate-180' : ''}`} />
-                </button>
-
-                {showHospitalDropdown && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-10" 
-                      onClick={() => setShowHospitalDropdown(false)}
-                    />
-                    <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
-                      {Object.keys(allHospitals).map((hospital) => (
-                        <button
-                          key={hospital}
-                          onClick={() => {
-                            setSelectedHospital(hospital);
-                            setShowHospitalDropdown(false);
-                            // Clear bundle selection when switching hospitals
-                            setSelectedBundles(new Set());
-                          }}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
-                            selectedHospital === hospital
-                              ? darkMode 
-                                ? 'bg-blue-900/30 text-blue-400' 
-                                : 'bg-blue-50 text-blue-700'
-                              : darkMode 
-                                ? 'text-gray-300 hover:bg-neutral-800' 
-                                : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          <Building2 className="w-4 h-4 flex-shrink-0" />
-                          <span className="flex-1 text-left truncate">
-                            {hospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                          </span>
-                          {selectedHospital === hospital && (
-                            <Check className="w-4 h-4 flex-shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Dark/Light Mode Toggle */}
-          <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
-            <div className="flex items-center justify-between px-1">
-              <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Light</span>
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
-                  darkMode ? 'bg-blue-600' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-300 ${
-                    darkMode ? 'translate-x-6' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-              <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Dark</span>
-            </div>
-          </div>
         </div>
       </aside>
 
@@ -896,7 +895,7 @@ export default function Home() {
       {/* Pinned Input (when searching) */}
       {hasSearched && (
         <div className={`fixed bottom-0 left-0 right-0 border-t px-4 py-4 z-50 lg:left-72 ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
-          <div className="max-w-5xl mx-auto px-4 relative">
+          <div className="max-w-3xl mx-auto relative">
             <textarea
               placeholder="Ask a follow-up question..."
               value={question}
