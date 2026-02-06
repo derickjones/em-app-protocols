@@ -231,7 +231,7 @@ export default function Home() {
   }
 
   return (
-    <div className={`min-h-screen font-sans flex ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}`}>
+    <div className={`min-h-screen font-sans flex ${darkMode ? 'bg-black text-gray-100' : 'bg-white text-gray-900'}`}>
       {/* Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -243,14 +243,14 @@ export default function Home() {
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 border-r transform transition-transform duration-300 ease-in-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      } lg:translate-x-0 flex flex-col ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+      } lg:translate-x-0 flex flex-col ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
         {/* Sidebar Header */}
-        <div className={`p-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className={`p-4 border-b ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className={`text-lg font-semibold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Conversations</h2>
             <button 
               onClick={() => setSidebarOpen(false)}
-              className={`lg:hidden p-1 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
+              className={`lg:hidden p-1 rounded ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-200'}`}
             >
               <X className={`w-5 h-5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
             </button>
@@ -258,7 +258,7 @@ export default function Home() {
           <button
             onClick={startNewConversation}
             className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-colors shadow-md ${
-              darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-black text-white hover:bg-gray-800'
+              darkMode ? 'bg-neutral-800 text-white hover:bg-neutral-700' : 'bg-black text-white hover:bg-gray-800'
             }`}
           >
             <Plus className="w-5 h-5" />
@@ -281,8 +281,8 @@ export default function Home() {
                 onClick={() => loadConversation(conv)}
                 className={`group w-full text-left px-4 py-3 rounded-xl transition-colors cursor-pointer ${
                   currentConversationId === conv.id
-                    ? darkMode ? 'bg-blue-900/30 border border-blue-700' : 'bg-blue-100 border border-blue-200'
-                    : darkMode ? 'hover:bg-gray-700 border border-transparent' : 'hover:bg-gray-100 border border-transparent'
+                    ? darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-blue-100 border border-blue-200'
+                    : darkMode ? 'hover:bg-neutral-800 border border-transparent' : 'hover:bg-gray-100 border border-transparent'
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -303,7 +303,7 @@ export default function Home() {
                   </div>
                   <button
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-red-900/30' : 'hover:bg-red-100'}`}
+                    className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-neutral-700' : 'hover:bg-red-100'}`}
                     title="Delete conversation"
                   >
                     <Trash2 className="w-4 h-4 text-red-500" />
@@ -315,12 +315,12 @@ export default function Home() {
         </div>
 
         {/* Sidebar Footer - User Auth */}
-        <div className={`p-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className={`p-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
           {user ? (
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'}`}
               >
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
                   {user.email?.charAt(0).toUpperCase()}
@@ -340,8 +340,8 @@ export default function Home() {
                     className="fixed inset-0 z-10" 
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                    <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}>
+                  <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
+                    <div className={`px-4 py-3 border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}>
                       <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user.email}</p>
                       {userProfile?.orgName && (
                         <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{userProfile.orgName}</p>
@@ -354,7 +354,7 @@ export default function Home() {
                     </div>
                     <button
                       onClick={handleSignOut}
-                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-neutral-800' : 'text-gray-600 hover:bg-gray-50'}`}
                     >
                       <LogOut className="w-4 h-4" />
                       Sign out
@@ -366,7 +366,7 @@ export default function Home() {
           ) : (
             <button
               onClick={() => router.push("/login")}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${darkMode ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${darkMode ? 'border-neutral-700 hover:bg-neutral-800' : 'border-gray-200 hover:bg-gray-100'}`}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -379,7 +379,7 @@ export default function Home() {
           )}
 
           {/* Dark/Light Mode Toggle */}
-          <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
             <div className="flex items-center justify-between px-1">
               <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Light</span>
               <button
@@ -403,13 +403,13 @@ export default function Home() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-h-screen">
         {/* Header */}
-        <div className={`sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+        <div className={`sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             {/* Left: Menu */}
             <div className="flex items-center space-x-3">
               <button 
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
+                className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'}`}
               >
                 <div className="flex flex-col gap-1.5">
                   <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
@@ -485,7 +485,7 @@ export default function Home() {
                   rows={2}
                   className={`w-full p-4 pl-5 pr-28 border-2 rounded-3xl text-sm shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 transition-all duration-200 hover:shadow-xl ${
                     darkMode 
-                      ? 'bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400 focus:ring-blue-900' 
+                      ? 'bg-neutral-900 border-neutral-700 text-gray-100 placeholder-gray-500 focus:ring-blue-900' 
                       : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-blue-100'
                   }`}
                 />
@@ -495,7 +495,7 @@ export default function Home() {
                   title="Voice input"
                   className={`absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl flex items-center justify-center border-2 transition-all duration-200 shadow-md hover:shadow-lg ${
                     darkMode 
-                      ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' 
+                      ? 'bg-neutral-800 text-gray-300 border-neutral-700 hover:bg-neutral-700' 
                       : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
                   }`}
                 >
@@ -525,7 +525,7 @@ export default function Home() {
           <div className="space-y-6 pb-32">
             {/* User Question */}
             <div className="flex justify-end">
-              <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-blue-900/30 border border-blue-800' : 'bg-blue-50 border border-blue-100'}`}>
+              <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-blue-50 border border-blue-100'}`}>
                 <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{question}</p>
               </div>
             </div>
@@ -541,7 +541,7 @@ export default function Home() {
                 <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Searching protocols...</span>
               </div>
             ) : error ? (
-              <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-900/30 border border-red-800' : 'bg-red-50 border border-red-100'}`}>
+              <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
                 <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
               </div>
             ) : response ? (
@@ -553,7 +553,7 @@ export default function Home() {
                 </div>
 
                 {/* Answer */}
-                <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-white border border-gray-200'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown>{response.answer}</ReactMarkdown>
                   </div>
@@ -561,7 +561,7 @@ export default function Home() {
 
                 {/* Citations */}
                 {response.citations.length > 0 && (
-                  <div className={`rounded-2xl p-5 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'}`}>
+                  <div className={`rounded-2xl p-5 ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-gray-50 border border-gray-200'}`}>
                     <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -575,7 +575,7 @@ export default function Home() {
                           href={cite.source_uri}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${darkMode ? 'text-blue-400 hover:bg-gray-700' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
+                          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${darkMode ? 'text-blue-400 hover:bg-neutral-800' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
                         >
                           <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>{idx + 1}</span>
                           <span className="flex-1">{cite.protocol_id.replace(/_/g, " ")}</span>
@@ -616,7 +616,7 @@ export default function Home() {
 
       {/* Pinned Input (when searching) */}
       {hasSearched && (
-        <div className={`fixed bottom-0 left-0 right-0 border-t px-4 py-4 z-50 lg:left-72 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
+        <div className={`fixed bottom-0 left-0 right-0 border-t px-4 py-4 z-50 lg:left-72 ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
           <div className="max-w-5xl mx-auto px-4 relative">
             <textarea
               placeholder="Ask a follow-up question..."
@@ -631,7 +631,7 @@ export default function Home() {
               rows={2}
               className={`w-full p-4 pl-5 pr-28 border-2 rounded-3xl text-sm shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 transition-all duration-200 hover:shadow-xl ${
                 darkMode 
-                  ? 'bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400 focus:ring-blue-900' 
+                  ? 'bg-neutral-900 border-neutral-700 text-gray-100 placeholder-gray-500 focus:ring-blue-900' 
                   : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-blue-100'
               }`}
             />
@@ -641,7 +641,7 @@ export default function Home() {
               title="Voice input"
               className={`absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl flex items-center justify-center border-2 transition-all duration-200 shadow-md hover:shadow-lg ${
                 darkMode 
-                  ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' 
+                  ? 'bg-neutral-800 text-gray-300 border-neutral-700 hover:bg-neutral-700' 
                   : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
               }`}
             >
