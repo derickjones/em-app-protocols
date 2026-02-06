@@ -9,11 +9,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import time
+import requests
+import google.auth
+import google.auth.transport.requests
 from google.cloud import storage
 
 from rag_service import RAGService
 from protocol_service import ProtocolService
 from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_bundle_access, verify_firebase_token, check_email_verified
+
+# RAG Configuration
+PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
+RAG_LOCATION = os.environ.get("RAG_LOCATION", "us-west4")
+CORPUS_ID = os.environ.get("CORPUS_ID", "2305843009213693952")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -34,6 +42,78 @@ app.add_middleware(
 # Initialize services
 rag_service = RAGService()
 protocol_service = ProtocolService()
+
+
+def get_access_token():
+    """Get OAuth2 access token for REST API calls"""
+    credentials, _ = google.auth.default()
+    auth_req = google.auth.transport.requests.Request()
+    credentials.refresh(auth_req)
+    return credentials.token
+
+
+def delete_from_rag_corpus(org_id: str, protocol_id: str) -> bool:
+    """
+    Delete a file from the RAG corpus by finding and removing it.
+    Returns True if found and deleted, False otherwise.
+    """
+    corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
+    
+    # List all RAG files to find the one to delete
+    url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles"
+    headers = {"Authorization": f"Bearer {get_access_token()}"}
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            print(f"Failed to list RAG files: {response.status_code}")
+            return False
+        
+        rag_files = response.json().get("ragFiles", [])
+        
+        # Find files matching this org_id/protocol_id
+        # The source URI should contain the path
+        target_path = f"{org_id}/{protocol_id}"
+        deleted_count = 0
+        
+        for rag_file in rag_files:
+            file_name = rag_file.get("name", "")
+            # Check if this file matches by examining the gcsSource or displayName
+            gcs_source = rag_file.get("gcsSource", {}).get("uris", [])
+            
+            # Check if any URI contains our target path
+            matches = any(target_path in uri for uri in gcs_source)
+            
+            if not matches:
+                # Also check by display name pattern
+                display_name = rag_file.get("displayName", "")
+                if display_name == "extracted_text.txt" or display_name == f"{protocol_id}.txt":
+                    # Need to get more details about this file
+                    detail_response = requests.get(
+                        f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{file_name}",
+                        headers=headers
+                    )
+                    if detail_response.status_code == 200:
+                        file_detail = detail_response.json()
+                        source_uri = file_detail.get("ragFileConfig", {}).get("ragFileSource", {}).get("gcsSource", {}).get("uri", "")
+                        if target_path in source_uri:
+                            matches = True
+            
+            if matches:
+                # Delete this RAG file
+                delete_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{file_name}"
+                delete_response = requests.delete(delete_url, headers=headers)
+                if delete_response.status_code == 200:
+                    print(f"Deleted RAG file: {file_name}")
+                    deleted_count += 1
+                else:
+                    print(f"Failed to delete RAG file: {delete_response.status_code}")
+        
+        return deleted_count > 0
+        
+    except Exception as e:
+        print(f"Error deleting from RAG corpus: {e}")
+        return False
 
 
 # ----- Request/Response Models -----
@@ -157,16 +237,14 @@ async def query_protocols(
         for c in result.get("citations", []):
             source = c["source"]
             # Extract protocol info from path like:
-            # gs://bucket/org_id/bundle_id/protocol_id/extracted_text.txt or
-            # gs://bucket/rag-input/protocol_id.txt
+            # gs://bucket/org_id/bundle_id/protocol_id/extracted_text.txt
             parts = source.replace("gs://", "").split("/")
             
+            # Skip legacy rag-input files (no longer exist)
             if "rag-input" in source:
-                # Format: bucket/rag-input/protocol_id.txt
-                protocol_id = parts[-1].replace(".txt", "")
-                org_id = "demo-hospital"  # Default org for rag-input files
-                bundle_id = None
-            elif len(parts) >= 5:
+                continue
+            
+            if len(parts) >= 5:
                 # Format: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
                 org_id = parts[1]
                 bundle_id = parts[2]
@@ -262,7 +340,7 @@ async def list_all_hospitals():
 async def delete_protocol(org_id: str, protocol_id: str):
     """
     Delete a protocol from the system.
-    Removes from processed bucket.
+    Removes from processed bucket, raw bucket, and RAG corpus.
     """
     try:
         # Delete from processed bucket
@@ -283,10 +361,97 @@ async def delete_protocol(org_id: str, protocol_id: str):
                 blob.delete()
                 break
         
-        return {"status": "deleted", "protocol_id": protocol_id, "org_id": org_id}
+        # Delete from RAG corpus
+        rag_deleted = delete_from_rag_corpus(org_id, protocol_id)
+        
+        return {
+            "status": "deleted", 
+            "protocol_id": protocol_id, 
+            "org_id": org_id,
+            "rag_removed": rag_deleted
+        }
         
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/reindex-rag")
+async def reindex_rag_corpus():
+    """
+    Admin endpoint: Clear and re-index all protocols in the RAG corpus.
+    This finds all extracted_text.txt files in the processed bucket and indexes them.
+    """
+    try:
+        corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
+        headers = {"Authorization": f"Bearer {get_access_token()}"}
+        
+        # Step 1: Delete all existing RAG files
+        list_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles"
+        response = requests.get(list_url, headers=headers)
+        
+        deleted_count = 0
+        if response.status_code == 200:
+            rag_files = response.json().get("ragFiles", [])
+            for rag_file in rag_files:
+                file_name = rag_file.get("name", "")
+                delete_response = requests.delete(
+                    f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{file_name}",
+                    headers=headers
+                )
+                if delete_response.status_code == 200:
+                    deleted_count += 1
+        
+        # Step 2: Find all current extracted_text.txt files
+        storage_client = storage.Client()
+        bucket = storage_client.bucket("clinical-assistant-457902-protocols-processed")
+        
+        text_files = []
+        for blob in bucket.list_blobs():
+            if blob.name.endswith("extracted_text.txt"):
+                text_files.append(f"gs://clinical-assistant-457902-protocols-processed/{blob.name}")
+        
+        if not text_files:
+            return {
+                "status": "completed",
+                "deleted": deleted_count,
+                "indexed": 0,
+                "message": "No extracted text files found to index"
+            }
+        
+        # Step 3: Batch import all files
+        import_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles:import"
+        payload = {
+            "importRagFilesConfig": {
+                "gcsSource": {
+                    "uris": text_files
+                },
+                "ragFileChunkingConfig": {
+                    "chunkSize": 1024,
+                    "chunkOverlap": 200
+                }
+            }
+        }
+        
+        import_response = requests.post(import_url, headers=headers, json=payload)
+        
+        if import_response.status_code == 200:
+            operation = import_response.json().get("name", "")
+            return {
+                "status": "indexing_started",
+                "deleted": deleted_count,
+                "files_to_index": len(text_files),
+                "operation": operation,
+                "message": f"Cleared {deleted_count} old files, started indexing {len(text_files)} files"
+            }
+        else:
+            return {
+                "status": "error",
+                "deleted": deleted_count,
+                "error": import_response.text
+            }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

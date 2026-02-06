@@ -652,11 +652,11 @@ export default function Home() {
       <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
         {/* Header */}
         <div className={`sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            {/* Left: Menu */}
-            <div className="flex items-center space-x-3">
+          <div className="flex items-center">
+            {/* Far Left: Menu - only show when sidebar collapsed */}
+            {!sidebarOpen && (
               <button 
-                onClick={() => setSidebarOpen(!sidebarOpen)}
+                onClick={() => setSidebarOpen(true)}
                 className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'}`}
               >
                 <div className="flex flex-col gap-1.5">
@@ -665,7 +665,7 @@ export default function Home() {
                   <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
                 </div>
               </button>
-            </div>
+            )}
 
             {/* Center: Title */}
             <div className="flex-1 flex flex-col items-center text-center">
