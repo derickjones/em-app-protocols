@@ -24,19 +24,23 @@ interface UploadStatus {
 }
 
 export default function AdminPage() {
-  const [orgId, setOrgId] = useState("");
+  const [hospitalId, setHospitalId] = useState("");
+  const [bundleName, setBundleName] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: "idle", message: "" });
   const [dragActive, setDragActive] = useState(false);
 
+  // Combine hospital and bundle into org_id format
+  const orgId = hospitalId && bundleName ? `${hospitalId}/${bundleName}` : hospitalId;
+
   // Fetch protocols for the org
   const fetchProtocols = useCallback(async () => {
-    if (!orgId) return;
+    if (!hospitalId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/protocols?org_id=${orgId}`);
+      const res = await fetch(`${API_URL}/protocols?org_id=${encodeURIComponent(orgId)}`);
       if (res.ok) {
         const data = await res.json();
         setProtocols(data.protocols || []);
@@ -46,7 +50,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [orgId]);
+  }, [orgId, hospitalId]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -57,7 +61,7 @@ export default function AdminPage() {
   // Handle login
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (orgId.trim()) {
+    if (hospitalId.trim() && bundleName.trim()) {
       setIsAuthenticated(true);
     }
   };
@@ -217,19 +221,34 @@ export default function AdminPage() {
               <form onSubmit={handleLogin} className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-6 space-y-4">
                 <div>
                   <label className="block text-sm text-[#9aa0a6] mb-2">
-                    Organization ID
+                    Hospital / Organization
                   </label>
                   <input
                     type="text"
-                    value={orgId}
-                    onChange={(e) => setOrgId(e.target.value)}
+                    value={hospitalId}
+                    onChange={(e) => setHospitalId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
                     placeholder="e.g., mayo-clinic"
                     className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8] transition-colors"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm text-[#9aa0a6] mb-2">
+                    Protocol Bundle
+                  </label>
+                  <input
+                    type="text"
+                    value={bundleName}
+                    onChange={(e) => setBundleName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                    placeholder="e.g., emergency, cardiac, trauma"
+                    className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8] transition-colors"
+                  />
+                  <p className="text-xs text-[#5f6368] mt-2 px-2">
+                    Bundles help organize protocols by specialty or use case
+                  </p>
+                </div>
                 <button
                   type="submit"
-                  disabled={!orgId.trim()}
+                  disabled={!hospitalId.trim() || !bundleName.trim()}
                   className="w-full py-3 bg-[#8ab4f8] text-[#131314] rounded-full font-medium hover:bg-[#aecbfa] disabled:bg-[#3c4043] disabled:text-[#5f6368] disabled:cursor-not-allowed transition-all"
                 >
                   Continue
@@ -268,13 +287,15 @@ export default function AdminPage() {
               EM Protocols
             </Link>
             <span className="text-xs text-[#9aa0a6]">•</span>
-            <span className="text-sm text-[#9aa0a6]">{orgId}</span>
+            <span className="text-sm text-white">{hospitalId}</span>
+            <span className="text-xs text-[#9aa0a6]">/</span>
+            <span className="text-sm text-[#8ab4f8]">{bundleName}</span>
           </div>
           <button
             onClick={() => setIsAuthenticated(false)}
             className="text-sm text-[#9aa0a6] hover:text-white px-4 py-2 rounded-full border border-[#3c4043] hover:bg-[#3c4043] transition-colors"
           >
-            Switch Org
+            Switch Bundle
           </button>
         </header>
 
