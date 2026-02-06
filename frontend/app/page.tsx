@@ -223,7 +223,7 @@ export default function Home() {
         headers,
         body: JSON.stringify({ 
           query: question.trim(),
-          bundle_ids: ["all"],  // Include all bundles for now
+          bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true
         }),
       });
@@ -372,28 +372,6 @@ export default function Home() {
             <Plus className="w-5 h-5" />
             <span className="font-medium">New Conversation</span>
           </button>
-
-          {/* Protocol Bundles Info */}
-          {Object.keys(allHospitals).length > 0 && (
-            <div className={`mt-4 p-3 rounded-xl ${darkMode ? 'bg-neutral-800/50' : 'bg-gray-100'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <Building2 className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                <span className={`text-xs font-medium ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                  Searching All Bundles
-                </span>
-              </div>
-              <div className="space-y-1">
-                {Object.entries(allHospitals).map(([hospital, bundles]) => (
-                  <div key={hospital} className="text-xs">
-                    <span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{hospital}:</span>
-                    <span className={`ml-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {Object.keys(bundles).join(', ')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Conversation List */}
@@ -657,6 +635,38 @@ export default function Home() {
                   )}
                 </button>
               </div>
+
+              {/* Bundle Toggle Chips - Gemini Style */}
+              {Object.keys(allHospitals).length > 0 && (
+                <div className="mt-6">
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    {Object.entries(allHospitals).map(([hospital, bundles]) => (
+                      Object.keys(bundles).map(bundle => {
+                        const bundleKey = `${hospital}/${bundle}`;
+                        const isSelected = selectedBundles.has(bundleKey);
+                        return (
+                          <button
+                            key={bundleKey}
+                            onClick={() => toggleBundleSelection(bundleKey)}
+                            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                              isSelected
+                                ? darkMode
+                                  ? 'bg-blue-600 text-white border-2 border-blue-500'
+                                  : 'bg-blue-500 text-white border-2 border-blue-400'
+                                : darkMode
+                                  ? 'bg-neutral-800 text-gray-300 border-2 border-neutral-700 hover:bg-neutral-700 hover:border-neutral-600'
+                                  : 'bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <FolderOpen className={`w-4 h-4 ${isSelected ? 'text-white' : darkMode ? 'text-yellow-500' : 'text-yellow-600'}`} />
+                            <span>{bundle}</span>
+                          </button>
+                        );
+                      })
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (
