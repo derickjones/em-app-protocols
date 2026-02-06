@@ -110,3 +110,26 @@ body {
   color: #1f2937;
   font-weight: 600;
 }
+
+/* Dark mode prose styles */
+.dark .prose strong,
+.prose-invert strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.dark .prose,
+.prose-invert {
+  color: #e5e5e5;
+}
+
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4,
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3,
+.prose-invert h4 {
+  color: #ffffff;
+}
