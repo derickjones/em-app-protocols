@@ -580,13 +580,45 @@ For questions or support:
 
 ---
 
-**Last Updated**: February 4, 2026  
-**Version**: 0.2.0 (MVP In Progress)  
+**Last Updated**: February 5, 2026  
+**Version**: 0.3.0 (MVP In Progress)  
 **Status**: Active Development
 
 ---
 
 ## 📈 Progress & Changelog
+
+### **v0.3.0** - February 5, 2026
+🎉 **Hospital/Bundle Organization & UI Polish**
+
+#### ✅ Completed Features
+- **Hospital & Bundle Organization**
+  - Protocols organized by `{hospital}/{bundle}/{protocol_id}` path structure
+  - Hospital selector dropdown in sidebar ("Logged into" selector)
+  - Bundle chips with varied medical icons (ECG, heart, brain, stethoscope)
+  - Admin hierarchical view: Hospitals → Bundles → Protocols with expand/collapse
+
+- **Collapsible Sidebar**
+  - Full sidebar collapse/expand on all screen sizes
+  - Hamburger menu only visible when sidebar collapsed
+  - Smooth transitions and proper content margin adjustment
+
+- **RAG Corpus Management**
+  - Auto-delete from RAG when protocol deleted via admin
+  - "Re-index RAG" button in admin UI for full corpus rebuild
+  - Cleaned up legacy demo data (14 RAG files, 21 GCS objects)
+
+- **UI Improvements**
+  - Login required to search (redirects to /login)
+  - Sidebar footer reordered: dark mode → hospital → user login
+  - Fixed PDF citation URLs to include bundle path
+
+- **API Enhancements**
+  - `/admin/reindex-rag` endpoint for full RAG rebuild
+  - Enhanced delete endpoint removes from RAG corpus
+  - Fixed path parsing for 3-level bundle structure
+
+---
 
 ### **v0.2.0** - February 4, 2026
 🎉 **Major Milestone: Working MVP with RAG + Frontend**
