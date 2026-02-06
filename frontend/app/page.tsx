@@ -10,6 +10,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-9300
 const STORAGE_KEY = "em-protocol-conversations";
 const THEME_KEY = "em-protocol-theme";
 const BUNDLE_KEY = "em-protocol-selected-bundles";
+const HOSPITAL_KEY = "em-protocol-selected-hospital";
 
 interface QueryResponse {
   answer: string;
@@ -51,6 +52,8 @@ export default function Home() {
   const [selectedBundles, setSelectedBundles] = useState<Set<string>>(new Set());
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
   const [showBundleSelector, setShowBundleSelector] = useState(false);
+  const [selectedHospital, setSelectedHospital] = useState<string>("");
+  const [showHospitalDropdown, setShowHospitalDropdown] = useState(false);
 
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
@@ -110,7 +113,19 @@ export default function Home() {
       const res = await fetch(`${API_URL}/hospitals`);
       if (res.ok) {
         const data = await res.json();
-        setAllHospitals(data.hospitals || {});
+        const hospitals = data.hospitals || {};
+        setAllHospitals(hospitals);
+        
+        // Auto-select hospital if none selected
+        const hospitalNames = Object.keys(hospitals);
+        if (hospitalNames.length > 0) {
+          const savedHospital = localStorage.getItem(HOSPITAL_KEY);
+          if (savedHospital && hospitalNames.includes(savedHospital)) {
+            setSelectedHospital(savedHospital);
+          } else {
+            setSelectedHospital(hospitalNames[0]);
+          }
+        }
       }
     } catch (err) {
       console.error("Failed to fetch hospitals:", err);
@@ -143,6 +158,13 @@ export default function Home() {
       localStorage.setItem(BUNDLE_KEY, JSON.stringify(Array.from(selectedBundles)));
     }
   }, [selectedBundles]);
+
+  // Save selected hospital to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && selectedHospital) {
+      localStorage.setItem(HOSPITAL_KEY, selectedHospital);
+    }
+  }, [selectedHospital]);
 
   // Toggle hospital expansion in selector
   const toggleHospitalExpand = (hospital: string) => {
@@ -195,6 +217,12 @@ export default function Home() {
 
   const handleSubmit = async () => {
     if (!question.trim() || loading) return;
+    
+    // Require login to search
+    if (!user) {
+      router.push("/login");
+      return;
+    }
     
     if (user && !emailVerified) {
       setError("Please verify your email before searching. Check your inbox for a verification link.");
@@ -495,6 +523,70 @@ export default function Home() {
             </button>
           )}
 
+          {/* Hospital Selector */}
+          {user && Object.keys(allHospitals).length > 0 && (
+            <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
+              <p className={`text-xs font-medium mb-2 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Logged into
+              </p>
+              <div className="relative">
+                <button
+                  onClick={() => setShowHospitalDropdown(!showHospitalDropdown)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                    darkMode 
+                      ? 'bg-neutral-800 border-neutral-700 hover:border-neutral-600' 
+                      : 'bg-white border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                  <span className={`flex-1 text-left text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {selectedHospital ? selectedHospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Select hospital...'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${darkMode ? 'text-gray-500' : 'text-gray-400'} ${showHospitalDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showHospitalDropdown && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setShowHospitalDropdown(false)}
+                    />
+                    <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
+                      {Object.keys(allHospitals).map((hospital) => (
+                        <button
+                          key={hospital}
+                          onClick={() => {
+                            setSelectedHospital(hospital);
+                            setShowHospitalDropdown(false);
+                            // Clear bundle selection when switching hospitals
+                            setSelectedBundles(new Set());
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                            selectedHospital === hospital
+                              ? darkMode 
+                                ? 'bg-blue-900/30 text-blue-400' 
+                                : 'bg-blue-50 text-blue-700'
+                              : darkMode 
+                                ? 'text-gray-300 hover:bg-neutral-800' 
+                                : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <Building2 className="w-4 h-4 flex-shrink-0" />
+                          <span className="flex-1 text-left truncate">
+                            {hospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          </span>
+                          {selectedHospital === hospital && (
+                            <Check className="w-4 h-4 flex-shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Dark/Light Mode Toggle */}
           <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
             <div className="flex items-center justify-between px-1">
@@ -637,33 +729,31 @@ export default function Home() {
               </div>
 
               {/* Bundle Toggle Chips - Gemini Style */}
-              {Object.keys(allHospitals).length > 0 && (
+              {selectedHospital && allHospitals[selectedHospital] && Object.keys(allHospitals[selectedHospital]).length > 0 && (
                 <div className="mt-6">
                   <div className="flex flex-wrap gap-3 justify-center">
-                    {Object.entries(allHospitals).map(([hospital, bundles]) => (
-                      Object.keys(bundles).map(bundle => {
-                        const bundleKey = `${hospital}/${bundle}`;
-                        const isSelected = selectedBundles.has(bundleKey);
-                        return (
-                          <button
-                            key={bundleKey}
-                            onClick={() => toggleBundleSelection(bundleKey)}
-                            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                              isSelected
-                                ? darkMode
-                                  ? 'bg-blue-600 text-white border-2 border-blue-500'
-                                  : 'bg-blue-500 text-white border-2 border-blue-400'
-                                : darkMode
-                                  ? 'bg-neutral-800 text-gray-300 border-2 border-neutral-700 hover:bg-neutral-700 hover:border-neutral-600'
-                                  : 'bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <FolderOpen className={`w-4 h-4 ${isSelected ? 'text-white' : darkMode ? 'text-yellow-500' : 'text-yellow-600'}`} />
-                            <span>{bundle}</span>
-                          </button>
-                        );
-                      })
-                    ))}
+                    {Object.keys(allHospitals[selectedHospital]).map(bundle => {
+                      const bundleKey = `${selectedHospital}/${bundle}`;
+                      const isSelected = selectedBundles.has(bundleKey);
+                      return (
+                        <button
+                          key={bundleKey}
+                          onClick={() => toggleBundleSelection(bundleKey)}
+                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                            isSelected
+                              ? darkMode
+                                ? 'bg-blue-600 text-white border-2 border-blue-500'
+                                : 'bg-blue-500 text-white border-2 border-blue-400'
+                              : darkMode
+                                ? 'bg-neutral-800 text-gray-300 border-2 border-neutral-700 hover:bg-neutral-700 hover:border-neutral-600'
+                                : 'bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <FolderOpen className={`w-4 h-4 ${isSelected ? 'text-white' : darkMode ? 'text-yellow-500' : 'text-yellow-600'}`} />
+                          <span>{bundle}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
