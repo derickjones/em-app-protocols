@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
+const THEME_KEY = "em-protocol-theme";
 
 interface QueryResponse {
   answer: string;
@@ -34,10 +35,37 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(false);
 
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
   const [verificationSent, setVerificationSent] = useState(false);
+
+  // Load theme from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem(THEME_KEY);
+      if (savedTheme) {
+        setDarkMode(savedTheme === 'dark');
+      } else {
+        // Check system preference
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setDarkMode(prefersDark);
+      }
+    }
+  }, []);
+
+  // Save theme to localStorage and update document class
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(THEME_KEY, darkMode ? 'dark' : 'light');
+      if (darkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }, [darkMode]);
 
   // Load conversations from localStorage on mount
   useEffect(() => {
@@ -203,7 +231,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 font-sans flex">
+    <div className={`min-h-screen font-sans flex ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'}`}>
       {/* Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -213,23 +241,25 @@ export default function Home() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-gray-50 border-r border-gray-200 transform transition-transform duration-300 ease-in-out ${
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 border-r transform transition-transform duration-300 ease-in-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      } lg:translate-x-0 flex flex-col`}>
+      } lg:translate-x-0 flex flex-col ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-gray-200">
+        <div className={`p-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Conversations</h2>
+            <h2 className={`text-lg font-semibold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Conversations</h2>
             <button 
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-1 hover:bg-gray-200 rounded"
+              className={`lg:hidden p-1 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'}`}
             >
-              <X className="w-5 h-5 text-gray-600" />
+              <X className={`w-5 h-5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
             </button>
           </div>
           <button
             onClick={startNewConversation}
-            className="w-full flex items-center gap-2 px-4 py-3 bg-black text-white rounded-xl hover:bg-gray-800 transition-colors shadow-md"
+            className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-colors shadow-md ${
+              darkMode ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-black text-white hover:bg-gray-800'
+            }`}
           >
             <Plus className="w-5 h-5" />
             <span className="font-medium">New Conversation</span>
@@ -239,7 +269,7 @@ export default function Home() {
         {/* Conversation List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {conversations.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">
+            <div className={`text-center py-8 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>No conversations yet</p>
               <p className="text-xs mt-1">Start a new conversation above</p>
@@ -251,27 +281,29 @@ export default function Home() {
                 onClick={() => loadConversation(conv)}
                 className={`group w-full text-left px-4 py-3 rounded-xl transition-colors cursor-pointer ${
                   currentConversationId === conv.id
-                    ? 'bg-blue-100 border border-blue-200'
-                    : 'hover:bg-gray-100 border border-transparent'
+                    ? darkMode ? 'bg-blue-900/30 border border-blue-700' : 'bg-blue-100 border border-blue-200'
+                    : darkMode ? 'hover:bg-gray-700 border border-transparent' : 'hover:bg-gray-100 border border-transparent'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                    currentConversationId === conv.id ? 'text-blue-600' : 'text-gray-400'
+                    currentConversationId === conv.id ? 'text-blue-500' : darkMode ? 'text-gray-500' : 'text-gray-400'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium truncate ${
-                      currentConversationId === conv.id ? 'text-blue-900' : 'text-gray-800'
+                      currentConversationId === conv.id 
+                        ? darkMode ? 'text-blue-300' : 'text-blue-900'
+                        : darkMode ? 'text-gray-200' : 'text-gray-800'
                     }`}>
                       {conv.title}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">
+                    <p className={`text-xs mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                       {new Date(conv.timestamp).toLocaleDateString()} {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   <button
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
+                    className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-red-900/30' : 'hover:bg-red-100'}`}
                     title="Delete conversation"
                   >
                     <Trash2 className="w-4 h-4 text-red-500" />
@@ -283,23 +315,23 @@ export default function Home() {
         </div>
 
         {/* Sidebar Footer - User Auth */}
-        <div className="p-4 border-t border-gray-200">
+        <div className={`p-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
           {user ? (
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
               >
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
                   {user.email?.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                  <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                     {userProfile?.orgName || user.email?.split("@")[0]}
                   </p>
-                  <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{user.email}</p>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showUserMenu ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'} ${showUserMenu ? 'rotate-180' : ''}`} />
               </button>
               
               {showUserMenu && (
@@ -308,21 +340,21 @@ export default function Home() {
                     className="fixed inset-0 z-10" 
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
+                  <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                    <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}>
+                      <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user.email}</p>
                       {userProfile?.orgName && (
-                        <p className="text-xs text-gray-500 mt-1">{userProfile.orgName}</p>
+                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{userProfile.orgName}</p>
                       )}
                       {userProfile?.bundleAccess && userProfile.bundleAccess.length > 0 && (
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                           Bundles: {userProfile.bundleAccess.join(", ")}
                         </p>
                       )}
                     </div>
                     <button
                       onClick={handleSignOut}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 transition-colors rounded-b-lg"
+                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-50'}`}
                     >
                       <LogOut className="w-4 h-4" />
                       Sign out
@@ -334,7 +366,7 @@ export default function Home() {
           ) : (
             <button
               onClick={() => router.push("/login")}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors"
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${darkMode ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -342,27 +374,47 @@ export default function Home() {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              <span className="text-sm text-gray-700">Sign in with Google</span>
+              <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Sign in with Google</span>
             </button>
           )}
+
+          {/* Dark/Light Mode Toggle */}
+          <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className="flex items-center justify-between px-1">
+              <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Light</span>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
+                  darkMode ? 'bg-blue-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-300 ${
+                    darkMode ? 'translate-x-6' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Dark</span>
+            </div>
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-h-screen">
         {/* Header */}
-        <div className="sticky top-0 z-30 w-full bg-white px-4 pt-4 border-b border-gray-100 pb-3">
+        <div className={`sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             {/* Left: Menu */}
             <div className="flex items-center space-x-3">
               <button 
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
               >
                 <div className="flex flex-col gap-1.5">
-                  <span className="block w-5 h-0.5 bg-black rounded-full" />
-                  <span className="block w-5 h-0.5 bg-black rounded-full" />
-                  <span className="block w-5 h-0.5 bg-black rounded-full" />
+                  <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
+                  <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
+                  <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
                 </div>
               </button>
             </div>
@@ -378,7 +430,7 @@ export default function Home() {
               emergency medicine app
             </h1>
             {!hasSearched && (
-              <p className="text-sm text-gray-500 italic mt-1">
+              <p className={`text-sm italic mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                 AI-powered emergency medicine clinical decision support
               </p>
             )}
@@ -431,13 +483,21 @@ export default function Home() {
                     }
                   }}
                   rows={2}
-                  className="w-full p-4 pl-5 pr-28 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+                  className={`w-full p-4 pl-5 pr-28 border-2 rounded-3xl text-sm shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 transition-all duration-200 hover:shadow-xl ${
+                    darkMode 
+                      ? 'bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400 focus:ring-blue-900' 
+                      : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-blue-100'
+                  }`}
                 />
 
                 {/* Mic Button */}
                 <button
                   title="Voice input"
-                  className="absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg"
+                  className={`absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl flex items-center justify-center border-2 transition-all duration-200 shadow-md hover:shadow-lg ${
+                    darkMode 
+                      ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' 
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                  }`}
                 >
                   <Mic className="w-4 h-4" />
                 </button>
@@ -447,7 +507,9 @@ export default function Home() {
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading}
                   title="Submit"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl text-white flex items-center justify-center transition-all duration-200 hover:scale-105 border-2 border-transparent disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg ${
+                    darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800 hover:border-gray-300'
+                  }`}
                 >
                   {loading ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -463,8 +525,8 @@ export default function Home() {
           <div className="space-y-6 pb-32">
             {/* User Question */}
             <div className="flex justify-end">
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl px-5 py-3 max-w-[80%]">
-                <p className="text-gray-800">{question}</p>
+              <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-blue-900/30 border border-blue-800' : 'bg-blue-50 border border-blue-100'}`}>
+                <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{question}</p>
               </div>
             </div>
 
@@ -476,31 +538,31 @@ export default function Home() {
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
-                <span className="text-sm text-gray-500">Searching protocols...</span>
+                <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Searching protocols...</span>
               </div>
             ) : error ? (
-              <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4">
-                <p className="text-red-700">{error}</p>
+              <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-900/30 border border-red-800' : 'bg-red-50 border border-red-100'}`}>
+                <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
               </div>
             ) : response ? (
               <div className="space-y-6">
                 {/* Query Time */}
-                <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                   <Sparkles className="w-3 h-3 text-blue-500" />
                   <span>{response.query_time_ms}ms</span>
                 </div>
 
                 {/* Answer */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-                  <div className="prose prose-sm max-w-none text-gray-800 leading-relaxed">
+                <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                  <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown>{response.answer}</ReactMarkdown>
                   </div>
                 </div>
 
                 {/* Citations */}
                 {response.citations.length > 0 && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                  <div className={`rounded-2xl p-5 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'}`}>
+                    <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
@@ -513,9 +575,9 @@ export default function Home() {
                           href={cite.source_uri}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-3 rounded-xl text-blue-600 hover:bg-white hover:shadow-sm transition-all text-sm"
+                          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${darkMode ? 'text-blue-400 hover:bg-gray-700' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
                         >
-                          <span className="w-6 h-6 flex items-center justify-center bg-blue-100 rounded text-xs text-blue-700 font-medium">{idx + 1}</span>
+                          <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>{idx + 1}</span>
                           <span className="flex-1">{cite.protocol_id.replace(/_/g, " ")}</span>
                           <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -554,7 +616,7 @@ export default function Home() {
 
       {/* Pinned Input (when searching) */}
       {hasSearched && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4 z-50 lg:left-72">
+        <div className={`fixed bottom-0 left-0 right-0 border-t px-4 py-4 z-50 lg:left-72 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'}`}>
           <div className="max-w-5xl mx-auto px-4 relative">
             <textarea
               placeholder="Ask a follow-up question..."
@@ -567,13 +629,21 @@ export default function Home() {
                 }
               }}
               rows={2}
-              className="w-full p-4 pl-5 pr-28 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+              className={`w-full p-4 pl-5 pr-28 border-2 rounded-3xl text-sm shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 transition-all duration-200 hover:shadow-xl ${
+                darkMode 
+                  ? 'bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400 focus:ring-blue-900' 
+                  : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-blue-100'
+              }`}
             />
 
             {/* Mic Button */}
             <button
               title="Voice input"
-              className="absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg"
+              className={`absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl flex items-center justify-center border-2 transition-all duration-200 shadow-md hover:shadow-lg ${
+                darkMode 
+                  ? 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600' 
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+              }`}
             >
               <Mic className="w-4 h-4" />
             </button>
@@ -582,7 +652,9 @@ export default function Home() {
               onClick={handleSubmit}
               disabled={!question.trim() || loading}
               title="Submit"
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
+              className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl text-white flex items-center justify-center transition-all duration-200 hover:scale-105 border-2 border-transparent disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg ${
+                darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800 hover:border-gray-300'
+              }`}
             >
               {loading ? (
                 <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
