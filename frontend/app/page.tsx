@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
+const STORAGE_KEY = "em-protocol-conversations";
 
 interface QueryResponse {
   answer: string;
@@ -18,7 +19,7 @@ interface QueryResponse {
 interface Conversation {
   id: string;
   title: string;
-  timestamp: Date;
+  timestamp: string; // Changed to string for JSON serialization
   question: string;
   response: QueryResponse | null;
 }
@@ -37,6 +38,28 @@ export default function Home() {
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
   const [verificationSent, setVerificationSent] = useState(false);
+
+  // Load conversations from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setConversations(parsed);
+        } catch (e) {
+          console.error("Failed to parse saved conversations:", e);
+        }
+      }
+    }
+  }, []);
+
+  // Save conversations to localStorage when they change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && conversations.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+    }
+  }, [conversations]);
 
   const handleSubmit = async () => {
     if (!question.trim() || loading) return;
@@ -84,7 +107,7 @@ export default function Home() {
       const newConversation: Conversation = {
         id: conversationId,
         title: question.trim().slice(0, 50) + (question.length > 50 ? "..." : ""),
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
         question: question.trim(),
         response: data,
       };
@@ -122,6 +145,26 @@ export default function Home() {
     setCurrentConversationId(conversation.id);
     setError(null);
     setSidebarOpen(false);
+  };
+
+  const deleteConversation = (conversationId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent loading the conversation when clicking delete
+    setConversations(prev => {
+      const updated = prev.filter(c => c.id !== conversationId);
+      // Update localStorage
+      if (typeof window !== 'undefined') {
+        if (updated.length === 0) {
+          localStorage.removeItem(STORAGE_KEY);
+        } else {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        }
+      }
+      return updated;
+    });
+    // If we deleted the current conversation, reset the view
+    if (currentConversationId === conversationId) {
+      resetSearch();
+    }
   };
 
   const resetSearch = () => {
@@ -203,10 +246,10 @@ export default function Home() {
             </div>
           ) : (
             conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
                 onClick={() => loadConversation(conv)}
-                className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${
+                className={`group w-full text-left px-4 py-3 rounded-xl transition-colors cursor-pointer ${
                   currentConversationId === conv.id
                     ? 'bg-blue-100 border border-blue-200'
                     : 'hover:bg-gray-100 border border-transparent'
@@ -223,11 +266,18 @@ export default function Home() {
                       {conv.title}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      {conv.timestamp.toLocaleDateString()} {conv.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(conv.timestamp).toLocaleDateString()} {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
+                  <button
+                    onClick={(e) => deleteConversation(conv.id, e)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
+                    title="Delete conversation"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
                 </div>
-              </button>
+              </div>
             ))
           )}
         </div>
@@ -244,10 +294,10 @@ export default function Home() {
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <div className="space-y-1">
-                  <span className="block w-5 h-0.5 bg-black" />
-                  <span className="block w-5 h-0.5 bg-black" />
-                  <span className="block w-5 h-0.5 bg-black" />
+                <div className="flex flex-col gap-1.5">
+                  <span className="block w-5 h-0.5 bg-black rounded-full" />
+                  <span className="block w-5 h-0.5 bg-black rounded-full" />
+                  <span className="block w-5 h-0.5 bg-black rounded-full" />
                 </div>
               </button>
             </div>
@@ -375,13 +425,13 @@ export default function Home() {
                     }
                   }}
                   rows={2}
-                  className="w-full p-4 pl-5 pr-20 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+                  className="w-full p-4 pl-5 pr-28 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
                 />
 
                 {/* Mic Button */}
                 <button
                   title="Voice input"
-                  className="absolute right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg"
+                  className="absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg"
                 >
                   <Mic className="w-4 h-4" />
                 </button>
@@ -391,7 +441,7 @@ export default function Home() {
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading}
                   title="Submit"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
                 >
                   {loading ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -511,13 +561,13 @@ export default function Home() {
                 }
               }}
               rows={2}
-              className="w-full p-4 pl-5 pr-20 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+              className="w-full p-4 pl-5 pr-28 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
             />
 
             {/* Mic Button */}
             <button
               title="Voice input"
-              className="absolute right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg"
+              className="absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg"
             >
               <Mic className="w-4 h-4" />
             </button>
@@ -526,7 +576,7 @@ export default function Home() {
               onClick={handleSubmit}
               disabled={!question.trim() || loading}
               title="Submit"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
             >
               {loading ? (
                 <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
