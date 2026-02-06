@@ -17,7 +17,7 @@ export default function LoginPage() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, error: authError } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithMicrosoft, error: authError } = useAuth();
   const router = useRouter();
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -54,6 +54,19 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await signInWithGoogle();
+      router.push("/");
+    } catch {
+      // Error is set in auth context
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMicrosoftSignIn = async () => {
+    setLocalError(null);
+    setIsLoading(true);
+    try {
+      await signInWithMicrosoft();
       router.push("/");
     } catch {
       // Error is set in auth context
@@ -176,6 +189,21 @@ export default function LoginPage() {
               />
             </svg>
             Continue with Google
+          </button>
+
+          {/* Microsoft Sign In */}
+          <button
+            onClick={handleMicrosoftSignIn}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-3 py-3 mt-3 bg-[#2F2F2F] hover:bg-[#3F3F3F] disabled:bg-[#2F2F2F]/50 text-white font-medium rounded-lg transition-colors border border-white/10"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 21 21">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+            </svg>
+            Continue with Microsoft
           </button>
 
           {/* Toggle Sign Up / Sign In */}

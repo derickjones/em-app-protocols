@@ -4,7 +4,7 @@
  */
 
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB5zFvhhcLVAJ4aYgJT3MlhhUY__k8egMk",
@@ -20,3 +20,10 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const microsoftProvider = new OAuthProvider('microsoft.com');
+
+// Configure Microsoft provider for multi-tenant (any org + personal accounts)
+microsoftProvider.setCustomParameters({
+  tenant: 'common',
+  prompt: 'select_account'
+});

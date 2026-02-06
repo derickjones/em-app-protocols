@@ -15,7 +15,7 @@ import {
   signOut as firebaseSignOut,
   sendEmailVerification,
 } from "firebase/auth";
-import { auth, googleProvider } from "./firebase";
+import { auth, googleProvider, microsoftProvider } from "./firebase";
 
 interface UserProfile {
   uid: string;
@@ -35,6 +35,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithMicrosoft: () => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
   resendVerificationEmail: () => Promise<void>;
@@ -132,6 +133,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithMicrosoft = async () => {
+    setError(null);
+    try {
+      const result = await signInWithPopup(auth, microsoftProvider);
+      const profile = await fetchUserProfile(result.user);
+      setUserProfile(profile);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Microsoft sign in failed";
+      setError(message);
+      throw err;
+    }
+  };
+
   const signOut = async () => {
     await firebaseSignOut(auth);
     setUserProfile(null);
@@ -167,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
+        signInWithMicrosoft,
         signOut,
         getIdToken,
         resendVerificationEmail,
