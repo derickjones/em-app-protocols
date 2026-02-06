@@ -105,3 +105,71 @@ class ProtocolService:
         except Exception as e:
             print(f"Error loading text for {org_id}/{protocol_id}: {e}")
             return None
+    
+    def list_all_hospitals(self) -> Dict[str, Dict[str, List[Dict]]]:
+        """
+        List all hospitals and their bundles with protocols.
+        Returns a nested dict: { hospital: { bundle: [protocols] } }
+        """
+        hospitals = {}
+        
+        # List all blobs and find metadata.json files
+        blobs = self.bucket.list_blobs()
+        
+        for blob in blobs:
+            if blob.name.endswith("/metadata.json"):
+                try:
+                    # Parse path: hospital/bundle/protocol_id/metadata.json
+                    # or: org_id/protocol_id/metadata.json
+                    parts = blob.name.split("/")
+                    
+                    if len(parts) >= 4:
+                        # hospital/bundle/protocol_id/metadata.json
+                        hospital = parts[0]
+                        bundle = parts[1]
+                        protocol_id = parts[2]
+                    elif len(parts) == 3:
+                        # org_id/protocol_id/metadata.json (legacy format)
+                        hospital = parts[0]
+                        bundle = "default"
+                        protocol_id = parts[1]
+                    else:
+                        continue
+                    
+                    # Initialize nested structure
+                    if hospital not in hospitals:
+                        hospitals[hospital] = {}
+                    if bundle not in hospitals[hospital]:
+                        hospitals[hospital][bundle] = []
+                    
+                    # Load metadata
+                    content = blob.download_as_string()
+                    metadata = json.loads(content)
+                    hospitals[hospital][bundle].append(metadata)
+                    
+                except Exception as e:
+                    print(f"Error loading {blob.name}: {e}")
+        
+        return hospitals
+    
+    def delete_protocol(self, org_id: str, protocol_id: str) -> bool:
+        """Delete a protocol from processed bucket"""
+        try:
+            prefix = f"{org_id}/{protocol_id}/"
+            blobs = list(self.bucket.list_blobs(prefix=prefix))
+            
+            if not blobs:
+                return False
+            
+            for blob in blobs:
+                blob.delete()
+            
+            # Clear from cache
+            cache_key = f"{org_id}/{protocol_id}"
+            if cache_key in self._cache:
+                del self._cache[cache_key]
+            
+            return True
+        except Exception as e:
+            print(f"Error deleting protocol {org_id}/{protocol_id}: {e}")
+            return False

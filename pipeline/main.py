@@ -212,13 +212,22 @@ def parse_gcs_path(gcs_uri: str) -> tuple:
 def extract_org_and_protocol(blob_name: str) -> tuple:
     """
     Extract org_id and protocol_id from blob path
-    Expected format: {org_id}/{filename}.pdf or {org_id}/protocols/{filename}.pdf
+    Expected formats: 
+      - {hospital}/{bundle}/{filename}.pdf -> org_id = "{hospital}/{bundle}"
+      - {org_id}/{filename}.pdf -> org_id = "{org_id}"
+      - {filename}.pdf -> org_id = "default"
     """
     parts = blob_name.split("/")
     
-    if len(parts) >= 2:
+    if len(parts) >= 3:
+        # hospital/bundle/filename.pdf format
+        org_id = "/".join(parts[:-1])  # Everything except the filename
+        filename = parts[-1]
+        protocol_id = Path(filename).stem
+        return org_id, protocol_id
+    elif len(parts) == 2:
+        # org_id/filename.pdf format
         org_id = parts[0]
-        # Use filename without extension as protocol_id
         filename = parts[-1]
         protocol_id = Path(filename).stem
         return org_id, protocol_id

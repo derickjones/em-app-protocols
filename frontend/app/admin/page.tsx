@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield } from "lucide-react";
+import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen } from "lucide-react";
 import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
@@ -13,6 +13,14 @@ interface Protocol {
   char_count: number;
   image_count: number;
   processed_at: string;
+}
+
+interface HospitalData {
+  [bundle: string]: Protocol[];
+}
+
+interface AllHospitals {
+  [hospital: string]: HospitalData;
 }
 
 interface UploadStatus {
@@ -27,15 +35,33 @@ export default function AdminPage() {
   const [hospitalId, setHospitalId] = useState("");
   const [bundleName, setBundleName] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [viewMode, setViewMode] = useState<"upload" | "browse">("upload");
   const [protocols, setProtocols] = useState<Protocol[]>([]);
+  const [allHospitals, setAllHospitals] = useState<AllHospitals>({});
+  const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
+  const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: "idle", message: "" });
   const [dragActive, setDragActive] = useState(false);
 
-  // Combine hospital and bundle into org_id format
   const orgId = hospitalId && bundleName ? `${hospitalId}/${bundleName}` : hospitalId;
 
-  // Fetch protocols for the org
+  const fetchAllHospitals = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/hospitals`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllHospitals(data.hospitals || {});
+      }
+    } catch (err) {
+      console.error("Failed to fetch hospitals:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const fetchProtocols = useCallback(async () => {
     if (!hospitalId) return;
     setLoading(true);
@@ -55,10 +81,57 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchProtocols();
+      fetchAllHospitals();
     }
-  }, [isAuthenticated, fetchProtocols]);
+  }, [isAuthenticated, fetchProtocols, fetchAllHospitals]);
 
-  // Handle login
+  const toggleHospital = (hospital: string) => {
+    const newExpanded = new Set(expandedHospitals);
+    if (newExpanded.has(hospital)) {
+      newExpanded.delete(hospital);
+    } else {
+      newExpanded.add(hospital);
+    }
+    setExpandedHospitals(newExpanded);
+  };
+
+  const toggleBundle = (key: string) => {
+    const newExpanded = new Set(expandedBundles);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedBundles(newExpanded);
+  };
+
+  const handleDelete = async (deleteOrgId: string, protocolId: string) => {
+    if (!confirm(`Delete protocol "${protocolId.replace(/_/g, " ")}"? This cannot be undone.`)) {
+      return;
+    }
+
+    const deleteKey = `${deleteOrgId}/${protocolId}`;
+    setDeleting(deleteKey);
+
+    try {
+      const res = await fetch(`${API_URL}/protocols/${encodeURIComponent(deleteOrgId)}/${encodeURIComponent(protocolId)}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        await fetchAllHospitals();
+        await fetchProtocols();
+      } else {
+        alert("Failed to delete protocol");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Failed to delete protocol");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (hospitalId.trim() && bundleName.trim()) {
@@ -66,11 +139,9 @@ export default function AdminPage() {
     }
   };
 
-  // Handle file upload - supports multiple files
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    // Filter for PDF files only
     const pdfFiles = Array.from(files).filter(file => file.type === "application/pdf");
     
     if (pdfFiles.length === 0) {
@@ -90,7 +161,6 @@ export default function AdminPage() {
       completedFiles: 0
     });
 
-    // Upload files sequentially to avoid overwhelming the server
     for (const file of pdfFiles) {
       try {
         const formData = new FormData();
@@ -129,7 +199,6 @@ export default function AdminPage() {
       }
     }
 
-    // Final status
     if (failedFiles.length === 0) {
       setUploadStatus({ 
         status: "success", 
@@ -151,18 +220,16 @@ export default function AdminPage() {
       });
     }
 
-    // Refresh protocols list after a delay
     setTimeout(() => {
       fetchProtocols();
+      fetchAllHospitals();
     }, 2000);
 
-    // Clear status after 5 seconds
     setTimeout(() => {
       setUploadStatus({ status: "idle", message: "" });
     }, 5000);
   };
 
-  // Drag and drop handlers
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -180,20 +247,16 @@ export default function AdminPage() {
     handleUpload(e.dataTransfer.files);
   };
 
-  // Login screen
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#131314] text-white flex">
-        {/* Left Sidebar */}
         <div className="w-16 flex-shrink-0 flex flex-col items-center py-4 border-r border-white/10">
           <Link href="/" className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors">
             <Menu className="w-5 h-5" />
           </Link>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col">
-          {/* Header */}
           <header className="h-16 flex items-center justify-between px-6 border-b border-white/5">
             <Link href="/" className="text-xl font-normal text-white hover:text-white/80 transition-colors">
               EM Protocols
@@ -203,10 +266,8 @@ export default function AdminPage() {
             </span>
           </header>
 
-          {/* Center Content */}
           <div className="flex-1 flex flex-col items-center justify-center px-6">
             <div className="w-full max-w-md space-y-8">
-              {/* Greeting */}
               <div className="text-center space-y-3">
                 <Shield className="w-12 h-12 mx-auto text-blue-400" />
                 <h1 className="text-4xl font-normal text-white/90 tracking-tight">
@@ -217,7 +278,6 @@ export default function AdminPage() {
                 </p>
               </div>
 
-              {/* Login Box */}
               <form onSubmit={handleLogin} className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-6 space-y-4">
                 <div>
                   <label className="block text-sm text-[#9aa0a6] mb-2">
@@ -265,10 +325,8 @@ export default function AdminPage() {
     );
   }
 
-  // Admin dashboard
   return (
     <div className="min-h-screen bg-[#131314] text-white flex">
-      {/* Left Sidebar */}
       <div className="w-16 flex-shrink-0 flex flex-col items-center py-4 border-r border-white/10">
         <Link href="/" className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -278,9 +336,7 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
         <header className="h-16 flex items-center justify-between px-6 border-b border-white/5">
           <div className="flex items-center gap-3">
             <Link href="/" className="text-xl font-normal text-white hover:text-white/80 transition-colors">
@@ -299,130 +355,280 @@ export default function AdminPage() {
           </button>
         </header>
 
-        {/* Dashboard Content */}
+        <div className="px-6 pt-4">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode("upload")}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                viewMode === "upload"
+                  ? "bg-[#8ab4f8] text-[#131314]"
+                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+              }`}
+            >
+              Upload Protocols
+            </button>
+            <button
+              onClick={() => setViewMode("browse")}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                viewMode === "browse"
+                  ? "bg-[#8ab4f8] text-[#131314]"
+                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+              }`}
+            >
+              Browse All Hospitals
+            </button>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-auto p-6">
           <div className="max-w-4xl mx-auto space-y-6">
 
-            {/* Upload Area */}
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              className={`relative border-2 border-dashed rounded-[28px] p-8 transition-all ${
-                dragActive 
-                  ? "border-[#8ab4f8] bg-[#8ab4f8]/10" 
-                  : "border-[#3c4043] bg-[#1e1f20] hover:border-[#5f6368]"
-              }`}
-            >
-              <input
-                type="file"
-                accept=".pdf"
-                multiple
-                onChange={(e) => handleUpload(e.target.files)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                disabled={uploadStatus.status === "uploading" || uploadStatus.status === "processing"}
-              />
-              
-              <div className="text-center">
-                {uploadStatus.status === "idle" && (
-                  <>
-                    <Upload className="w-12 h-12 mx-auto text-[#9aa0a6] mb-4" />
-                    <p className="text-lg font-medium text-white mb-1">
-                      Drop PDFs here or click to upload
-                    </p>
-                    <p className="text-sm text-[#9aa0a6]">
-                      Multiple protocols can be uploaded at once
-                    </p>
-                  </>
-                )}
-
-                {(uploadStatus.status === "uploading" || uploadStatus.status === "processing") && (
-                  <>
-                    <RefreshCw className="w-12 h-12 mx-auto text-[#8ab4f8] mb-4 animate-spin" />
-                    <p className="text-lg font-medium text-[#8ab4f8] mb-1">
-                      {uploadStatus.message}
-                    </p>
-                    {uploadStatus.totalFiles && uploadStatus.totalFiles > 1 && (
-                      <p className="text-sm text-[#9aa0a6] mb-2">
-                        {uploadStatus.completedFiles || 0} of {uploadStatus.totalFiles} files completed
-                      </p>
-                    )}
-                    {uploadStatus.progress !== undefined && (
-                      <div className="w-64 mx-auto bg-[#3c4043] rounded-full h-2 mt-3">
-                        <div 
-                          className="bg-[#8ab4f8] h-2 rounded-full transition-all"
-                          style={{ width: `${uploadStatus.progress}%` }}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {uploadStatus.status === "success" && (
-                  <>
-                    <CheckCircle className="w-12 h-12 mx-auto text-green-400 mb-4" />
-                    <p className="text-lg font-medium text-green-400">
-                      {uploadStatus.message}
-                    </p>
-                  </>
-                )}
-
-                {uploadStatus.status === "error" && (
-                  <>
-                    <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
-                    <p className="text-lg font-medium text-red-400">
-                      {uploadStatus.message}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Protocols List */}
-            <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
-              <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
-                <h2 className="text-lg font-medium text-white">Your Protocols</h2>
-                <button
-                  onClick={fetchProtocols}
-                  disabled={loading}
-                  className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
+            {viewMode === "upload" && (
+              <>
+                <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  className={`relative border-2 border-dashed rounded-[28px] p-8 transition-all ${
+                    dragActive 
+                      ? "border-[#8ab4f8] bg-[#8ab4f8]/10" 
+                      : "border-[#3c4043] bg-[#1e1f20] hover:border-[#5f6368]"
+                  }`}
                 >
-                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                  Refresh
-                </button>
-              </div>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    multiple
+                    onChange={(e) => handleUpload(e.target.files)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={uploadStatus.status === "uploading" || uploadStatus.status === "processing"}
+                  />
+                  
+                  <div className="text-center">
+                    {uploadStatus.status === "idle" && (
+                      <>
+                        <Upload className="w-12 h-12 mx-auto text-[#9aa0a6] mb-4" />
+                        <p className="text-lg font-medium text-white mb-1">
+                          Drop PDFs here or click to upload
+                        </p>
+                        <p className="text-sm text-[#9aa0a6]">
+                          Multiple protocols can be uploaded at once
+                        </p>
+                      </>
+                    )}
 
-              {protocols.length === 0 ? (
-                <div className="p-8 text-center">
-                  <FileText className="w-12 h-12 mx-auto text-[#5f6368] mb-3" />
-                  <p className="text-[#9aa0a6]">No protocols uploaded yet</p>
-                  <p className="text-sm text-[#5f6368]">Upload a PDF to get started</p>
+                    {(uploadStatus.status === "uploading" || uploadStatus.status === "processing") && (
+                      <>
+                        <RefreshCw className="w-12 h-12 mx-auto text-[#8ab4f8] mb-4 animate-spin" />
+                        <p className="text-lg font-medium text-[#8ab4f8] mb-1">
+                          {uploadStatus.message}
+                        </p>
+                        {uploadStatus.totalFiles && uploadStatus.totalFiles > 1 && (
+                          <p className="text-sm text-[#9aa0a6] mb-2">
+                            {uploadStatus.completedFiles || 0} of {uploadStatus.totalFiles} files completed
+                          </p>
+                        )}
+                        {uploadStatus.progress !== undefined && (
+                          <div className="w-64 mx-auto bg-[#3c4043] rounded-full h-2 mt-3">
+                            <div 
+                              className="bg-[#8ab4f8] h-2 rounded-full transition-all"
+                              style={{ width: `${uploadStatus.progress}%` }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {uploadStatus.status === "success" && (
+                      <>
+                        <CheckCircle className="w-12 h-12 mx-auto text-green-400 mb-4" />
+                        <p className="text-lg font-medium text-green-400">
+                          {uploadStatus.message}
+                        </p>
+                      </>
+                    )}
+
+                    {uploadStatus.status === "error" && (
+                      <>
+                        <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+                        <p className="text-lg font-medium text-red-400">
+                          {uploadStatus.message}
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <ul className="divide-y divide-[#3c4043]">
-                  {protocols.map((protocol) => (
-                    <li key={protocol.protocol_id} className="p-5 hover:bg-[#2c2d2e] transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-medium text-white">
-                            {protocol.protocol_id.replace(/_/g, " ")}
-                          </h3>
-                          <p className="text-sm text-[#9aa0a6] mt-1">
-                            {protocol.page_count} pages • {protocol.image_count} images • {protocol.char_count.toLocaleString()} characters
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-[#5f6368]">
-                            {new Date(protocol.processed_at).toLocaleDateString()}
-                          </p>
-                        </div>
+
+                <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
+                  <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
+                    <h2 className="text-lg font-medium text-white">
+                      Protocols in {hospitalId}/{bundleName}
+                    </h2>
+                    <button
+                      onClick={fetchProtocols}
+                      disabled={loading}
+                      className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                      Refresh
+                    </button>
+                  </div>
+
+                  {protocols.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <FileText className="w-12 h-12 mx-auto text-[#5f6368] mb-3" />
+                      <p className="text-[#9aa0a6]">No protocols uploaded yet</p>
+                      <p className="text-sm text-[#5f6368]">Upload a PDF to get started</p>
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-[#3c4043]">
+                      {protocols.map((protocol) => (
+                        <li key={protocol.protocol_id} className="p-5 hover:bg-[#2c2d2e] transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="font-medium text-white">
+                                {protocol.protocol_id.replace(/_/g, " ")}
+                              </h3>
+                              <p className="text-sm text-[#9aa0a6] mt-1">
+                                {protocol.page_count} pages • {protocol.image_count} images • {protocol.char_count.toLocaleString()} characters
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <p className="text-xs text-[#5f6368]">
+                                {new Date(protocol.processed_at).toLocaleDateString()}
+                              </p>
+                              <button
+                                onClick={() => handleDelete(orgId, protocol.protocol_id)}
+                                disabled={deleting === `${orgId}/${protocol.protocol_id}`}
+                                className="p-2 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors disabled:opacity-50"
+                              >
+                                {deleting === `${orgId}/${protocol.protocol_id}` ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </>
+            )}
+
+            {viewMode === "browse" && (
+              <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
+                <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
+                  <h2 className="text-lg font-medium text-white">All Hospitals & Bundles</h2>
+                  <button
+                    onClick={fetchAllHospitals}
+                    disabled={loading}
+                    className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                </div>
+
+                {Object.keys(allHospitals).length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Building2 className="w-12 h-12 mx-auto text-[#5f6368] mb-3" />
+                    <p className="text-[#9aa0a6]">No protocols found</p>
+                    <p className="text-sm text-[#5f6368]">Upload protocols to see them here</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-[#3c4043]">
+                    {Object.entries(allHospitals).sort().map(([hospital, bundles]) => (
+                      <div key={hospital}>
+                        <button
+                          onClick={() => toggleHospital(hospital)}
+                          className="w-full px-5 py-4 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
+                        >
+                          {expandedHospitals.has(hospital) ? (
+                            <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                          )}
+                          <Building2 className="w-5 h-5 text-[#8ab4f8]" />
+                          <span className="font-medium text-white">{hospital}</span>
+                          <span className="text-xs text-[#5f6368] ml-auto">
+                            {Object.keys(bundles).length} bundle(s)
+                          </span>
+                        </button>
+
+                        {expandedHospitals.has(hospital) && (
+                          <div className="bg-[#1a1a1b]">
+                            {Object.entries(bundles).sort().map(([bundle, bundleProtocols]) => {
+                              const bundleKey = `${hospital}/${bundle}`;
+                              return (
+                                <div key={bundleKey}>
+                                  <button
+                                    onClick={() => toggleBundle(bundleKey)}
+                                    className="w-full pl-12 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
+                                  >
+                                    {expandedBundles.has(bundleKey) ? (
+                                      <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                                    )}
+                                    <FolderOpen className="w-4 h-4 text-yellow-500" />
+                                    <span className="text-[#e8eaed]">{bundle}</span>
+                                    <span className="text-xs text-[#5f6368] ml-auto">
+                                      {bundleProtocols.length} protocol(s)
+                                    </span>
+                                  </button>
+
+                                  {expandedBundles.has(bundleKey) && (
+                                    <ul className="bg-[#131314]">
+                                      {bundleProtocols.map((protocol) => {
+                                        const fullOrgId = `${hospital}/${bundle}`;
+                                        const deleteKey = `${fullOrgId}/${protocol.protocol_id}`;
+                                        return (
+                                          <li 
+                                            key={protocol.protocol_id}
+                                            className="pl-20 pr-5 py-3 flex items-center justify-between hover:bg-[#2c2d2e] transition-colors"
+                                          >
+                                            <div className="flex items-center gap-3">
+                                              <FileText className="w-4 h-4 text-[#5f6368]" />
+                                              <div>
+                                                <span className="text-[#e8eaed]">
+                                                  {protocol.protocol_id.replace(/_/g, " ")}
+                                                </span>
+                                                <p className="text-xs text-[#5f6368]">
+                                                  {protocol.page_count} pages • {protocol.char_count?.toLocaleString() || 0} chars
+                                                </p>
+                                              </div>
+                                            </div>
+                                            <button
+                                              onClick={() => handleDelete(fullOrgId, protocol.protocol_id)}
+                                              disabled={deleting === deleteKey}
+                                              className="p-2 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors disabled:opacity-50"
+                                            >
+                                              {deleting === deleteKey ? (
+                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                              ) : (
+                                                <Trash2 className="w-4 h-4" />
+                                              )}
+                                            </button>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

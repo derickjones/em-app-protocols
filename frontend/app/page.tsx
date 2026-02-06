@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2 } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, FolderOpen, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
 const THEME_KEY = "em-protocol-theme";
+const BUNDLE_KEY = "em-protocol-selected-bundles";
 
 interface QueryResponse {
   answer: string;
@@ -25,6 +26,14 @@ interface Conversation {
   response: QueryResponse | null;
 }
 
+interface HospitalData {
+  [bundle: string]: unknown[];
+}
+
+interface AllHospitals {
+  [hospital: string]: HospitalData;
+}
+
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
@@ -36,6 +45,12 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
+  
+  // Hospital/Bundle selection state
+  const [allHospitals, setAllHospitals] = useState<AllHospitals>({});
+  const [selectedBundles, setSelectedBundles] = useState<Set<string>>(new Set());
+  const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
+  const [showBundleSelector, setShowBundleSelector] = useState(false);
 
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
@@ -89,6 +104,95 @@ export default function Home() {
     }
   }, [conversations]);
 
+  // Fetch hospitals and bundles
+  const fetchHospitals = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/hospitals`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllHospitals(data.hospitals || {});
+      }
+    } catch (err) {
+      console.error("Failed to fetch hospitals:", err);
+    }
+  }, []);
+
+  // Load hospitals on mount
+  useEffect(() => {
+    fetchHospitals();
+  }, [fetchHospitals]);
+
+  // Load selected bundles from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(BUNDLE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setSelectedBundles(new Set(parsed));
+        } catch (e) {
+          console.error("Failed to parse saved bundles:", e);
+        }
+      }
+    }
+  }, []);
+
+  // Save selected bundles to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(BUNDLE_KEY, JSON.stringify(Array.from(selectedBundles)));
+    }
+  }, [selectedBundles]);
+
+  // Toggle hospital expansion in selector
+  const toggleHospitalExpand = (hospital: string) => {
+    setExpandedHospitals(prev => {
+      const next = new Set(prev);
+      if (next.has(hospital)) {
+        next.delete(hospital);
+      } else {
+        next.add(hospital);
+      }
+      return next;
+    });
+  };
+
+  // Toggle bundle selection
+  const toggleBundleSelection = (bundleKey: string) => {
+    setSelectedBundles(prev => {
+      const next = new Set(prev);
+      if (next.has(bundleKey)) {
+        next.delete(bundleKey);
+      } else {
+        next.add(bundleKey);
+      }
+      return next;
+    });
+  };
+
+  // Select all bundles for a hospital
+  const selectAllHospitalBundles = (hospital: string) => {
+    const bundles = Object.keys(allHospitals[hospital] || {});
+    setSelectedBundles(prev => {
+      const next = new Set(prev);
+      bundles.forEach(bundle => next.add(`${hospital}/${bundle}`));
+      return next;
+    });
+  };
+
+  // Deselect all bundles for a hospital
+  const deselectAllHospitalBundles = (hospital: string) => {
+    setSelectedBundles(prev => {
+      const next = new Set(prev);
+      Array.from(next).forEach(key => {
+        if (key.startsWith(`${hospital}/`)) {
+          next.delete(key);
+        }
+      });
+      return next;
+    });
+  };
+
   const handleSubmit = async () => {
     if (!question.trim() || loading) return;
     
@@ -117,7 +221,11 @@ export default function Home() {
       const res = await fetch(`${API_URL}/query`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ query: question.trim() }),
+        body: JSON.stringify({ 
+          query: question.trim(),
+          bundle_ids: ["all"],  // Include all bundles for now
+          include_images: true
+        }),
       });
       if (!res.ok) {
         if (res.status === 401) {
@@ -264,6 +372,28 @@ export default function Home() {
             <Plus className="w-5 h-5" />
             <span className="font-medium">New Conversation</span>
           </button>
+
+          {/* Protocol Bundles Info */}
+          {Object.keys(allHospitals).length > 0 && (
+            <div className={`mt-4 p-3 rounded-xl ${darkMode ? 'bg-neutral-800/50' : 'bg-gray-100'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Building2 className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                <span className={`text-xs font-medium ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  Searching All Bundles
+                </span>
+              </div>
+              <div className="space-y-1">
+                {Object.entries(allHospitals).map(([hospital, bundles]) => (
+                  <div key={hospital} className="text-xs">
+                    <span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{hospital}:</span>
+                    <span className={`ml-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      {Object.keys(bundles).join(', ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Conversation List */}

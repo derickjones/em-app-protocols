@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import time
+from google.cloud import storage
 
 from rag_service import RAGService
 from protocol_service import ProtocolService
@@ -229,6 +230,53 @@ async def list_protocols(
             count=len(protocols)
         )
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/hospitals")
+async def list_all_hospitals():
+    """
+    List all hospitals with their bundles and protocols.
+    Returns hierarchical structure: { hospitals: { hospital: { bundle: [protocols] } } }
+    """
+    try:
+        hospitals = protocol_service.list_all_hospitals()
+        return {"hospitals": hospitals}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/protocols/{org_id}/{protocol_id}")
+async def delete_protocol(org_id: str, protocol_id: str):
+    """
+    Delete a protocol from the system.
+    Removes from processed bucket.
+    """
+    try:
+        # Delete from processed bucket
+        success = protocol_service.delete_protocol(org_id, protocol_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Protocol not found")
+        
+        # Also delete from raw bucket
+        raw_bucket = f"clinical-assistant-457902-protocols-raw"
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(raw_bucket)
+        
+        # Try to delete the PDF (could be .pdf or other extensions)
+        for ext in [".pdf", ".PDF"]:
+            blob = bucket.blob(f"{org_id}/{protocol_id}{ext}")
+            if blob.exists():
+                blob.delete()
+                break
+        
+        return {"status": "deleted", "protocol_id": protocol_id, "org_id": org_id}
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
