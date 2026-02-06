@@ -408,7 +408,7 @@ export default function Home() {
 
   return (
     <div className={`min-h-screen font-sans flex ${darkMode ? 'bg-black text-gray-100' : 'bg-white text-gray-900'}`}>
-      {/* Sidebar Overlay */}
+      {/* Sidebar Overlay - mobile only */}
       {sidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/20 z-40 lg:hidden"
@@ -417,16 +417,16 @@ export default function Home() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 border-r transform transition-transform duration-300 ease-in-out ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      } lg:translate-x-0 flex flex-col ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 border-r transform transition-all duration-300 ease-in-out ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      } flex flex-col ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-gray-50 border-gray-200'}`}>
         {/* Sidebar Header */}
         <div className={`p-4 border-b ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className={`text-lg font-semibold ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Conversations</h2>
             <button 
               onClick={() => setSidebarOpen(false)}
-              className={`lg:hidden p-1 rounded ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-200'}`}
+              className={`p-1 rounded ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-200'}`}
             >
               <X className={`w-5 h-5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
             </button>
@@ -649,7 +649,7 @@ export default function Home() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-h-screen">
+      <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
         {/* Header */}
         <div className={`sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
           <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -894,7 +894,7 @@ export default function Home() {
 
       {/* Pinned Input (when searching) */}
       {hasSearched && (
-        <div className={`fixed bottom-0 left-0 right-0 border-t px-4 py-4 z-50 lg:left-72 ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
+        <div className={`fixed bottom-0 right-0 border-t px-4 py-4 z-40 transition-all duration-300 ${sidebarOpen ? 'left-72' : 'left-0'} ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
           <div className="max-w-3xl mx-auto relative">
             <textarea
               placeholder="Ask a follow-up question..."
