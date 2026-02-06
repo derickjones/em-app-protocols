@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
@@ -15,6 +15,14 @@ interface QueryResponse {
   query_time_ms: number;
 }
 
+interface Conversation {
+  id: string;
+  title: string;
+  timestamp: Date;
+  question: string;
+  response: QueryResponse | null;
+}
+
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
@@ -22,6 +30,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
 
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
@@ -38,6 +49,12 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+
+    // Create a new conversation if we don't have one
+    const conversationId = currentConversationId || `conv-${Date.now()}`;
+    if (!currentConversationId) {
+      setCurrentConversationId(conversationId);
+    }
 
     try {
       const token = await getIdToken();
@@ -62,6 +79,25 @@ export default function Home() {
       }
       const data: QueryResponse = await res.json();
       setResponse(data);
+
+      // Save conversation to history
+      const newConversation: Conversation = {
+        id: conversationId,
+        title: question.trim().slice(0, 50) + (question.length > 50 ? "..." : ""),
+        timestamp: new Date(),
+        question: question.trim(),
+        response: data,
+      };
+      
+      setConversations(prev => {
+        const existing = prev.findIndex(c => c.id === conversationId);
+        if (existing >= 0) {
+          const updated = [...prev];
+          updated[existing] = newConversation;
+          return updated;
+        }
+        return [newConversation, ...prev];
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch response");
       setResponse(null);
@@ -70,11 +106,30 @@ export default function Home() {
     }
   };
 
+  const startNewConversation = () => {
+    setQuestion("");
+    setResponse(null);
+    setError(null);
+    setHasSearched(false);
+    setCurrentConversationId(null);
+    setSidebarOpen(false);
+  };
+
+  const loadConversation = (conversation: Conversation) => {
+    setQuestion(conversation.question);
+    setResponse(conversation.response);
+    setHasSearched(true);
+    setCurrentConversationId(conversation.id);
+    setError(null);
+    setSidebarOpen(false);
+  };
+
   const resetSearch = () => {
     setQuestion("");
     setResponse(null);
     setError(null);
     setHasSearched(false);
+    setCurrentConversationId(null);
   };
 
   const handleSignOut = async () => {
@@ -105,29 +160,106 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-gray-900 font-sans">
-      {/* Header */}
-      <div className="sticky top-0 z-50 w-full bg-white px-4 pt-4 border-b border-gray-100 pb-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          {/* Left: Menu */}
-          <div className="flex items-center space-x-3">
-            <button className="p-1">
-              <div className="space-y-1">
-                <span className="block w-5 h-0.5 bg-black" />
-                <span className="block w-5 h-0.5 bg-black" />
-                <span className="block w-5 h-0.5 bg-black" />
-              </div>
+    <div className="min-h-screen bg-white text-gray-900 font-sans flex">
+      {/* Sidebar Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-gray-50 border-r border-gray-200 transform transition-transform duration-300 ease-in-out ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      } lg:translate-x-0 flex flex-col`}>
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Conversations</h2>
+            <button 
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-1 hover:bg-gray-200 rounded"
+            >
+              <X className="w-5 h-5 text-gray-600" />
             </button>
           </div>
+          <button
+            onClick={startNewConversation}
+            className="w-full flex items-center gap-2 px-4 py-3 bg-black text-white rounded-xl hover:bg-gray-800 transition-colors shadow-md"
+          >
+            <Plus className="w-5 h-5" />
+            <span className="font-medium">New Conversation</span>
+          </button>
+        </div>
 
-          {/* Center: Title */}
-          <div className="flex-1 flex flex-col items-center text-center">
-            <h1
-              onClick={resetSearch}
-              className={`font-title font-bold tracking-wide transition-all duration-300 cursor-pointer ${
-                hasSearched ? "text-xl" : "text-4xl"
-              }`}
-            >
+        {/* Conversation List */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {conversations.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No conversations yet</p>
+              <p className="text-xs mt-1">Start a new conversation above</p>
+            </div>
+          ) : (
+            conversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => loadConversation(conv)}
+                className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${
+                  currentConversationId === conv.id
+                    ? 'bg-blue-100 border border-blue-200'
+                    : 'hover:bg-gray-100 border border-transparent'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                    currentConversationId === conv.id ? 'text-blue-600' : 'text-gray-400'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${
+                      currentConversationId === conv.id ? 'text-blue-900' : 'text-gray-800'
+                    }`}>
+                      {conv.title}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {conv.timestamp.toLocaleDateString()} {conv.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-h-screen">
+        {/* Header */}
+        <div className="sticky top-0 z-30 w-full bg-white px-4 pt-4 border-b border-gray-100 pb-3">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            {/* Left: Menu */}
+            <div className="flex items-center space-x-3">
+              <button 
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <div className="space-y-1">
+                  <span className="block w-5 h-0.5 bg-black" />
+                  <span className="block w-5 h-0.5 bg-black" />
+                  <span className="block w-5 h-0.5 bg-black" />
+                </div>
+              </button>
+            </div>
+
+            {/* Center: Title */}
+            <div className="flex-1 flex flex-col items-center text-center">
+              <h1
+                onClick={resetSearch}
+                className={`font-title font-bold tracking-wide transition-all duration-300 cursor-pointer ${
+                  hasSearched ? "text-xl" : "text-4xl"
+                }`}
+              >
               emergency medicine app
             </h1>
             {!hasSearched && (
@@ -366,7 +498,7 @@ export default function Home() {
 
       {/* Pinned Input (when searching) */}
       {hasSearched && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4 z-50">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4 z-50 lg:left-72">
           <div className="max-w-4xl mx-auto relative">
             <textarea
               placeholder="Ask a follow-up question..."
@@ -405,6 +537,7 @@ export default function Home() {
           </div>
         </div>
       )}
-    </main>
+      </main>
+    </div>
   );
 }
