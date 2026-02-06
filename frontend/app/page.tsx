@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Mic, LogOut, ChevronDown } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
@@ -229,9 +229,9 @@ export default function Home() {
         {!hasSearched ? (
           /* Initial Search View */
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
-            <div className="w-full max-w-2xl">
+            <div className="w-full max-w-4xl">
               {/* Input Box */}
-              <div className="relative">
+              <div className="relative mt-2">
                 <textarea
                   placeholder="Enter a clinical question or use the mic..."
                   value={question}
@@ -243,9 +243,9 @@ export default function Home() {
                     }
                   }}
                   rows={2}
-                  className="w-full p-4 pl-5 pr-24 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+                  className="w-full p-4 pl-5 pr-20 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
                 />
-                
+
                 {/* Mic Button */}
                 <button
                   title="Voice input"
@@ -259,14 +259,12 @@ export default function Home() {
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading}
                   title="Submit"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
                 >
                   {loading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <ArrowUp className="w-4 h-4" />
                   )}
                 </button>
               </div>
@@ -368,8 +366,8 @@ export default function Home() {
 
       {/* Pinned Input (when searching) */}
       {hasSearched && (
-        <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-8 pb-6 px-4">
-          <div className="max-w-2xl mx-auto relative">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4 z-50">
+          <div className="max-w-4xl mx-auto relative">
             <textarea
               placeholder="Ask a follow-up question..."
               value={question}
@@ -381,9 +379,10 @@ export default function Home() {
                 }
               }}
               rows={2}
-              className="w-full p-4 pl-5 pr-24 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
+              className="w-full p-4 pl-5 pr-20 border-2 border-gray-300 rounded-3xl bg-gray-50 text-sm text-gray-800 shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all duration-200 hover:shadow-xl"
             />
-            
+
+            {/* Mic Button */}
             <button
               title="Voice input"
               className="absolute right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 border-2 border-gray-300 transition-all duration-200 shadow-md hover:shadow-lg"
@@ -395,14 +394,12 @@ export default function Home() {
               onClick={handleSubmit}
               disabled={!question.trim() || loading}
               title="Submit"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center transition-all duration-200 hover:bg-gray-800 hover:scale-105 border-2 border-transparent hover:border-gray-300 disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg"
             >
               {loading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
-                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <ArrowUp className="w-4 h-4" />
               )}
             </button>
           </div>
