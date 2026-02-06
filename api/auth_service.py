@@ -98,7 +98,13 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
     """
     Get existing user or create new user based on domain validation
     """
-    uid = decoded_token["uid"]
+    # Firebase tokens use 'sub' for user ID, but may also have 'uid' or 'user_id'
+    uid = decoded_token.get("sub") or decoded_token.get("uid") or decoded_token.get("user_id")
+    if not uid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: no user ID found"
+        )
     email = decoded_token.get("email", "")
     
     # Check if user already exists
