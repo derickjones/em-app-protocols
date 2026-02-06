@@ -1,12 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @import "tailwindcss";
 
-@theme {
-  --color-background: #ffffff;
-  --color-foreground: #171717;
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
   
   /* Font variables */
   --font-title: var(--font-orbitron), sans-serif;
   --font-body: var(--font-roboto), sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
 }
 
 * {

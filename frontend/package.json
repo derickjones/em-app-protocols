@@ -17,6 +17,7 @@
   "license": "MIT",
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/node": "^25.1.0",
     "@types/react": "^19.2.10",
     "autoprefixer": "^10.4.24",
