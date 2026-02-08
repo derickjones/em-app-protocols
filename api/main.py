@@ -563,6 +563,144 @@ async def upload_pdf(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
+# ============================================================================
+# ADMIN MANAGEMENT ENDPOINTS
+# ============================================================================
+
+from google.cloud import firestore
+db = firestore.Client(project="clinical-assistant-457902")
+
+
+class AdminUser(BaseModel):
+    """Admin user data model"""
+    email: str
+    org_id: str
+    role: str = "admin"
+    bundle_access: List[str] = []
+
+
+class AdminUserResponse(BaseModel):
+    """Response model for admin user"""
+    uid: str
+    email: str
+    role: str
+    bundleAccess: List[str]
+    createdAt: str
+
+
+@app.get("/admin/users")
+async def list_admin_users(
+    org_id: Optional[str] = Query(None),
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    List all admin users (super_admin only)
+    Optionally filter by org_id
+    """
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Only super admins can view admin users")
+    
+    try:
+        users_ref = db.collection("users")
+        
+        # Filter by org if provided
+        if org_id:
+            query = users_ref.where("orgId", "==", org_id)
+        else:
+            query = users_ref
+        
+        users = []
+        for doc in query.stream():
+            user_data = doc.to_dict()
+            users.append({
+                "uid": doc.id,
+                "email": user_data.get("email", ""),
+                "role": user_data.get("role", "user"),
+                "bundleAccess": user_data.get("bundleAccess", []),
+                "createdAt": user_data.get("createdAt", ""),
+            })
+        
+        return {"users": users}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list users: {str(e)}")
+
+
+@app.post("/admin/users")
+async def create_admin_user(
+    admin_data: AdminUser,
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    Create or update an admin user (super_admin only)
+    """
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Only super admins can create admin users")
+    
+    try:
+        # Check if user exists by email
+        users_ref = db.collection("users")
+        query = users_ref.where("email", "==", admin_data.email).limit(1)
+        existing = list(query.stream())
+        
+        user_data = {
+            "email": admin_data.email,
+            "orgId": admin_data.org_id,
+            "role": admin_data.role,
+            "bundleAccess": admin_data.bundle_access,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+        
+        if existing:
+            # Update existing user
+            doc_ref = existing[0].reference
+            doc_ref.update(user_data)
+            return {"status": "updated", "uid": existing[0].id}
+        else:
+            # Create new user record
+            user_data["createdAt"] = firestore.SERVER_TIMESTAMP
+            doc_ref = users_ref.document()
+            doc_ref.set(user_data)
+            return {"status": "created", "uid": doc_ref.id}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
+
+
+@app.delete("/admin/users/{uid}")
+async def delete_admin_user(
+    uid: str,
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    Delete an admin user (super_admin only)
+    """
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Only super admins can delete admin users")
+    
+    try:
+        # Get user to check if they're super_admin (can't delete super_admins)
+        user_ref = db.collection("users").document(uid)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user_doc.to_dict()
+        if user_data.get("role") == "super_admin":
+            raise HTTPException(status_code=403, detail="Cannot delete super admin users")
+        
+        # Delete the user
+        user_ref.delete()
+        
+        return {"status": "deleted", "uid": uid}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
+
+
 # Run with: uvicorn main:app --reload
 if __name__ == "__main__":
     import uvicorn

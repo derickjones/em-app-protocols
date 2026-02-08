@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
@@ -620,6 +620,25 @@ export default function Home() {
                         </p>
                       )}
                     </div>
+                    {/* Admin Dashboard Links */}
+                    {userProfile && (userProfile.role === "admin" || userProfile.role === "super_admin") && (
+                      <>
+                        <button
+                          onClick={() => router.push("/owner")}
+                          className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-neutral-800' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}
+                        >
+                          <Crown className="w-4 h-4" />
+                          Owner Dashboard
+                        </button>
+                        <button
+                          onClick={() => router.push("/admin")}
+                          className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-neutral-800' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}
+                        >
+                          <Shield className="w-4 h-4" />
+                          Upload Protocols
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={handleSignOut}
                       className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-neutral-800' : 'text-gray-600 hover:bg-gray-50'}`}
