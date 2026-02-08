@@ -701,6 +701,44 @@ async def delete_admin_user(
         raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
 
 
+@app.post("/admin/make-super-admin")
+async def make_super_admin(
+    email: str = Query(..., description="Email address to make super admin")
+):
+    """
+    Development endpoint to make a user a super admin
+    In production, this should be secured or removed
+    """
+    try:
+        users_ref = db.collection("users")
+        query = users_ref.where("email", "==", email).limit(1)
+        existing = list(query.stream())
+        
+        if existing:
+            # Update existing user
+            doc_ref = existing[0].reference
+            doc_ref.update({
+                "role": "super_admin",
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            })
+            return {"status": "updated", "email": email, "role": "super_admin"}
+        else:
+            # Create new super admin user
+            user_data = {
+                "email": email,
+                "role": "super_admin",
+                "bundleAccess": [],
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
+            doc_ref = users_ref.document()
+            doc_ref.set(user_data)
+            return {"status": "created", "email": email, "role": "super_admin"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to make super admin: {str(e)}")
+
+
 # Run with: uvicorn main:app --reload
 if __name__ == "__main__":
     import uvicorn
