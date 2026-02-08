@@ -189,14 +189,16 @@ A:"""
         return None
     
     def _get_images_from_contexts(self, contexts: List[Dict]) -> List[Dict]:
-        """Extract images from context sources"""
+        """Extract images from context sources - maintains protocol relevance order"""
         seen_images = set()
         images = []
         
-        for ctx in contexts:
+        # Process contexts in order (most relevant first)
+        for ctx_idx, ctx in enumerate(contexts):
             metadata = self._get_protocol_metadata(ctx["source"])
             
             if metadata:
+                protocol_images = []
                 for img in metadata.get("images", []):
                     img_key = img.get("gcs_uri", "")
                     if img_key and img_key not in seen_images:
@@ -208,14 +210,16 @@ A:"""
                             "https://storage.googleapis.com/"
                         )
                         
-                        images.append({
+                        protocol_images.append({
                             "page": img.get("page", 0),
                             "url": url,
-                            "source": metadata.get("protocol_id", "unknown")
+                            "source": metadata.get("protocol_id", "unknown"),
+                            "protocol_rank": ctx_idx  # Track source protocol order
                         })
-        
-        # Sort by source and page
-        images.sort(key=lambda x: (x["source"], x["page"]))
+                
+                # Sort this protocol's images by page number
+                protocol_images.sort(key=lambda x: x["page"])
+                images.extend(protocol_images)
         
         return images
     
