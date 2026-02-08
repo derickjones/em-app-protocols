@@ -715,15 +715,18 @@ async def make_super_admin(
         existing = list(query.stream())
         
         if existing:
-            # Update existing user
+            # Update existing user - remove org association for super admins
             doc_ref = existing[0].reference
             doc_ref.update({
                 "role": "super_admin",
+                "orgId": firestore.DELETE_FIELD,  # Remove orgId field
+                "orgName": firestore.DELETE_FIELD,  # Remove orgName field
+                "bundleAccess": [],
                 "updatedAt": firestore.SERVER_TIMESTAMP,
             })
             return {"status": "updated", "email": email, "role": "super_admin"}
         else:
-            # Create new super admin user
+            # Create new super admin user without org
             user_data = {
                 "email": email,
                 "role": "super_admin",
