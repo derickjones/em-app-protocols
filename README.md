@@ -409,29 +409,40 @@ $99-299/org/month = $11,880-$35,880/year (10 orgs)
 ## 📋 Repository Structure
 
 ```
-em-app-external/
-├── frontend/           # Next.js app
-│   ├── components/     # React components
-│   ├── pages/          # Next.js pages
-│   ├── styles/         # Tailwind CSS
-│   └── lib/            # Utilities
-├── backend/            # FastAPI services
-│   ├── api/            # API routes
-│   ├── services/       # Business logic
-│   ├── models/         # Data models
-│   └── utils/          # Helpers
-├── functions/          # Cloud Functions
-│   ├── pdf-processor/  # PDF processing pipeline
-│   └── rag-indexer/    # RAG corpus indexing
-├── infrastructure/     # Terraform (GCP setup)
-│   ├── main.tf
-│   ├── variables.tf
-│   └── modules/
-├── docs/               # Documentation
-│   ├── api.md
-│   ├── deployment.md
-│   └── user-guide.md
-└── scripts/            # Deployment & utility scripts
+em-app-protocols/
+├── frontend/               # Next.js 16 + React 19 + Tailwind CSS 4
+│   ├── app/
+│   │   ├── page.tsx        # Main search page (image carousel, source badges)
+│   │   ├── layout.tsx      # Root layout
+│   │   ├── globals.css     # Global styles + scrollbar styling
+│   │   ├── login/          # Firebase auth login page
+│   │   ├── admin/          # Admin dashboard (protocol upload)
+│   │   └── owner/          # Super admin dashboard (manage admins)
+│   ├── components/         # Shared React components
+│   └── lib/
+│       ├── auth-context.tsx # Firebase auth context (roles: user|admin|super_admin)
+│       └── firebase.ts     # Firebase client config
+├── api/                    # FastAPI backend (Cloud Run)
+│   ├── main.py             # API endpoints (query, auth, admin, protocols)
+│   ├── rag_service.py      # Multi-source RAG (local + WikEM corpora)
+│   ├── auth_service.py     # Firebase auth + domain-based org lookup
+│   ├── protocol_service.py # Protocol CRUD operations
+│   ├── seed_database.py    # Firestore seeding script
+│   └── Dockerfile          # Cloud Run container
+├── pipeline/               # PDF processing pipeline (Cloud Function)
+│   ├── main.py             # Document AI → GCS → RAG indexing
+│   ├── protocol_store.py   # GCS storage utilities
+│   └── query_with_images.py # Image-aware queries
+├── scrapers/               # External content scrapers
+│   ├── WIKEM_SCRAPER_PLAN.md   # Implementation plan
+│   ├── wikem_scraper.py        # WikEM topic page scraper
+│   ├── wikem_indexer.py        # WikEM → GCS → RAG corpus indexer
+│   ├── wikem_rag_config.json   # WikEM corpus config
+│   └── output/                 # Scraped content (processed JSON + markdown)
+├── docs/                   # Documentation
+│   └── ADMIN_MULTITENANCY_PLAN.md
+├── CLAUDE.md               # AI assistant context
+└── README.md               # This file
 ```
 
 ---
@@ -580,147 +591,64 @@ For questions or support:
 
 ---
 
-**Last Updated**: February 5, 2026  
-**Version**: 0.3.0 (MVP In Progress)  
+**Last Updated**: February 8, 2026  
+**Version**: 0.4.0  
 **Status**: Active Development
 
 ---
 
-## 📈 Progress & Changelog
+## 🧩 Current Features
 
-### **v0.3.0** - February 5, 2026
-🎉 **Hospital/Bundle Organization & UI Polish**
+### Multi-Source RAG
+Queries run against **two corpora in parallel** and merge results by relevance:
+- **Local Protocols** — department-specific PDFs uploaded by hospital admins
+- **WikEM** — general ED knowledge scraped from [wikem.org](https://wikem.org) (CC BY-SA 3.0)
 
-#### ✅ Completed Features
-- **Hospital & Bundle Organization**
-  - Protocols organized by `{hospital}/{bundle}/{protocol_id}` path structure
-  - Hospital selector dropdown in sidebar ("Logged into" selector)
-  - Bundle chips with varied medical icons (ECG, heart, brain, stethoscope)
-  - Admin hierarchical view: Hospitals → Bundles → Protocols with expand/collapse
+Citations in the frontend are color-coded with **Local** (blue) and **WikEM** (green) badges. WikEM citations link directly to the source page on wikem.org.
 
-- **Collapsible Sidebar**
-  - Full sidebar collapse/expand on all screen sizes
-  - Hamburger menu only visible when sidebar collapsed
-  - Smooth transitions and proper content margin adjustment
+### WikEM Scraper & Indexer
+- `scrapers/wikem_scraper.py` — crawls wikem.org topic pages, extracts structured sections, saves raw HTML + processed markdown + JSON
+- `scrapers/wikem_indexer.py` — uploads processed markdown to GCS and imports into a dedicated Vertex AI RAG corpus
+- Separate corpus keeps department data isolated from general reference content
 
-- **RAG Corpus Management**
-  - Auto-delete from RAG when protocol deleted via admin
-  - "Re-index RAG" button in admin UI for full corpus rebuild
-  - Cleaned up legacy demo data (14 RAG files, 21 GCS objects)
+### Image Carousel
+Protocol diagrams and flowcharts display in a **horizontal scrolling carousel** with snap scrolling, hover-to-zoom, and lazy loading.
 
-- **UI Improvements**
-  - Login required to search (redirects to /login)
-  - Sidebar footer reordered: dark mode → hospital → user login
-  - Fixed PDF citation URLs to include bundle path
+### Owner Dashboard
+Super admins (`/owner`) can manage department admins — add/remove admin users across organizations. Role hierarchy: Super Admin → Admin → User.
 
-- **API Enhancements**
-  - `/admin/reindex-rag` endpoint for full RAG rebuild
-  - Enhanced delete endpoint removes from RAG corpus
-  - Fixed path parsing for 3-level bundle structure
+### Authentication & Authorization
+- Firebase Auth with email/password and domain-based org assignment
+- Roles: `user`, `admin`, `super_admin`
+- Email verification required before searching
+- Domain-to-org mapping in Firestore
 
----
+### PDF Processing Pipeline
+Cloud Function triggered on PDF upload to GCS:
+1. Document AI OCR extracts text + page images
+2. Text and images stored in processed GCS bucket
+3. Text indexed into Vertex AI RAG corpus
+4. Metadata (page count, image URIs, confidence) saved as JSON
 
-### **v0.2.0** - February 4, 2026
-🎉 **Major Milestone: Working MVP with RAG + Frontend**
-
-#### ✅ Completed Features
-- **Backend API (FastAPI on Cloud Run)**
-  - Vertex AI RAG integration with corpus retrieval
-  - Gemini 2.0 Flash for answer generation
-  - Fast two-step RAG approach (~3-4 second responses)
-  - Image extraction from protocol metadata
-  - PDF citation URLs with clickable links
-  - Deployed: `https://em-protocol-api-930035889332.us-central1.run.app`
-
-- **Frontend (Next.js on Vercel)**
-  - Modern dark UI inspired by Google Gemini
-  - Real-time search with loading states
-  - Markdown rendering for formatted answers
-  - Bullet points and structured formatting
-  - Source Protocols section with citation numbers [1], [2]
-  - Related Diagrams section with protocol images
-  - Responsive input bar (home + fixed bottom after search)
-  - Custom fonts (Orbitron titles, Roboto body)
-  - Deployed: `https://em-app-protocols.vercel.app`
-
-- **RAG Pipeline**
-  - Vertex AI RAG corpus configured (us-west4)
-  - Protocol PDFs processed and indexed
-  - Text extraction with page/source tracking
-  - Image extraction and GCS storage
-
-- **Prompt Engineering**
-  - ED-optimized response formatting
-  - Markdown bullet points and bold headers
-  - Inline numeric citations [1], [2]
-  - Concise responses under 150 words
-
-#### 🔧 Recent Improvements (Feb 4)
-- Optimized RAG for speed (3-4s responses, down from 15s)
-- Improved markdown formatting with balanced paragraphs/bullets
-- Added prose list styles for proper bullet rendering
-- Enhanced Source Protocols UI with citation numbers
-- Better visual separation between sections
-- Fixed input text alignment in search bubble
-
-#### 📋 Known Issues
-- Input text occasionally clips on left edge (minor)
-- Response formatting varies by query type
+### Hospital & Bundle Organization
+Protocols organized as `{hospital}/{bundle}/{protocol_id}`. Hospital selector in sidebar, bundle chips with medical icons, admin hierarchical view with expand/collapse.
 
 ---
 
-## 🚀 NEXT SESSION: Multi-Tenancy Setup
+## 🔗 Live Deployments
 
-### Recommended Approach
-Set up the multi-tenant foundation, then validate with a **real pilot organization** (e.g., a telemedicine practice at a specific hospital) before scaling.
+| Service | URL |
+|---------|-----|
+| Frontend | [emergencymedicine.app](https://emergencymedicine.app) |
+| API | `https://em-protocol-api-930035889332.us-central1.run.app` |
+| GCP Project | `clinical-assistant-457902` |
 
-### Session Goals
-1. **Set up Firebase Auth** - Login/signup flow
-2. **Create first real organization** - e.g., "Teladoc EM" or "Memorial Telemed"
-3. **Create org-specific RAG corpus** - Isolated from demo data
-4. **Test admin upload flow** - Upload their actual protocols
-5. **Validate end-to-end** - Login → Query → See org-specific results
-
-### Pre-Session Checklist
-- [ ] Have pilot org name and contact ready
-- [ ] Get 3-5 sample protocols from pilot org (PDF)
-- [ ] Review `docs/ADMIN_MULTITENANCY_PLAN.md`
-- [ ] Have GCP project access ready
-
-### Files to Reference
-- `docs/ADMIN_MULTITENANCY_PLAN.md` - Full architecture plan
-- `api/rag_service.py` - Current RAG implementation
-- `frontend/app/page.tsx` - Current UI
-
-### Key Decisions Needed
-1. **Auth provider**: Firebase Auth (recommended) vs Auth0
-2. **Pilot org details**: Name, admin email, protocols to upload
-3. **RAG corpus strategy**: Confirm one corpus per org
-
-### Estimated Time
-- Firebase Auth setup: 2-3 hours
-- First org + RAG corpus: 1-2 hours  
-- Admin upload UI (basic): 3-4 hours
-- End-to-end testing: 1-2 hours
-- **Total: 1 full day (~8 hours)**
-
----
-
-#### 🚧 Current State (Feb 4, 2026)
-- Working single-tenant demo with sample protocols
-- Frontend + API deployed and functional
-- Multi-tenancy plan documented, not implemented
-
-#### 📅 What's After Multi-Tenancy
-- User invite flow
-- Analytics dashboard
-- Subscription tiers
-- Production hardening
-
----
-
-### **v0.1.0** - January 23, 2026
-- Initial project setup
-- Architecture planning
-- GCP project configuration
-- README documentation
+### Key Infrastructure
+| Resource | ID / Location |
+|----------|--------------|
+| Local RAG Corpus | `2305843009213693952` (us-west4) |
+| WikEM RAG Corpus | `6917529027641081856` (us-west4) |
+| Document AI Processor | `40e813cb62d57ea8` (us) |
+| Raw PDFs Bucket | `clinical-assistant-457902-protocols-raw` |
+| Processed Bucket | `clinical-assistant-457902-protocols-processed` |
+| WikEM Bucket | `clinical-assistant-457902-wikem` |
