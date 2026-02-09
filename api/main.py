@@ -123,6 +123,7 @@ class QueryRequest(BaseModel):
     query: str = Field(..., description="The question to ask", min_length=3, max_length=500)
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
+    sources: List[str] = Field(default=["local", "wikem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference)")
 
 class ImageInfo(BaseModel):
     """Image information in query response"""
@@ -135,6 +136,7 @@ class Citation(BaseModel):
     protocol_id: str
     source_uri: str
     relevance_score: float
+    source_type: str = "local"  # "local" or "wikem"
 
 class QueryResponse(BaseModel):
     """Response model for protocol queries"""
@@ -226,7 +228,8 @@ async def query_protocols(
         # Get RAG results
         result = rag_service.query(
             query=request.query,
-            include_images=request.include_images
+            include_images=request.include_images,
+            sources=request.sources
         )
         
         query_time_ms = int((time.time() - start_time) * 1000)
@@ -236,6 +239,30 @@ async def query_protocols(
         citations = []
         for c in result.get("citations", []):
             source = c["source"]
+            source_type = c.get("source_type", "local")
+            
+            # Handle WikEM citations
+            if source_type == "wikem":
+                # Source is like: gs://clinical-assistant-457902-wikem/processed/Hyponatremia.md
+                parts = source.replace("gs://", "").split("/")
+                # Get the filename without extension as the topic name
+                filename = parts[-1] if parts else "unknown"
+                topic_id = filename.replace(".md", "")
+                
+                wikem_key = f"wikem-{topic_id}"
+                if wikem_key in seen_protocols:
+                    continue
+                seen_protocols.add(wikem_key)
+                
+                citations.append(Citation(
+                    protocol_id=topic_id,
+                    source_uri=f"https://wikem.org/wiki/{topic_id}",
+                    relevance_score=c["score"],
+                    source_type="wikem"
+                ))
+                continue
+            
+            # Handle local protocol citations
             # Extract protocol info from path like:
             # gs://bucket/org_id/bundle_id/protocol_id/extracted_text.txt
             parts = source.replace("gs://", "").split("/")
@@ -271,7 +298,8 @@ async def query_protocols(
             citations.append(Citation(
                 protocol_id=protocol_id,
                 source_uri=pdf_url,
-                relevance_score=c["score"]
+                relevance_score=c["score"],
+                source_type="local"
             ))
         
         return QueryResponse(

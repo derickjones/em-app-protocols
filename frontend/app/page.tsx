@@ -15,7 +15,7 @@ const HOSPITAL_KEY = "em-protocol-selected-hospital";
 interface QueryResponse {
   answer: string;
   images: { page: number; url: string; protocol_id: string }[];
-  citations: { protocol_id: string; source_uri: string; relevance_score: number }[];
+  citations: { protocol_id: string; source_uri: string; relevance_score: number; source_type: string }[];
   query_time_ms: number;
 }
 
@@ -292,7 +292,8 @@ export default function Home() {
         body: JSON.stringify({ 
           query: question.trim(),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
-          include_images: true
+          include_images: true,
+          sources: ["local", "wikem"]
         }),
       });
       if (!res.ok) {
@@ -863,25 +864,44 @@ export default function Home() {
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      Source Protocols
+                      Sources
                     </h3>
                     <div className="space-y-2">
-                      {response.citations.map((cite, idx) => (
-                        <a
-                          key={idx}
-                          href={cite.source_uri}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${darkMode ? 'text-blue-400 hover:bg-neutral-800' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
-                        >
-                          <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>{idx + 1}</span>
-                          <span className="flex-1">{cite.protocol_id.replace(/_/g, " ")}</span>
-                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </a>
-                      ))}
+                      {response.citations.map((cite, idx) => {
+                        const isWikEM = cite.source_type === "wikem";
+                        return (
+                          <a
+                            key={idx}
+                            href={cite.source_uri}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${darkMode ? 'text-blue-400 hover:bg-neutral-800' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
+                          >
+                            <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${
+                              isWikEM 
+                                ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                                : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
+                            }`}>{idx + 1}</span>
+                            <span className="flex-1">{cite.protocol_id.replace(/_/g, " ")}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                              isWikEM
+                                ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
+                                : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
+                            }`}>
+                              {isWikEM ? 'WikEM' : 'Local'}
+                            </span>
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+                        );
+                      })}
                     </div>
+                    {response.citations.some(c => c.source_type === "wikem") && (
+                      <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        WikEM content from <a href="https://wikem.org" target="_blank" rel="noopener noreferrer" className="underline">wikem.org</a> under CC BY-SA 3.0
+                      </p>
+                    )}
                   </div>
                 )}
 

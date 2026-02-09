@@ -1,6 +1,7 @@
 """
 RAG Service
 Handles RAG queries and Gemini answer generation
+Supports multi-source queries (local protocols + WikEM)
 """
 
 import os
@@ -10,12 +11,14 @@ import google.auth
 import google.auth.transport.requests
 from typing import Dict, List, Optional
 from google.cloud import storage
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration
 PROJECT_ID = os.environ.get("PROJECT_ID", "clinical-assistant-457902")
 PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
 RAG_LOCATION = os.environ.get("RAG_LOCATION", "us-west4")
 CORPUS_ID = os.environ.get("CORPUS_ID", "2305843009213693952")
+WIKEM_CORPUS_ID = os.environ.get("WIKEM_CORPUS_ID", "6917529027641081856")
 PROCESSED_BUCKET = f"{PROJECT_ID}-protocols-processed"
 
 
@@ -27,7 +30,9 @@ class RAGService:
         self.project_number = PROJECT_NUMBER
         self.location = RAG_LOCATION
         self.corpus_id = CORPUS_ID
+        self.wikem_corpus_id = WIKEM_CORPUS_ID
         self.corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
+        self.wikem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{WIKEM_CORPUS_ID}"
         self.storage_client = storage.Client()
         self._metadata_cache = {}
     
@@ -38,8 +43,11 @@ class RAGService:
         credentials.refresh(auth_req)
         return credentials.token
     
-    def _retrieve_contexts(self, query: str, top_k: int = 5) -> List[Dict]:
-        """Retrieve relevant contexts from RAG corpus"""
+    def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5) -> List[Dict]:
+        """Retrieve relevant contexts from a RAG corpus"""
+        if corpus_name is None:
+            corpus_name = self.corpus_name
+            
         url = f"https://{self.location}-aiplatform.googleapis.com/v1beta1/projects/{self.project_number}/locations/{self.location}:retrieveContexts"
         
         headers = {
@@ -50,7 +58,7 @@ class RAGService:
         payload = {
             "query": {"text": query},
             "vertex_rag_store": {
-                "rag_corpora": [self.corpus_name]
+                "rag_corpora": [corpus_name]
             }
         }
         
@@ -73,12 +81,13 @@ class RAGService:
         return contexts
     
     def _generate_answer(self, query: str, contexts: List[Dict]) -> str:
-        """Generate answer using Gemini (fast - no grounding overhead)"""
-        # Build context string - limit to top 3 for speed
-        context_text = "\n---\n".join([
-            f"[{i+1}] {c['text'][:1500]}"
-            for i, c in enumerate(contexts[:3])
-        ])
+        """Generate answer using Gemini with source-aware context"""
+        # Build context string with source labels - limit to top 5 for speed
+        context_parts = []
+        for i, c in enumerate(contexts[:5]):
+            source_label = "WikEM" if c.get("source_type") == "wikem" else "Local Protocol"
+            context_parts.append(f"[{i+1}] ({source_label}) {c['text'][:1500]}")
+        context_text = "\n---\n".join(context_parts)
         
         # Gemini endpoint (us-central1 for low latency)
         url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent"
@@ -90,11 +99,15 @@ class RAGService:
         
         prompt = f"""Emergency medicine assistant for ED physicians. Use markdown formatting.
 
+You have context from two possible sources:
+- "Local Protocol" = department-specific clinical protocols (prioritize these)
+- "WikEM" = general emergency medicine reference (wikem.org, CC BY-SA 3.0)
+
 MARKDOWN FORMAT RULES:
 - Use "- " (dash space) at start of line for bullet points
 - Use "**text**" for bold headers and drug names  
 - Use blank lines between sections
-- Add [1] citations at end of sentences
+- Add [1] citations at end of sentences matching the context numbers
 
 STRUCTURE:
 1. Bold header + 1-2 sentence intro paragraph
@@ -223,15 +236,70 @@ A:"""
         
         return images
     
-    def query(self, query: str, include_images: bool = True) -> Dict:
+    def _retrieve_multi_source(self, query: str, sources: List[str] = None) -> List[Dict]:
         """
-        Execute a full RAG query (fast two-step approach)
+        Retrieve contexts from multiple corpora in parallel.
+        Each context is tagged with source_type ('local' or 'wikem').
+        Results are merged and sorted by relevance score.
+        """
+        if sources is None:
+            sources = ["local", "wikem"]
+        
+        all_contexts: List[Dict] = []
+        
+        def fetch_local():
+            try:
+                contexts = self._retrieve_contexts(query, self.corpus_name)
+                for ctx in contexts:
+                    ctx["source_type"] = "local"
+                return contexts
+            except Exception as e:
+                print(f"Local corpus query failed: {e}")
+                return []
+        
+        def fetch_wikem():
+            try:
+                contexts = self._retrieve_contexts(query, self.wikem_corpus_name)
+                for ctx in contexts:
+                    ctx["source_type"] = "wikem"
+                return contexts
+            except Exception as e:
+                print(f"WikEM corpus query failed: {e}")
+                return []
+        
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {}
+            if "local" in sources:
+                futures["local"] = executor.submit(fetch_local)
+            if "wikem" in sources:
+                futures["wikem"] = executor.submit(fetch_wikem)
+            
+            for key, future in futures.items():
+                try:
+                    results = future.result(timeout=10)
+                    all_contexts.extend(results)
+                except Exception as e:
+                    print(f"Failed to get {key} results: {e}")
+        
+        # Sort by score (lower = more relevant in Vertex AI RAG)
+        all_contexts.sort(key=lambda x: x.get("score", 1))
+        
+        return all_contexts
+
+    def query(self, query: str, include_images: bool = True, sources: List[str] = None) -> Dict:
+        """
+        Execute a full RAG query with multi-source retrieval
+        
+        Args:
+            query: The search query
+            include_images: Whether to include protocol images
+            sources: List of sources to query ('local', 'wikem'). Default: both.
         
         Returns:
             dict with answer, images, citations
         """
-        # Step 1: Retrieve contexts from RAG corpus
-        contexts = self._retrieve_contexts(query)
+        # Step 1: Retrieve contexts from all corpora in parallel
+        contexts = self._retrieve_multi_source(query, sources)
         
         if not contexts:
             return {
@@ -252,7 +320,8 @@ A:"""
         citations = [
             {
                 "source": ctx["source"],
-                "score": ctx["score"]
+                "score": ctx["score"],
+                "source_type": ctx.get("source_type", "local")
             }
             for ctx in contexts
         ]
