@@ -1,0 +1,117 @@
+{
+  "slug": "Arthrocentesis",
+  "url": "https://wikem.org/wiki/Arthrocentesis",
+  "title": "Arthrocentesis",
+  "last_scraped": "2026-02-09T04:55:07.425955+00:00",
+  "content_hash": "9ba45b0e0e523643",
+  "sections": [
+    {
+      "heading": "Indications",
+      "level": 2,
+      "content": "Hip anatomy.\nExtracapsular ligaments (anterior right hip).\nExtracapsular ligaments (posterior right hip).\nCross section of the right hip at the level of the acetabulum.",
+      "order": 1
+    },
+    {
+      "heading": "Generalarthrocentesisindications",
+      "level": 3,
+      "content": "Suspicion of septic arthritis\nSuspicion of crystal induced arthritis\nEvaluation of therapeutic response for septic arthritis\nUnexplained arthritis with synovial effusion\nEvaluation of joint capsule integrity if overlying laceration\nRelative: therapeutic (decrease intra-articular pressure, injection of anesthetics/steroids)",
+      "order": 2
+    },
+    {
+      "heading": "Generalarthrocentesiscontraindications",
+      "level": 3,
+      "content": "No absolute contraindications for diagnostic arthrocentesis\nDo not inject steroids into a joint that you suspect is already infected\nRelative Contraindications: Overlying cellulitis Coagulopathy Joint prosthesis (refer to ortho)",
+      "order": 3
+    },
+    {
+      "heading": "Generalarthrocentesisequipment",
+      "level": 3,
+      "content": "Betadine or Chlorhexadine\nSterile gloves/drape\nSterile gauze\nLidocaine\nSyringes Small syringe (6-12cc) for injection of local anesthetic Large syringe (one 60cc or two 30cc) for aspiration\nNeedles 18 gauge: knee 20 gauge: most other joints 25 gauge: MTP joints 27 gauge for anesthetic injection\nCollection tubes (red top and purple for crystal analysis)\nCulture bottles\nConsider utilizing U/S to assess for effusion",
+      "order": 4
+    },
+    {
+      "heading": "General Setup",
+      "level": 3,
+      "content": "Prep area with betadine or chlorhexadine using circular motion moving away from joint x 3\nDrape joint in sterile fashion\nInject lidocaine with 25-30ga needle superficially and then into deeper tissues\nInsert 18ga needle (for larger joints) into joint space while pulling back on syringe\nStop once you aspirate fluid; aspirate as much fluid as possible Send: cell count, culture, Gram Stain , crystal analysis",
+      "order": 5
+    },
+    {
+      "heading": "Specific Procedure",
+      "level": 3,
+      "content": "See joint-specific page for procedures\nArthrocentesis: shoulder\nArthrocentesis: elbow\nArthrocentesis: wrist\nArthrocentesis: finger\nArthrocentesis: hip\nArthrocentesis: knee\nArthrocentesis: toe",
+      "order": 6
+    },
+    {
+      "heading": "Generalarthrocentesiscomplications",
+      "level": 3,
+      "content": "Pain\nInfection\nRe-accumulation of effusion\nDamage to tendons, nerves, or blood vessels",
+      "order": 7
+    },
+    {
+      "heading": "Arthrocentesisof synoval fluid",
+      "level": 3,
+      "content": "Synovium Normal Noninflammatory Inflammatory Septic Clarity Transparent Transparent Cloudy Cloudy Color Clear Yellow Yellow Yellow WBC <200 <200-2000 200-50,000 > 1,100 (prosthetic joint) >25,000; LR=2.9 >50,000; LR=7.7 >100,000; LR=28 PMN <25% <25% >50% >64% (prosthetic joint) >90% Culture Neg Neg Neg >50% positive Lactate <5.6 mmol/L <5.6 mmol/L <5.6 mmol/L >5.6 mmol/L LDH <250 <250 <250 >250 Crystals None None Multiple or none None\nViscosity of synovial fluid may actually be decreased in inflammatory or infectious etiologies, as hyaluronic acid concentrations decrease\nThe presence of crystals does not rule out septic arthritis; however, the diagnosis is highly unlikely with synovial WBC < 50,000 [1]",
+      "order": 8
+    },
+    {
+      "heading": "See Also",
+      "level": 2,
+      "content": "Arthrocentesis Arthrocentesis: shoulder Arthrocentesis: elbow Arthrocentesis: wrist Arthrocentesis: finger Arthrocentesis: hip Arthrocentesis: knee Arthrocentesis: ankle Arthrocentesis: toe\nSeptic arthritis\nSeptic arthritis (peds)",
+      "order": 9
+    },
+    {
+      "heading": "External Links",
+      "level": 2,
+      "content": "http://www.youtube.com/watch?v=fZ2dcZhoGP8 Arthrocentesis\nhttp://emprocedures.com/arthrocentesis/introduction.htm",
+      "order": 10
+    },
+    {
+      "heading": "References",
+      "level": 2,
+      "content": "↑ Shah K, Spear J, Nathanson LA, Mccauley J, Edlow JA. Does the presence of crystal arthritis rule out septic arthritis?. J Emerg Med. 2007;32(1):23-6.",
+      "order": 11
+    }
+  ],
+  "images": [
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Arthrocentesis/Slide2DAD.jpg",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Slide2DAD.jpg/300px-Slide2DAD.jpg",
+      "gcs_path": "images/Arthrocentesis/Slide2DAD.jpg"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Arthrocentesis/Gray339.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Gray339.png/300px-Gray339.png",
+      "gcs_path": "images/Arthrocentesis/Gray339.png"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Arthrocentesis/Gray340.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Gray340.png/300px-Gray340.png",
+      "gcs_path": "images/Arthrocentesis/Gray340.png"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Arthrocentesis/Gray344.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Gray344.png/300px-Gray344.png",
+      "gcs_path": "images/Arthrocentesis/Gray344.png"
+    }
+  ],
+  "categories": [
+    "Procedures",
+    "Orthopedics"
+  ],
+  "see_also": [
+    "Arthrocentesis:_shoulder",
+    "Arthrocentesis:_elbow",
+    "Arthrocentesis:_wrist",
+    "Arthrocentesis:_finger",
+    "Arthrocentesis:_hip",
+    "Arthrocentesis:_knee",
+    "Arthrocentesis:_ankle",
+    "Arthrocentesis:_toe",
+    "Septic_arthritis",
+    "Septic_arthritis_(peds)"
+  ]
+}

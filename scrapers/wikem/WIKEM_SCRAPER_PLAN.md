@@ -257,3 +257,99 @@ Before scraping, verify `wikem.org/robots.txt` allows crawling of `/wiki/` pages
 - WikEM content is under **CC BY-SA 3.0** license
 - Must provide attribution: "Content from WikEM (wikem.org) under CC BY-SA 3.0"
 - Attribution will be displayed in the frontend alongside WikEM results
+
+---
+
+## ✅ Completed (Feb 8, 2026)
+
+- [x] Phase 1 — Scraper built & tested on Hyponatremia
+- [x] Phase 3 — Multi-source parallel API queries working
+- [x] Phase 4 — Frontend source badges (Local blue / WikEM green), CC BY-SA attribution
+- [x] Image pipeline — full-res images downloaded to GCS, metadata auto-uploaded
+- [x] EM Universe / Protocol search mode toggle in frontend
+- [x] 9 topics scraped & indexed: Hyponatremia, Arthrocentesis, Chest tube, Lumbar puncture, Balloon tamponade, Paracentesis, Pericardiocentesis, Thoracentesis, Transvenous pacing
+- [x] Scrapers reorganized under `scrapers/wikem/`
+
+---
+
+## 🔜 TODO: Full WikEM Scrape (Feb 9)
+
+### Goal
+Scrape all ~5,000 WikEM topics and index them into the RAG corpus.
+
+### Pre-scrape code changes needed
+
+1. **Add batch/resume controls to `wikem_scraper.py`**
+   - `--batch-size N` — scrape N topics then stop (default: all)
+   - `--start-from <slug>` — resume from a specific topic alphabetically
+   - Progress tracking in `output/metadata/scrape_progress.json` (last slug completed, count, timestamp)
+   - Already skips existing by default (`--force` to re-scrape)
+
+2. **Add skip-existing to `wikem_indexer.py`**
+   - Track which files are already indexed in the RAG corpus
+   - Compare content hashes — only re-import changed files
+   - `--force` flag to re-index everything
+
+3. **Add error retry logic**
+   - `scrape_errors.json` already saved (built in)
+   - Add `--retry-errors` flag to re-attempt only failed slugs
+   - Add retry with backoff for transient network errors (503, timeout)
+
+### Execution plan
+
+| Step | Command | Time | Notes |
+|------|---------|------|-------|
+| 1. Discover all topics | `python3 wikem_scraper.py --discover` | ~2 min | Saves `topic_urls.json` |
+| 2. Scrape all topics | `python3 wikem_scraper.py --all` | ~8-9 hours | 1.5s delay per page, skips existing |
+| 3. Retry failures | `python3 wikem_scraper.py --retry-errors` | ~10 min | Re-attempt failed pages |
+| 4. Index into RAG | `python3 wikem_indexer.py --index-all` | ~16-17 hours | ~12s per file (GCS upload + import) |
+
+### Scale estimates
+
+| Resource | Per Topic (avg) | × 5,000 topics | Cost |
+|----------|----------------|-----------------|------|
+| Scrape time | ~6s (1.5s delay + image download) | ~8-9 hours | Free |
+| Images downloaded | ~2.7 per topic | ~13,500 images | — |
+| GCS storage (images) | ~500KB | ~6.7 GB | ~$0.14/mo |
+| GCS storage (markdown) | ~5KB | ~25 MB | negligible |
+| RAG indexing time | ~12s per file | ~16-17 hours | Free tier |
+
+### Option A: Run on laptop overnight
+```bash
+# Night 1: Discover + Scrape
+python3 wikem_scraper.py --discover
+python3 wikem_scraper.py --all                  # ~8hr, let it run overnight
+
+# Night 2: Finish scrape if needed, then index
+python3 wikem_scraper.py --all                  # picks up where it left off
+python3 wikem_indexer.py --index-all            # ~17hr, run overnight
+```
+
+### Option B: Run on GCE VM (faster, unattended)
+```bash
+# Spin up e2-small in same project (auth is automatic via service account)
+gcloud compute instances create wikem-scraper \
+  --zone=us-west4-a --machine-type=e2-small \
+  --scopes=cloud-platform
+
+# SSH in, clone, run
+gcloud compute ssh wikem-scraper
+git clone https://github.com/derickjones/em-app-protocols.git
+cd em-app-protocols/scrapers/wikem
+pip install -r requirements.txt
+
+# Run everything in a tmux session
+tmux new -s scrape
+python3 wikem_scraper.py --discover
+python3 wikem_scraper.py --all        # ~8hr
+python3 wikem_indexer.py --index-all  # ~17hr
+# Detach with Ctrl+B, D — come back later
+
+# Clean up when done
+gcloud compute instances delete wikem-scraper --zone=us-west4-a
+```
+
+### Post-scrape: Incremental updates (ongoing)
+- **Weekly cron** — re-run `--discover` to find new topics, scrape only new ones
+- **Content hash comparison** — `content_hash` field in each JSON detects changed pages
+- **Delta indexing** — only re-index files whose content hash changed since last import

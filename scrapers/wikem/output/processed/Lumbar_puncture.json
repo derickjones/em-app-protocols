@@ -1,0 +1,141 @@
+{
+  "slug": "Lumbar_puncture",
+  "url": "https://wikem.org/wiki/Lumbar_puncture",
+  "title": "Lumbar puncture",
+  "last_scraped": "2026-02-09T04:55:44.895215+00:00",
+  "content_hash": "86f0b12749bbf6b1",
+  "sections": [
+    {
+      "heading": "Overview",
+      "level": 2,
+      "content": "Comparison of pediatric and adult spinal cord anatomy.\nAnatomic landmarks for lumbar puncture.",
+      "order": 1
+    },
+    {
+      "heading": "Indications",
+      "level": 2,
+      "content": "Lateral patient positioning for LP.\nSurface markings for lumbar puncture.  Blue dots = Iliac crests; line connecting them = intercristal (Tuffier's) line; intersection of the Tuffier's line and lumbar spine midline = L4 spinous process.\nProper needle trajectory: skin, subcutaneous tissue, supraspinous ligament, interspinous ligament, ligamentum flavum, epidural space (containing internal vertebral venous plexus), dura, arachnoid, and subarachnoid space\nSuspicion of meningitis [1]\nSuspicion of subarachnoid hemorrhage (SAH) [2]\nSuspicion of certain central nervous system (CNS) diseases such as Guillain-Barré syndrome [3]\nTherapeutic relief of pseudotumor cerebri [4]",
+      "order": 2
+    },
+    {
+      "heading": "Contraindications",
+      "level": 2,
+      "content": "Infection at LP site\nSuspected spinal epidural abscess\nTrauma at the site",
+      "order": 3
+    },
+    {
+      "heading": "Lumbar puncture if coagulopathic",
+      "level": 3,
+      "content": "Tranfuse if platelets <25,000 [5] [6]\nINR >1.5\nHemophilia, von Willebrand disease, other coagulopathies If hemophiliac, replace factor before LP",
+      "order": 4
+    },
+    {
+      "heading": "CT Before Lumbar Puncture",
+      "level": 3,
+      "content": "LP without CT is likely safe if: [7]\nHistory Age < 60 Not immunocompromised No history of CNS disease No seizure within 1 week of presentation\nPhysical Exam No altered level of consciousness Ability to answer two consecutive questions successfully Ability to follow two consecutive commands successfully Normal neurologic exam\nIf none of the above, chance of normal ct is 97%; none of the patients herniated\nCT findings that prohibit LP: [8]\nMidline shift Unequal pressures between the 3 cerebral compartments (left/right supretentorial compartments, posterior fossa) Intracerebral masses not causing midline shift\nObstructive Hydrocephalus Enlargement of ventricles prox to lesions and normal ventricles distal (especially 4th ventricle)\nBasilar cisterns compressed Lateral/3rd ventricles may be small due to diffuse cerebral edema or enlarged due to obstr. hydroceph. +/- shift\nPosterior fossa mass Displacement/compression of 4th ventricle",
+      "order": 5
+    },
+    {
+      "heading": "Procedure",
+      "level": 2,
+      "content": "Ultrasound can be used, especially on high BMI patients. Ultrasound videos one , two , and three . Routine use of Ultrasound, however, has not been shown to increase procedural success, use in specific scenarios only [9]\nSterile prep L3-L4 and L4-L5 interspaces; prepare and confirm correct tubes in numerical order U/S can be used to ID interspaces in obese patients increasing your accuracy as much as 2.3 times [10] Aim lower than L4-L5 and no higher in pediatric patients as the conus medullaris ends at L3 at birth [11] Tuffier's line, L5/S1 at iliac crests in the pediatric patient\nPositioning Patient on side: able to measure opening pressure Patient sitting: helpful for difficult habitus, but must move patient to measure opening pressure\nNeedle selection 3.5 in atraumatic 22ga needle is ideal A 2018 meta analysis showed atraumatic needles had a lower incidence of post-LP headache and need for blood patch when compared to sharp needles [12] Needle >20ga almost doubles incidence of post-LP headache\nAnesthetize both superficial skin as well as along intended path of LP needle\nInsert needle with bevel parallel to spinal canal\nOpening pressure should be measured with patient on side with legs extended\nCollect 1mL of CSF in each tube",
+      "order": 6
+    },
+    {
+      "heading": "Standard",
+      "level": 3,
+      "content": "Tube 1: Cell count and differential\nTube 2: Gram stain, bacterial and viral cultures\nTube 3: Glucose, protein, protein electrophoresis (if indicated)\nTube 4: Second cell count and differential (if indicated) or hold tube Tube 3 or 4 can be used for special tests or additional cultures",
+      "order": 7
+    },
+    {
+      "heading": "Additional",
+      "level": 3,
+      "content": "Cryptoccal ag\nIndia ink\nAFB PCR\nRPR, VRDL\nFungal cultures\nviral cultures\nHerpes PCR\nLDH >40 suggests bacterial meningitis <40 suggests viral",
+      "order": 8
+    },
+    {
+      "heading": "Evaluation",
+      "level": 2,
+      "content": "Measure Normal Bacterial Aseptic (Viral) Fungal Tuberculosis Subarachnoid hemorrhage Neoplastic Appearance Clear Clear, cloudy, or purulent Clear Clear or opaque Clear or opaque Xanthochromia, bloody, or clear Clear or opaque Opening Pressure (cm H2O) 10-20 >25 Normal or elevated >25 >25 >25 Normal or elevated WBC Count^ (cells/µL) 0-5^ >100^ 5-1000 <500 50-500 0-5 (see correction section) <500 % PMNs >80-90% 1-50%^^ 1-50% Early PMN then lymph 1-50% Glucose >60% of serum glucose Low Normal Low Low Normal Normal Protein^^^ (mg/dL) < 45 Elevated Elevated Elevated Elevated Elevated >200 Gram Stain Neg Pos Neg India ink Tb stain Blood\n^Normal or lower WBC results may be found in immunocompromised, early, or partially treated (e.g. with oral antibiotics) bacterial menintigis, and those with tuberculosis meningitis\n^^Lymph predominance may be found in patients with early bacterial meningitis or those that have been partially treated (e.g. with oral antibiotics)\n^^^For unexplained elevations of protein, consider encephalitis , MS , Guillian Barre\nCorrections\nWBC correction (for bloody tap) Simplified version (if peripheral WBC and RBC counts are within normal limits): Subtract 1 WBC for every 750 RBC in CSF Complex version (WBC and/or RBC not within normal limits): \"WBCs added\" = WBC(blood) x [RBC(CSF) / RBC(blood)] WBC counted/resulted - \"WBCs added\" = actual WBC\nProtein correction (for bloody tap) For each 1000 RBC decrease protein value by 1mg/dl",
+      "order": 9
+    },
+    {
+      "heading": "Delay in LP",
+      "level": 4,
+      "content": "CSF cultures are negative 2 hrs after parenteral antibiotics in meningococcal meningitis, and 6 hrs in pneumococcal meningitis [13] [14]\n12 hrs after antibiotics: CSF glucose levels increase and protein levels decrease. CSF WBC and neutrophils are not affected [15]",
+      "order": 10
+    },
+    {
+      "heading": "Complications",
+      "level": 2,
+      "content": "Post-Lumbar Puncture Headache\nSpinal epidural hematoma",
+      "order": 11
+    },
+    {
+      "heading": "See Also",
+      "level": 2,
+      "content": "Meningitis\nCT Before Lumbar Puncture\nProcedure sample documentation",
+      "order": 12
+    },
+    {
+      "heading": "External Links",
+      "level": 2,
+      "content": "Straus, S. et al. How Do I Perform a Lumbar Puncture and Analyze the Results to Diagnose Bacterial Meningitis?",
+      "order": 13
+    },
+    {
+      "heading": "Videos",
+      "level": 3,
+      "content": "Adult NEJM (10:59) https://www.nejm.org/doi/full/10.1056/NEJMvcm054952 Mellick (3:14) https://www.youtube.com/watch?v=grpeEDBMrn8\nNeonatal Sachetti (5:44) https://www.youtube.com/watch?v=xvVIhFZeUnY&list=UUHaNQfnfpRdsqMdEBLlFaCw&index=21&feature=plcp",
+      "order": 14
+    },
+    {
+      "heading": "References",
+      "level": 2,
+      "content": "↑ CDC: Meningitis\n↑ Carley, S. Harrison, M. Timing of lumbar puncture in suspected subarachnoid haemorrhage. Emerg Med J 2005;22:121-122\n↑ Petzold A, Brettschneider J, Jin K, et al. CSF protein biomarkers for proximal axonal damage improve prognostic accuracy in the acute phase of Guillain-Barré syndrome. Muscle Nerve. 2009 Jul. 40(1):42-9\n↑ Chern JJ, Tubbs RS, Gordon AS, Donnithorne KJ, Oakes WJ. Management of pediatric patients with pseudotumor cerebri. Childs Nerv Syst. 2012 Jan 19\n↑ Howard SC, Gajjar A, Ribeiro RC, et al. Safety of lumbar puncture for children with acute lymphoblastic leukemia and thrombocytopenia. JAMA 2000; 284:2222–2224\n↑ Vavricka SR, Walter RB, Irani S, Halter J, Schanz U. Safety of lumbar puncture for adults with acute leukemia and restrictive prophylactic platelet transfusion. Ann Hematol 2003; 82:570–573\n↑ Computed Tomography of the Head before Lumbar Puncture in Adults with Suspected Meningitis. NEJM 2001; 345; 1727-33\n↑ Emergency Radiology: Case Studies Schwartz\n↑ Review: Ultrasound-Assisted Lumbar Puncture (LP) Does Not Increase Procedural Success But Reduces Traumatic LPs Kirschner, J.M., et al, Ann Intern Med 170(2):JC9, January 15, 2019\n↑ Nomura, J, et al. A randomized control study of ultrasound-assisted lumbar puncture. J Ultrasound Med. 2007; 26:1341–8.\n↑ Gupta A and Usha U. Spinal anesthesia in children: A review. J Anaesthesiol Clin Pharmacol. 2014 Jan-Mar; 30(1): 10–18.\n↑ Atraumatic Versus Conventional Lumbar Puncture Needles: A Systematic Review And Meta-Analysis Nath, S., et al, Lancet 391(10126):1197, March 24, 2018\n↑ Kanegaye JT, Soliemanzadeh P, Bradley JS. Lumbar puncture in pediatric bacterial meningitis: defining the time interval for recovery of cerebrospinal fluid pathogens after parenteral antibotic pretreatment. Pediatrics2001;108:1169–74\n↑ Michael B1, Menezes BF, Cunniffe J, Miller A, Kneen R, Francis G, Beeching NJ, Solomon T. Effect of delayed lumbar punctures on the diagnosis of acute bacterial meningitis in adults. Emerg Med J 2010;27:6 433-438. PMID 20360497\n↑ Lise E. Nigrovic, Richard Malley, Charles G. Macias, John T. Kanegaye, Donna M. Moro-Sutherland, Robert D. Schremmer, Sandra H. Schwab, Dewesh Agrawal, Karim M. Mansour, Jonathan E. Bennett, Yiannis L. Katsogridakis, Michael M. Mohseni, Blake Bulloch, Dale W. Steele, Ron L. Kaplan, Martin I. Herman, Subhankar Bandyopadhyay, Peter Dayan, Uyen T. Truong, Vince J. Wang, Bema K. Bonsu, Jennifer L. Chapman, Nathan Kuppermann. Effect of Antibiotic Pretreatment on Cerebrospinal Fluid Profiles of Children With Bacterial Meningitis. Pediatrics Oct 2008, 122 (4) 726-730. PMID 18829794",
+      "order": 15
+    }
+  ],
+  "images": [
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Lumbar_puncture/Pediatric_vs_adult_LP.jpg",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Pediatric_vs_adult_LP.jpg/300px-Pediatric_vs_adult_LP.jpg",
+      "gcs_path": "images/Lumbar_puncture/Pediatric_vs_adult_LP.jpg"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Lumbar_puncture/Pediatric_spinal_cord.JPG",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Pediatric_spinal_cord.JPG/300px-Pediatric_spinal_cord.JPG",
+      "gcs_path": "images/Lumbar_puncture/Pediatric_spinal_cord.JPG"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Lumbar_puncture/PMC3425284_IJA-56-250-g001.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/PMC3425284_IJA-56-250-g001.png/300px-PMC3425284_IJA-56-250-g001.png",
+      "gcs_path": "images/Lumbar_puncture/PMC3425284_IJA-56-250-g001.png"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Lumbar_puncture/Lumbar_puncture_lines.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Lumbar_puncture_lines.png/300px-Lumbar_puncture_lines.png",
+      "gcs_path": "images/Lumbar_puncture/Lumbar_puncture_lines.png"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Lumbar_puncture/Sagittal_section_LP.jpg",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Sagittal_section_LP.jpg/300px-Sagittal_section_LP.jpg",
+      "gcs_path": "images/Lumbar_puncture/Sagittal_section_LP.jpg"
+    }
+  ],
+  "categories": [
+    "Neurology",
+    "Procedures",
+    "ID"
+  ],
+  "see_also": [
+    "Meningitis",
+    "CT_Before_Lumbar_Puncture",
+    "Procedure_sample_documentation"
+  ]
+}

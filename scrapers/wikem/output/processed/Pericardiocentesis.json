@@ -1,0 +1,146 @@
+{
+  "slug": "Pericardiocentesis",
+  "url": "https://wikem.org/wiki/Pericardiocentesis",
+  "title": "Pericardiocentesis",
+  "last_scraped": "2026-02-09T04:56:42.189299+00:00",
+  "content_hash": "8d6a9e46f43426f8",
+  "sections": [
+    {
+      "heading": "Indications",
+      "level": 2,
+      "content": "The pericardial cavity in this image is labeled d and is part of the inferior mediastium. Here we can see its relation to the superior mediastinum a, the pleural cavities c, and the diaphragm e.\nAnatomy of the pericardium.\nCardiac tamponade\nDiagnose cause of pericardial effusion",
+      "order": 1
+    },
+    {
+      "heading": "Contraindications",
+      "level": 2,
+      "content": "No contraindications in patient who is hemodynamically unstable due to tamponade",
+      "order": 2
+    },
+    {
+      "heading": "Relative Contraindications[1]",
+      "level": 3,
+      "content": "Traumatic tamponade (perform ED thoracotomy instead)\nMyocardial rupture\nAortic dissection\nBleeding diathesis",
+      "order": 3
+    },
+    {
+      "heading": "Equipment",
+      "level": 2,
+      "content": "Pericardiocentesis kit (contains equipment to perform drain placement via Seldinger technique) If kit unavailable: 18 gauge spinal needle 20mL (or larger) syringe Can also use abdominal paracentesis kit or central line kit\nUltrasound\nIf ultrasound not available: Wire with alligator clip connected to base of needle and cardiac monitor or precordial EKG lead\nIf no ultrasound and no alligator clip available, may perform procedure blind as last resort",
+      "order": 4
+    },
+    {
+      "heading": "Preparation",
+      "level": 2,
+      "content": "Obtain consent if able\nObtain continuous cardiorespiratory monitoring Arterial line is ideal if time permits\nConsider sedation or local anesthesia if time permits and patient is conscious Do not delay procedure in unstable patient\nFor apical approach: Bed to 45˚ angle if patient condition allows Brings heart closer to anterior chest wall\nFor subxiphoid approach: Bed flat\nNG tube to decompress stomach if time permits\nSkin prep with iodine or chlorhexidine\nDrape appropriately\nConsider atropine to prevent vasovagal reaction",
+      "order": 5
+    },
+    {
+      "heading": "Technique",
+      "level": 2,
+      "content": "Pericardial effusion on ultrasound\nUltrasound-guided pericardiocentesis in a patient with malignant pericardial effusion and tamponade. (a) Apical view of the heart showing large circumferential pericardial effusion (arrow); (b) Intrapericardial injection of agitated saline (whitish-gray cloud of microbubbles of air) verifies correct positioning of the pericardiocentesis needle (arrow); and (c) following pericardiocentesis, the right ventricle has expanded and no residual pericardial effusion is seen within the pericardial sac (arrow). LV = left ventricle; RV = right ventricle.\nExample pericardiocentesis technique.",
+      "order": 6
+    },
+    {
+      "heading": "Ultrasound-guided",
+      "level": 4,
+      "content": "Use ultrasound to identify location of effusion\nAiming toward effusion, insert needle through skin using real-time ultrasound guidance and applying negative pressure throughout insertion\nRemove stylet from needle and attach 3-way stopcock and 20-mL syringe\nAspirate fluid\nDisconnect syringe and stopcock\nUse Seldinger technique to place pericardial drain if needed for ongoing drainage\nObtain post-procedure CXR to rule out iatrogenic pneumothorax",
+      "order": 7
+    },
+    {
+      "heading": "Landmark-guided",
+      "level": 4,
+      "content": "Identify insertion location between xiphoid process and left costal margin\nAttach needle to EKG lead using alligator clip and cable (ST elevations will occur on ventricular contact with the needle)\nAiming toward left shoulder, insert needle through skin  at 30-45' angle, applying negative pressure throughout insertion\nRemove stylet from needle and attach 3-way stopcock and 20-mL syringe\nAspirate fluid\nDisconnect syringe and stopcock\nUse Seldinger technique to place pericardial drain if needed for ongoing drainage\nObtain post-procedure CXR to rule out iatrogenic pneumothorax",
+      "order": 8
+    },
+    {
+      "heading": "Parasternal Approach[1]",
+      "level": 3,
+      "content": "If patient condition allows, position in left lateral decubitus to bring effusion towards apex [2]\nUse sterile ultrasonography in parasternal view to identify location of largest area of the effusion (usually around 5th intercostal space)\nInsert needle through skin at identified site perpendicular to the skin just lateral to the sternum\nUnder real-time ultrasound guidance, advance needle while continually aspirating until fluid return\nRemove stylet from needle and attach 3-way stopcock and 20-mL syringe\nAspirate fluid\nDisconnect syringe and stopcock and use Seldinger technique to place pericardial drain if needed\nObtain post-procedure CXR to rule out iatrogenic pneumothorax",
+      "order": 9
+    },
+    {
+      "heading": "Novel In-Plane Technique[3]",
+      "level": 3,
+      "content": "Skin is prepped\nCurvilinear probe with sterile cover is placed obliquely over the right chest with indicator to the right shoulder\nDepth corrected to see only the RV and effusion\nNeedle directed in an in-plane approach at 45°\nAspiration is done under direct needle visualization\nA catheter can be placed under direct visualization using Seldinger technique",
+      "order": 10
+    },
+    {
+      "heading": "Complications",
+      "level": 2,
+      "content": "Cardiac puncture\nPneumothorax/pneumopericardium\nDysrhythmias PVC (most common) Vasovagal bradycardia (responsive to atropine)\nFalse negative (clotted pericardial blood)\nFalse positive (intracardiac puncture)",
+      "order": 11
+    },
+    {
+      "heading": "Pearls",
+      "level": 2,
+      "content": "Ensuring proper placement of the needle/drain in the pericardium is imperative. There are several methods to do this.\nDirect visualization of needle/drain tip on ultrasound.\nInject small amount of agitated saline under direct ultrasound visualization and evaluate location of bubbles. [4]\nPlace small amount of aspirated fluid into a container and evaluate for development of clots. Pericardial fluid will not clot secondary to intrinsic pericardial fibrinolytic activity. [5] However, a rapidly-developing effusion can overwhelm this fibrinolytic activity, causing the fluid to clot.\nSend pericardial fluid for blood gas analysis Pericardial fluid will have low pH, low pO2, high pCO2 compared to arterial, venous or mixed venous blood. [5] [6]",
+      "order": 12
+    },
+    {
+      "heading": "External Links",
+      "level": 2,
+      "content": "emDocs - Ultrasound Guided Pericardiocentesis\nALIEM Pericardiocentesis",
+      "order": 13
+    },
+    {
+      "heading": "Videos",
+      "level": 3,
+      "content": "{{#widget:YouTube|id=XqZKK3J4cwo}}",
+      "order": 14
+    },
+    {
+      "heading": "See Also",
+      "level": 2,
+      "content": "Cardiac tamponade\nPericardial effusion",
+      "order": 15
+    },
+    {
+      "heading": "References",
+      "level": 2,
+      "content": "↑ 1.0 1.1 1.2 Fitch MT, Nicks BA, Pariyadath M, McGinnis HD, Manthey DE. Emergency Pericardiocentesis. N Engl J Med. 2012 Mar 22;366(12):e17\n↑ ACEP Ultrasound Clinical & Practice Resources - \"Appendix: The Core Content of Clinical Ultrasonography Fellowship Training\" PDF Accessed 06/17/15\n↑ Nagdev, A, et al. A novel in-plane technique for ultrasound-guided pericardiocentesis. American Journal of Emergency Medicine. 2013; 31:1424.e5–1424.e9.\n↑ Ainsworth, C.D., & Salehian, O. (2011) \"Echo-Guided Pericardiocentesis\nLet the Bubbles Show the Way\". Circulation. 123: e210-e211\n↑ 5.0 5.1 Shabetai, R. \"The Pericardium\". 2003. Springer Science.\n↑ Mann W, Millen JE, Glauser FL. Bloody pericardial fluid. The value of blood gas measurements. JAMA. 1978 May 19;239(20):2151-2.",
+      "order": 16
+    }
+  ],
+  "images": [
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Pericardiocentesis/Body_Cavities_Frontal_view_labeled_2.jpg",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Body_Cavities_Frontal_view_labeled_2.jpg/300px-Body_Cavities_Frontal_view_labeled_2.jpg",
+      "gcs_path": "images/Pericardiocentesis/Body_Cavities_Frontal_view_labeled_2.jpg"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Pericardiocentesis/2004_Heart_Wall.jpg",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/2004_Heart_Wall.jpg/300px-2004_Heart_Wall.jpg",
+      "gcs_path": "images/Pericardiocentesis/2004_Heart_Wall.jpg"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Pericardiocentesis/PericardialeffusionUS.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/PericardialeffusionUS.png/300px-PericardialeffusionUS.png",
+      "gcs_path": "images/Pericardiocentesis/PericardialeffusionUS.png"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Pericardiocentesis/PMC4613420_IJCIIS-5-206-g001.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/PMC4613420_IJCIIS-5-206-g001.png/300px-PMC4613420_IJCIIS-5-206-g001.png",
+      "gcs_path": "images/Pericardiocentesis/PMC4613420_IJCIIS-5-206-g001.png"
+    },
+    {
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Pericardiocentesis/PMC3518705_kcj-42-725-g007.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/PMC3518705_kcj-42-725-g007.png/300px-PMC3518705_kcj-42-725-g007.png",
+      "gcs_path": "images/Pericardiocentesis/PMC3518705_kcj-42-725-g007.png"
+    }
+  ],
+  "categories": [
+    "Cardiology",
+    "Procedures",
+    "Critical Care"
+  ],
+  "see_also": [
+    "Cardiac_tamponade",
+    "Pericardial_effusion"
+  ]
+}
