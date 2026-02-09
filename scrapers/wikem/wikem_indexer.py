@@ -28,6 +28,7 @@ from pathlib import Path
 import google.auth
 import google.auth.transport.requests
 import requests as http_requests
+from google.cloud import storage as gcs
 
 # ---------------------------------------------------------------------------
 # Config
@@ -215,6 +216,7 @@ def index_file(md_path: Path) -> bool:
     """
     Index a single markdown file into the WikEM RAG corpus.
     Uploads to GCS then imports into RAG corpus.
+    Also uploads metadata JSON if a matching processed JSON exists.
     """
     config = load_config()
     if not config:
@@ -230,13 +232,56 @@ def index_file(md_path: Path) -> bool:
     display_name = md_path.stem  # e.g. "Hyponatremia"
 
     log.info(f"Indexing {display_name} ({len(content)} chars)...")
-    return _index_via_import(corpus_name, md_path, display_name, content)
+    success = _index_via_import(corpus_name, md_path, display_name, content)
+
+    # Also upload metadata if the processed JSON exists
+    if success:
+        _upload_metadata_for_topic(display_name)
+
+    return success
+
+
+def _upload_metadata_for_topic(slug: str):
+    """Upload image metadata to GCS from the processed JSON file."""
+    json_path = PROCESSED_DIR / f"{slug}.json"
+    if not json_path.exists():
+        log.info(f"  No processed JSON for {slug}, skipping metadata upload")
+        return
+
+    try:
+        with open(json_path) as f:
+            data = json.load(f)
+
+        images = data.get("images", [])
+        if not images:
+            log.info(f"  No images for {slug}, skipping metadata upload")
+            return
+
+        metadata = {
+            "protocol_id": slug,
+            "title": data.get("title", slug),
+            "images": [
+                {"url": img["url"], "alt": img.get("alt", ""), "page": i}
+                for i, img in enumerate(images)
+                if img.get("url")
+            ],
+        }
+
+        client = gcs.Client(project=PROJECT_ID)
+        bucket_name = f"{PROJECT_ID}-wikem"
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(f"metadata/{slug}.json")
+        blob.upload_from_string(
+            json.dumps(metadata, indent=2),
+            content_type="application/json",
+        )
+        log.info(f"  📋 Metadata uploaded: metadata/{slug}.json ({len(images)} images)")
+    except Exception as e:
+        log.warning(f"  ⚠️ Failed to upload metadata for {slug}: {e}")
 
 
 def _index_via_import(corpus_name: str, md_path: Path, display_name: str, content: str) -> bool:
     """Upload to GCS first, then import into RAG corpus."""
-    from google.cloud import storage as gcs
-
     bucket_name = f"{PROJECT_ID}-wikem"
     gcs_path = f"processed/{display_name}.md"
 

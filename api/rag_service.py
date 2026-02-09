@@ -20,6 +20,7 @@ RAG_LOCATION = os.environ.get("RAG_LOCATION", "us-west4")
 CORPUS_ID = os.environ.get("CORPUS_ID", "2305843009213693952")
 WIKEM_CORPUS_ID = os.environ.get("WIKEM_CORPUS_ID", "6917529027641081856")
 PROCESSED_BUCKET = f"{PROJECT_ID}-protocols-processed"
+WIKEM_BUCKET = f"{PROJECT_ID}-wikem"
 
 
 class RAGService:
@@ -201,6 +202,32 @@ A:"""
         
         return None
     
+    def _get_wikem_metadata(self, source_uri: str) -> Optional[Dict]:
+        """Get metadata for a WikEM topic from its source URI"""
+        # Format: gs://clinical-assistant-457902-wikem/processed/Hyponatremia.md
+        try:
+            if source_uri.startswith("gs://"):
+                parts = source_uri.split("/")
+                filename = parts[-1] if parts else ""
+                topic_slug = filename.replace(".md", "")
+                
+                cache_key = f"wikem/{topic_slug}"
+                if cache_key in self._metadata_cache:
+                    return self._metadata_cache[cache_key]
+                
+                bucket = self.storage_client.bucket(WIKEM_BUCKET)
+                blob = bucket.blob(f"metadata/{topic_slug}.json")
+                
+                if blob.exists():
+                    content = blob.download_as_string()
+                    metadata = json.loads(content)
+                    self._metadata_cache[cache_key] = metadata
+                    return metadata
+        except Exception as e:
+            print(f"Error getting WikEM metadata for {source_uri}: {e}")
+        
+        return None
+
     def _get_images_from_contexts(self, contexts: List[Dict]) -> List[Dict]:
         """Extract images from context sources - maintains protocol relevance order"""
         seen_images = set()
@@ -208,31 +235,49 @@ A:"""
         
         # Process contexts in order (most relevant first)
         for ctx_idx, ctx in enumerate(contexts):
-            metadata = self._get_protocol_metadata(ctx["source"])
+            source_type = ctx.get("source_type", "local")
             
-            if metadata:
-                protocol_images = []
-                for img in metadata.get("images", []):
-                    img_key = img.get("gcs_uri", "")
-                    if img_key and img_key not in seen_images:
-                        seen_images.add(img_key)
-                        
-                        # Convert to public URL
-                        url = img_key.replace(
-                            "gs://",
-                            "https://storage.googleapis.com/"
-                        )
-                        
-                        protocol_images.append({
-                            "page": img.get("page", 0),
-                            "url": url,
-                            "source": metadata.get("protocol_id", "unknown"),
-                            "protocol_rank": ctx_idx  # Track source protocol order
-                        })
+            if source_type == "wikem":
+                # Get WikEM metadata with image URLs
+                metadata = self._get_wikem_metadata(ctx["source"])
+                if metadata:
+                    for img in metadata.get("images", []):
+                        img_url = img.get("url", "")
+                        if img_url and img_url not in seen_images:
+                            seen_images.add(img_url)
+                            images.append({
+                                "page": img.get("page", 0),
+                                "url": img_url,
+                                "source": f"WikEM: {metadata.get('title', metadata.get('protocol_id', 'unknown'))}",
+                                "protocol_rank": ctx_idx
+                            })
+            else:
+                # Local protocol metadata
+                metadata = self._get_protocol_metadata(ctx["source"])
                 
-                # Sort this protocol's images by page number
-                protocol_images.sort(key=lambda x: x["page"])
-                images.extend(protocol_images)
+                if metadata:
+                    protocol_images = []
+                    for img in metadata.get("images", []):
+                        img_key = img.get("gcs_uri", "")
+                        if img_key and img_key not in seen_images:
+                            seen_images.add(img_key)
+                            
+                            # Convert to public URL
+                            url = img_key.replace(
+                                "gs://",
+                                "https://storage.googleapis.com/"
+                            )
+                            
+                            protocol_images.append({
+                                "page": img.get("page", 0),
+                                "url": url,
+                                "source": metadata.get("protocol_id", "unknown"),
+                                "protocol_rank": ctx_idx  # Track source protocol order
+                            })
+                    
+                    # Sort this protocol's images by page number
+                    protocol_images.sort(key=lambda x: x["page"])
+                    images.extend(protocol_images)
         
         return images
     

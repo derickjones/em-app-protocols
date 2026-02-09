@@ -2,7 +2,7 @@
   "slug": "Hyponatremia",
   "url": "https://wikem.org/wiki/Hyponatremia",
   "title": "Hyponatremia",
-  "last_scraped": "2026-02-09T04:20:34.867438+00:00",
+  "last_scraped": "2026-02-09T04:41:50.890352+00:00",
   "content_hash": "f64f758a5e441e4c",
   "sections": [
     {
@@ -182,12 +182,16 @@
   ],
   "images": [
     {
-      "url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Hyponatremia_correction.png/300px-Hyponatremia_correction.png",
-      "alt": ""
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Hyponatremia/Hyponatremia_correction.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Hyponatremia_correction.png/300px-Hyponatremia_correction.png",
+      "gcs_path": "images/Hyponatremia/Hyponatremia_correction.png"
     },
     {
-      "url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Hyponatremia.png/300px-Hyponatremia.png",
-      "alt": ""
+      "url": "https://storage.googleapis.com/clinical-assistant-457902-wikem/images/Hyponatremia/Hyponatremia.png",
+      "alt": "",
+      "original_url": "https://s3.ap-southeast-2.amazonaws.com/wikem.cf.bucket/images/thumb/Hyponatremia.png/300px-Hyponatremia.png",
+      "gcs_path": "images/Hyponatremia/Hyponatremia.png"
     }
   ],
   "categories": [

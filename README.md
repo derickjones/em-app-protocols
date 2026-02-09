@@ -434,11 +434,12 @@ em-app-protocols/
 │   ├── protocol_store.py   # GCS storage utilities
 │   └── query_with_images.py # Image-aware queries
 ├── scrapers/               # External content scrapers
-│   ├── WIKEM_SCRAPER_PLAN.md   # Implementation plan
-│   ├── wikem_scraper.py        # WikEM topic page scraper
-│   ├── wikem_indexer.py        # WikEM → GCS → RAG corpus indexer
-│   ├── wikem_rag_config.json   # WikEM corpus config
-│   └── output/                 # Scraped content (processed JSON + markdown)
+│   └── wikem/              # WikEM (wikem.org) scraper
+│       ├── WIKEM_SCRAPER_PLAN.md   # Implementation plan
+│       ├── wikem_scraper.py        # WikEM topic page scraper + image downloader
+│       ├── wikem_indexer.py        # WikEM → GCS → RAG corpus indexer
+│       ├── wikem_rag_config.json   # WikEM corpus config
+│       └── output/                 # Scraped content (processed JSON + markdown)
 ├── docs/                   # Documentation
 │   └── ADMIN_MULTITENANCY_PLAN.md
 ├── CLAUDE.md               # AI assistant context
@@ -607,8 +608,8 @@ Queries run against **two corpora in parallel** and merge results by relevance:
 Citations in the frontend are color-coded with **Local** (blue) and **WikEM** (green) badges. WikEM citations link directly to the source page on wikem.org.
 
 ### WikEM Scraper & Indexer
-- `scrapers/wikem_scraper.py` — crawls wikem.org topic pages, extracts structured sections, saves raw HTML + processed markdown + JSON
-- `scrapers/wikem_indexer.py` — uploads processed markdown to GCS and imports into a dedicated Vertex AI RAG corpus
+- `scrapers/wikem/wikem_scraper.py` — crawls wikem.org topic pages, extracts structured sections, downloads full-res images to GCS, saves raw HTML + processed markdown + JSON
+- `scrapers/wikem/wikem_indexer.py` — uploads processed markdown to GCS and imports into a dedicated Vertex AI RAG corpus
 - Separate corpus keeps department data isolated from general reference content
 
 ### Image Carousel

@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ from urllib.parse import urljoin, unquote
 
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
+from google.cloud import storage as gcs
 
 # ---------------------------------------------------------------------------
 # Config
@@ -42,6 +44,8 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 RAW_DIR = OUTPUT_DIR / "raw"
 PROCESSED_DIR = OUTPUT_DIR / "processed"
 METADATA_DIR = OUTPUT_DIR / "metadata"
+
+GCS_BUCKET_NAME = os.environ.get("WIKEM_BUCKET", "clinical-assistant-457902-wikem")
 
 REQUEST_DELAY = 1.5  # seconds between requests (be polite)
 USER_AGENT = (
@@ -217,6 +221,109 @@ def _extract_images(soup: BeautifulSoup, base_url: str) -> list[dict]:
     return images
 
 
+def _get_full_res_url(thumb_url: str) -> str:
+    """
+    Convert a WikEM thumbnail URL to full-resolution.
+    Thumbnail: .../images/thumb/Hyponatremia_correction.png/300px-Hyponatremia_correction.png
+    Full-res:  .../images/Hyponatremia_correction.png
+    """
+    if "/images/thumb/" in thumb_url:
+        # Remove /thumb/ and the trailing /300px-Filename part
+        base = thumb_url.split("/images/thumb/")[0]
+        after_thumb = thumb_url.split("/images/thumb/")[1]
+        # after_thumb = "Hyponatremia_correction.png/300px-Hyponatremia_correction.png"
+        filename = after_thumb.split("/")[0]
+        return f"{base}/images/{filename}"
+    return thumb_url
+
+
+def _download_images_to_gcs(slug: str, images: list[dict]) -> list[dict]:
+    """
+    Download images from WikEM S3 to our GCS bucket.
+    Returns updated image list with GCS URLs.
+    """
+    if not images:
+        return images
+
+    try:
+        client = gcs.Client()
+        bucket = client.bucket(GCS_BUCKET_NAME)
+    except Exception as e:
+        log.error(f"Failed to connect to GCS bucket {GCS_BUCKET_NAME}: {e}")
+        return images  # Return originals as fallback
+
+    updated_images = []
+    for img in images:
+        original_url = img["url"]
+        full_res_url = _get_full_res_url(original_url)
+
+        # Derive filename from the full-res URL
+        filename = full_res_url.split("/")[-1]
+        gcs_path = f"images/{slug}/{filename}"
+
+        try:
+            # Download from WikEM S3
+            resp = session.get(full_res_url, timeout=15)
+            resp.raise_for_status()
+            image_data = resp.content
+            content_type = resp.headers.get("Content-Type", "image/png")
+
+            # Upload to GCS
+            blob = bucket.blob(gcs_path)
+            blob.upload_from_string(image_data, content_type=content_type)
+            # Make publicly readable
+            blob.make_public()
+
+            gcs_public_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{gcs_path}"
+
+            updated_images.append({
+                "url": gcs_public_url,
+                "alt": img.get("alt", ""),
+                "original_url": original_url,
+                "gcs_path": gcs_path,
+            })
+            log.info(f"  📸 Downloaded {filename} → {gcs_path}")
+            time.sleep(0.5)  # Rate limit image downloads
+
+        except Exception as e:
+            log.warning(f"  ⚠️ Failed to download {full_res_url}: {e}")
+            # Keep original URL as fallback
+            updated_images.append({
+                "url": original_url,
+                "alt": img.get("alt", ""),
+                "original_url": original_url,
+                "gcs_path": None,
+            })
+
+    return updated_images
+
+
+def _upload_metadata_to_gcs(slug: str, title: str, images: list[dict]):
+    """Upload image metadata JSON to GCS for API image lookup."""
+    try:
+        client = gcs.Client()
+        bucket = client.bucket(GCS_BUCKET_NAME)
+
+        metadata = {
+            "protocol_id": slug,
+            "title": title,
+            "images": [
+                {"url": img["url"], "alt": img.get("alt", ""), "page": i}
+                for i, img in enumerate(images)
+                if img.get("url")
+            ],
+        }
+
+        blob = bucket.blob(f"metadata/{slug}.json")
+        blob.upload_from_string(
+            json.dumps(metadata, indent=2),
+            content_type="application/json",
+        )
+        log.info(f"  📋 Metadata uploaded: metadata/{slug}.json ({len(images)} images)")
+    except Exception as e:
+        log.warning(f"  ⚠️ Failed to upload metadata for {slug}: {e}")
+
+
 def _extract_categories(soup: BeautifulSoup) -> list[str]:
     """Extract category names from the page."""
     cats = []
@@ -325,6 +432,9 @@ def extract_page(slug: str) -> dict | None:
     # --- Images ---
     images = _extract_images(soup, url)
 
+    # --- Download images to GCS ---
+    images = _download_images_to_gcs(slug, images)
+
     # --- Categories ---
     categories = _extract_categories(soup)
 
@@ -368,6 +478,9 @@ def extract_page(slug: str) -> dict | None:
         md_lines.append("")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(md_lines))
+
+    # --- Upload metadata JSON to GCS (for API image lookup) ---
+    _upload_metadata_to_gcs(slug, title, images)
 
     log.info(
         f"  ✅ {title}: {len(sections)} sections, "

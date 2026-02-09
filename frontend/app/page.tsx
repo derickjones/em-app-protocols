@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
@@ -54,6 +54,9 @@ export default function Home() {
   const [showBundleSelector, setShowBundleSelector] = useState(false);
   const [selectedHospital, setSelectedHospital] = useState<string>("");
   const [showHospitalDropdown, setShowHospitalDropdown] = useState(false);
+
+  // Search mode: "universe" = local + wikem, "protocol" = local only
+  const [searchMode, setSearchMode] = useState<"universe" | "protocol">("universe");
 
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
@@ -293,7 +296,7 @@ export default function Home() {
           query: question.trim(),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
-          sources: ["local", "wikem"]
+          sources: searchMode === "universe" ? ["local", "wikem"] : ["local"]
         }),
       });
       if (!res.ok) {
@@ -787,6 +790,40 @@ export default function Home() {
                 </button>
               </div>
 
+              {/* Search Mode Toggle - Gemini Style */}
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  onClick={() => setSearchMode("universe")}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border-2 ${
+                    searchMode === "universe"
+                      ? darkMode
+                        ? 'bg-blue-600/20 text-blue-400 border-blue-500'
+                        : 'bg-blue-50 text-blue-700 border-blue-300'
+                      : darkMode
+                        ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
+                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  EM Universe
+                </button>
+                <button
+                  onClick={() => setSearchMode("protocol")}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border-2 ${
+                    searchMode === "protocol"
+                      ? darkMode
+                        ? 'bg-blue-600/20 text-blue-400 border-blue-500'
+                        : 'bg-blue-50 text-blue-700 border-blue-300'
+                      : darkMode
+                        ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
+                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  Protocol
+                </button>
+              </div>
+
               {/* Bundle Toggle Chips - Gemini Style */}
               {selectedHospital && allHospitals[selectedHospital] && Object.keys(allHospitals[selectedHospital]).length > 0 && (
                 <div className="mt-6">
@@ -990,6 +1027,40 @@ export default function Home() {
               ) : (
                 <ArrowUp className="w-4 h-4" />
               )}
+            </button>
+          </div>
+
+          {/* Search Mode Toggle */}
+          <div className="max-w-3xl mx-auto mt-2 flex items-center gap-2">
+            <button
+              onClick={() => setSearchMode("universe")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border ${
+                searchMode === "universe"
+                  ? darkMode
+                    ? 'bg-blue-600/20 text-blue-400 border-blue-500'
+                    : 'bg-blue-50 text-blue-700 border-blue-300'
+                  : darkMode
+                    ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
+                    : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              EM Universe
+            </button>
+            <button
+              onClick={() => setSearchMode("protocol")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border ${
+                searchMode === "protocol"
+                  ? darkMode
+                    ? 'bg-blue-600/20 text-blue-400 border-blue-500'
+                    : 'bg-blue-50 text-blue-700 border-blue-300'
+                  : darkMode
+                    ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
+                    : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Protocol
             </button>
           </div>
         </div>
