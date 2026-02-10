@@ -58,6 +58,9 @@ export default function OwnerDashboard() {
   const [newAdminEnterprise, setNewAdminEnterprise] = useState("");
   const [newAdminBundles, setNewAdminBundles] = useState<string[]>([]);
   const [availableEDs, setAvailableEDs] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<Admin[]>([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Create modals
   const [showCreateEnterprise, setShowCreateEnterprise] = useState(false);
@@ -135,8 +138,25 @@ export default function OwnerDashboard() {
     if (userProfile?.role === "super_admin" || userProfile?.role === "admin") {
       fetchAdmins();
       fetchEnterprises();
+      fetchAllUsers();
     }
   }, [userProfile]);
+
+  // Fetch all users (for user picker)
+  const fetchAllUsers = async () => {
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllUsers(data.users || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch all users:", err);
+    }
+  };
 
   const handleAddAdmin = async () => {
     if (!newAdminEmail.trim()) return;
@@ -169,7 +189,10 @@ export default function OwnerDashboard() {
         setNewAdminRole("admin");
         setNewAdminEnterprise("");
         setNewAdminBundles([]);
+        setUserSearch("");
+        setShowUserDropdown(false);
         fetchAdmins();
+        fetchAllUsers();
       } else {
         alert("Failed to add admin");
       }
@@ -881,14 +904,85 @@ export default function OwnerDashboard() {
                       
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm text-[#9aa0a6] mb-2">Email Address</label>
-                          <input
-                            type="email"
-                            value={newAdminEmail}
-                            onChange={(e) => setNewAdminEmail(e.target.value)}
-                            placeholder="admin@example.com"
-                            className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8] transition-colors"
-                          />
+                          <label className="block text-sm text-[#9aa0a6] mb-2">Select User</label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={newAdminEmail || userSearch}
+                              onChange={(e) => {
+                                setUserSearch(e.target.value);
+                                setNewAdminEmail("");
+                                setShowUserDropdown(true);
+                              }}
+                              onFocus={() => setShowUserDropdown(true)}
+                              placeholder="Search users by email..."
+                              className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8] transition-colors"
+                            />
+                            {newAdminEmail && (
+                              <button
+                                onClick={() => {
+                                  setNewAdminEmail("");
+                                  setUserSearch("");
+                                }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9aa0a6] hover:text-white"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                            {showUserDropdown && !newAdminEmail && (
+                              <div className="absolute z-10 mt-2 w-full bg-[#1e1f20] border border-[#3c4043] rounded-2xl shadow-xl max-h-60 overflow-y-auto">
+                                {allUsers
+                                  .filter(u => {
+                                    const search = userSearch.toLowerCase();
+                                    return u.email.toLowerCase().includes(search);
+                                  })
+                                  .sort((a, b) => {
+                                    // Sort: users first, then admins, then super_admins
+                                    const roleOrder: Record<string, number> = { user: 0, admin: 1, super_admin: 2 };
+                                    return (roleOrder[a.role] ?? 0) - (roleOrder[b.role] ?? 0);
+                                  })
+                                  .map((u) => (
+                                    <button
+                                      key={u.uid}
+                                      onClick={() => {
+                                        setNewAdminEmail(u.email);
+                                        setUserSearch("");
+                                        setShowUserDropdown(false);
+                                        // Pre-fill enterprise from their existing data
+                                        if (u.enterpriseId) {
+                                          setNewAdminEnterprise(u.enterpriseId);
+                                        }
+                                      }}
+                                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#2c2d2e] transition-colors first:rounded-t-2xl last:rounded-b-2xl"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-[#8ab4f8]/20 flex items-center justify-center flex-shrink-0">
+                                          <Mail className="w-4 h-4 text-[#8ab4f8]" />
+                                        </div>
+                                        <div className="text-left">
+                                          <p className="text-sm text-white">{u.email}</p>
+                                          {u.enterpriseId && (
+                                            <p className="text-xs text-[#5f6368]">{u.enterpriseId}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
+                                        u.role === "super_admin"
+                                          ? "bg-yellow-500/20 text-yellow-400"
+                                          : u.role === "admin"
+                                          ? "bg-blue-500/20 text-blue-400"
+                                          : "bg-green-500/20 text-green-400"
+                                      }`}>
+                                        {u.role}
+                                      </span>
+                                    </button>
+                                  ))}
+                                {allUsers.filter(u => u.email.toLowerCase().includes(userSearch.toLowerCase())).length === 0 && (
+                                  <div className="px-4 py-3 text-sm text-[#5f6368]">No users found</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Role Selector */}
@@ -982,6 +1076,8 @@ export default function OwnerDashboard() {
                             setNewAdminRole("admin");
                             setNewAdminEnterprise("");
                             setNewAdminBundles([]);
+                            setUserSearch("");
+                            setShowUserDropdown(false);
                           }}
                           className="flex-1 px-4 py-3 bg-[#3c4043] text-white rounded-full hover:bg-[#5f6368] transition-colors"
                         >
@@ -1021,10 +1117,17 @@ export default function OwnerDashboard() {
                                 <span className={`text-xs px-2 py-1 rounded-full ${
                                   admin.role === "super_admin" 
                                     ? "bg-yellow-500/20 text-yellow-400"
-                                    : "bg-blue-500/20 text-blue-400"
+                                    : admin.role === "admin"
+                                    ? "bg-blue-500/20 text-blue-400"
+                                    : "bg-green-500/20 text-green-400"
                                 }`}>
                                   {admin.role}
                                 </span>
+                                {admin.enterpriseId && (
+                                  <span className="text-xs text-[#5f6368]">
+                                    {admin.enterpriseId}
+                                  </span>
+                                )}
                                 {admin.edAccess && admin.edAccess.length > 0 && (
                                   <span className="text-xs text-[#9aa0a6]">
                                     {admin.edAccess.length} ED(s)
