@@ -580,36 +580,49 @@ async def reindex_rag_corpus():
                 "message": "No extracted text files found to index"
             }
         
-        # Step 3: Batch import all files
-        import_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles:import"
-        payload = {
-            "importRagFilesConfig": {
-                "gcsSource": {
-                    "uris": text_files
-                },
-                "ragFileChunkingConfig": {
-                    "chunkSize": 1024,
-                    "chunkOverlap": 200
+        # Step 3: Batch import all files (max 25 per request)
+        BATCH_SIZE = 25
+        operations = []
+        
+        for i in range(0, len(text_files), BATCH_SIZE):
+            batch = text_files[i:i + BATCH_SIZE]
+            import_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles:import"
+            payload = {
+                "importRagFilesConfig": {
+                    "gcsSource": {
+                        "uris": batch
+                    },
+                    "ragFileChunkingConfig": {
+                        "chunkSize": 1024,
+                        "chunkOverlap": 200
+                    }
                 }
             }
-        }
+            
+            import_response = requests.post(import_url, headers=headers, json=payload)
+            
+            if import_response.status_code == 200:
+                operation = import_response.json().get("name", "")
+                if operation:
+                    operations.append(operation)
+            else:
+                print(f"Batch import failed for batch {i//BATCH_SIZE + 1}: {import_response.text}")
         
-        import_response = requests.post(import_url, headers=headers, json=payload)
-        
-        if import_response.status_code == 200:
-            operation = import_response.json().get("name", "")
+        if operations:
             return {
                 "status": "indexing_started",
                 "deleted": deleted_count,
                 "files_to_index": len(text_files),
-                "operation": operation,
-                "message": f"Cleared {deleted_count} old files, started indexing {len(text_files)} files"
+                "operation": operations[-1],  # Track last operation for polling
+                "batches": len(operations),
+                "message": f"Cleared {deleted_count} old files, started indexing {len(text_files)} files in {len(operations)} batch(es)"
             }
         else:
             return {
                 "status": "error",
                 "deleted": deleted_count,
-                "error": import_response.text
+                "files_to_index": len(text_files),
+                "message": "Failed to start indexing — all batches failed"
             }
         
     except Exception as e:
