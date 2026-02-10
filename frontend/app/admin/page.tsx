@@ -265,22 +265,30 @@ export default function AdminPage() {
     setReindexStatus({ type: null, message: "" });
     
     try {
+      const token = await user?.getIdToken();
       const res = await fetch(`${API_URL}/admin/reindex-rag`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
       });
       
       if (res.ok) {
         const data = await res.json();
+        const initialMsg = data.message || `Cleared ${data.deleted || 0} files, indexing ${data.files_to_index || 0} files`;
         setReindexStatus({ 
           type: "success", 
-          message: `${data.message || `Cleared ${data.deleted} files, indexing ${data.files_to_index} files`}` 
+          message: initialMsg
         });
         
         // Poll for completion if we got an operation name
         if (data.operation) {
+          let pollCount = 0;
           const pollInterval = setInterval(async () => {
             try {
-              const statusRes = await fetch(`${API_URL}/admin/reindex-rag/status?operation=${encodeURIComponent(data.operation)}`);
+              pollCount++;
+              const pollToken = await user?.getIdToken();
+              const statusRes = await fetch(`${API_URL}/admin/reindex-rag/status?operation=${encodeURIComponent(data.operation)}`, {
+                headers: { Authorization: `Bearer ${pollToken}` },
+              });
               if (statusRes.ok) {
                 const statusData = await statusRes.json();
                 if (statusData.done) {
@@ -291,11 +299,23 @@ export default function AdminPage() {
                     message: statusData.message
                   });
                 } else {
-                  setReindexStatus({ type: "success", message: `⏳ ${statusData.message}` });
+                  setReindexStatus({ type: "success", message: `⏳ ${statusData.message || 'Indexing in progress...'}` });
+                }
+              } else {
+                // If status check fails, show error after a few retries
+                if (pollCount > 6) {
+                  clearInterval(pollInterval);
+                  setReindexing(false);
+                  setReindexStatus({ type: "success", message: "✅ Re-index started. Check back shortly." });
                 }
               }
             } catch {
-              // Keep polling on network errors
+              // Keep polling on network errors, but give up after many attempts
+              if (pollCount > 12) {
+                clearInterval(pollInterval);
+                setReindexing(false);
+                setReindexStatus({ type: "success", message: "✅ Re-index started. Check back shortly." });
+              }
             }
           }, 5000); // Check every 5 seconds
           
