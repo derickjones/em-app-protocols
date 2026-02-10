@@ -81,13 +81,45 @@ class RAGService:
         
         return contexts
     
+    def _get_source_key(self, ctx: Dict) -> str:
+        """Get a unique key for a context source (for deduplication/grouping)"""
+        source = ctx.get("source", "")
+        source_type = ctx.get("source_type", "local")
+        
+        if source_type == "wikem":
+            # gs://bucket/processed/Topic.md → wikem-Topic
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            return f"wikem-{filename.replace('.md', '')}"
+        else:
+            # gs://bucket/enterprise/ed/bundle/protocol_id/extracted_text.txt → protocol_id
+            parts = source.replace("gs://", "").split("/")
+            if len(parts) >= 6:
+                return parts[4]  # protocol_id in new format
+            elif len(parts) >= 5:
+                return parts[3]  # protocol_id in legacy format
+            return source
+
     def _generate_answer(self, query: str, contexts: List[Dict]) -> str:
         """Generate answer using Gemini with source-aware context"""
-        # Build context string with source labels - limit to top 5
+        # Group contexts by source protocol so citation numbers match displayed sources
+        from collections import OrderedDict
+        grouped = OrderedDict()
+        for c in contexts[:5]:
+            key = self._get_source_key(c)
+            if key not in grouped:
+                grouped[key] = {
+                    "source_type": c.get("source_type", "local"),
+                    "texts": []
+                }
+            grouped[key]["texts"].append(c["text"][:4000])
+        
+        # Build context string with deduplicated source numbers
         context_parts = []
-        for i, c in enumerate(contexts[:5]):
-            source_label = "WikEM" if c.get("source_type") == "wikem" else "Local Protocol"
-            context_parts.append(f"[{i+1}] ({source_label}) {c['text'][:4000]}")
+        for i, (key, group) in enumerate(grouped.items()):
+            source_label = "WikEM" if group["source_type"] == "wikem" else "Local Protocol"
+            combined_text = "\n".join(group["texts"])
+            context_parts.append(f"[{i+1}] ({source_label}) {combined_text}")
         context_text = "\n---\n".join(context_parts)
         
         # Gemini endpoint (us-central1 for low latency)
