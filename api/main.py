@@ -616,6 +616,63 @@ async def reindex_rag_corpus():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/admin/reindex-rag/status")
+async def check_reindex_status(operation: str = Query(..., description="Operation name from reindex response")):
+    """
+    Check the status of a RAG reindex operation.
+    Returns whether it's still running, completed, or failed.
+    """
+    try:
+        headers = {"Authorization": f"Bearer {get_access_token()}"}
+        
+        # Poll the long-running operation
+        status_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{operation}"
+        response = requests.get(status_url, headers=headers)
+        
+        if response.status_code != 200:
+            return {"done": False, "status": "unknown", "message": "Could not check operation status"}
+        
+        data = response.json()
+        done = data.get("done", False)
+        
+        if done:
+            # Check for errors
+            error = data.get("error")
+            if error:
+                return {
+                    "done": True,
+                    "status": "error",
+                    "message": f"Indexing failed: {error.get('message', 'Unknown error')}"
+                }
+            
+            # Success - get result details
+            result = data.get("response", {})
+            imported = result.get("importedRagFilesCount", 0)
+            failed = result.get("failedRagFilesCount", 0)
+            skipped = result.get("skippedRagFilesCount", 0)
+            
+            return {
+                "done": True,
+                "status": "completed",
+                "message": f"Indexing complete: {imported} files indexed, {failed} failed, {skipped} skipped",
+                "imported": imported,
+                "failed": failed,
+                "skipped": skipped
+            }
+        else:
+            # Still in progress
+            metadata = data.get("metadata", {})
+            progress = metadata.get("genericMetadata", {}).get("partialFailures", [])
+            return {
+                "done": False,
+                "status": "in_progress",
+                "message": "Indexing in progress..."
+            }
+    
+    except Exception as e:
+        return {"done": False, "status": "error", "message": str(e)}
+
+
 @app.get("/protocols/{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}")
 async def get_protocol(enterprise_id: str, ed_id: str, bundle_id: str, protocol_id: str):
     """

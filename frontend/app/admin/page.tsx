@@ -243,6 +243,38 @@ export default function AdminPage() {
           type: "success", 
           message: `${data.message || `Cleared ${data.deleted} files, indexing ${data.files_to_index} files`}` 
         });
+        
+        // Poll for completion if we got an operation name
+        if (data.operation) {
+          const pollInterval = setInterval(async () => {
+            try {
+              const statusRes = await fetch(`${API_URL}/admin/reindex-rag/status?operation=${encodeURIComponent(data.operation)}`);
+              if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                if (statusData.done) {
+                  clearInterval(pollInterval);
+                  setReindexing(false);
+                  setReindexStatus({
+                    type: statusData.status === "completed" ? "success" : "error",
+                    message: statusData.message
+                  });
+                } else {
+                  setReindexStatus({ type: "success", message: `⏳ ${statusData.message}` });
+                }
+              }
+            } catch {
+              // Keep polling on network errors
+            }
+          }, 5000); // Check every 5 seconds
+          
+          // Stop polling after 5 minutes max
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            setReindexing(false);
+          }, 300000);
+          
+          return; // Don't set reindexing to false yet
+        }
       } else {
         const error = await res.text();
         setReindexStatus({ type: "error", message: `Failed: ${error}` });
