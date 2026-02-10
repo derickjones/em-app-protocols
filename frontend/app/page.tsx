@@ -916,7 +916,7 @@ export default function Home() {
               {getAvailableBundles().length > 0 && (
                 <div className="mt-5">
                   <p className={`text-xs font-medium mb-2.5 text-center ${darkMode ? 'text-neutral-500' : 'text-gray-400'}`}>
-                    Available Bundles
+                    Available Protocol Bundles
                   </p>
                   <div className="flex flex-wrap gap-3 justify-center">
                     {getAvailableBundles().map((bundle, index) => {
