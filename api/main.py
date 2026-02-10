@@ -795,7 +795,7 @@ db = firestore.Client(project="clinical-assistant-457902")
 class AdminUser(BaseModel):
     """Admin user data model"""
     email: str
-    enterprise_id: str
+    enterprise_id: Optional[str] = ""
     role: str = "admin"
     ed_access: List[str] = []
 
@@ -866,13 +866,23 @@ async def create_admin_user(
         query = users_ref.where("email", "==", admin_data.email).limit(1)
         existing = list(query.stream())
         
-        user_data = {
-            "email": admin_data.email,
-            "enterprise_id": admin_data.enterprise_id,
-            "role": admin_data.role,
-            "ed_access": admin_data.ed_access,
-            "updatedAt": firestore.SERVER_TIMESTAMP,
-        }
+        # For super_admin, clear enterprise association
+        if admin_data.role == "super_admin":
+            user_data = {
+                "email": admin_data.email,
+                "enterprise_id": None,
+                "role": "super_admin",
+                "ed_access": [],
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
+        else:
+            user_data = {
+                "email": admin_data.email,
+                "enterprise_id": admin_data.enterprise_id,
+                "role": admin_data.role,
+                "ed_access": admin_data.ed_access,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
         
         if existing:
             # Update existing user

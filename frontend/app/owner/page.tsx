@@ -54,6 +54,8 @@ export default function OwnerDashboard() {
   const [loading, setLoading] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminRole, setNewAdminRole] = useState<"admin" | "super_admin">("admin");
+  const [newAdminEnterprise, setNewAdminEnterprise] = useState("");
   const [newAdminBundles, setNewAdminBundles] = useState<string[]>([]);
   const [availableEDs, setAvailableEDs] = useState<string[]>([]);
 
@@ -137,10 +139,16 @@ export default function OwnerDashboard() {
   }, [userProfile]);
 
   const handleAddAdmin = async () => {
-    if (!newAdminEmail.trim() || !userProfile?.enterpriseId) return;
+    if (!newAdminEmail.trim()) return;
+    // For admin role, need an enterprise
+    if (newAdminRole === "admin" && !newAdminEnterprise && !userProfile?.enterpriseId) return;
     
     try {
       const token = await user?.getIdToken();
+      const enterpriseId = newAdminRole === "super_admin" 
+        ? "" 
+        : (newAdminEnterprise || userProfile?.enterpriseId || "");
+      
       const res = await fetch(`${API_URL}/admin/users`, {
         method: "POST",
         headers: {
@@ -149,15 +157,17 @@ export default function OwnerDashboard() {
         },
         body: JSON.stringify({
           email: newAdminEmail,
-          enterprise_id: userProfile.enterpriseId,
-          role: "admin",
-          ed_access: newAdminBundles,
+          enterprise_id: enterpriseId,
+          role: newAdminRole,
+          ed_access: newAdminRole === "super_admin" ? [] : newAdminBundles,
         }),
       });
       
       if (res.ok) {
         setShowAddAdmin(false);
         setNewAdminEmail("");
+        setNewAdminRole("admin");
+        setNewAdminEnterprise("");
         setNewAdminBundles([]);
         fetchAdmins();
       } else {
@@ -881,22 +891,87 @@ export default function OwnerDashboard() {
                           />
                         </div>
 
-                        <div>
-                          <label className="block text-sm text-[#9aa0a6] mb-2">ED Access</label>
-                          <div className="space-y-2">
-                            {availableEDs.map((ed) => (
-                              <label key={ed} className="flex items-center gap-3 px-4 py-2 bg-[#131314] rounded-full cursor-pointer hover:bg-[#2c2d2e] transition-colors">
-                                <input
-                                  type="checkbox"
-                                  checked={newAdminBundles.includes(ed)}
-                                  onChange={() => toggleEDSelection(ed)}
-                                  className="w-4 h-4"
-                                />
-                                <span className="text-white">{ed}</span>
-                              </label>
-                            ))}
+                        {/* Role Selector */}
+                        {isSuperAdmin && (
+                          <div>
+                            <label className="block text-sm text-[#9aa0a6] mb-2">Role</label>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setNewAdminRole("admin")}
+                                className={`flex-1 px-4 py-3 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                                  newAdminRole === "admin"
+                                    ? "bg-[#8ab4f8] text-[#131314]"
+                                    : "bg-[#131314] border border-[#3c4043] text-[#9aa0a6] hover:border-[#8ab4f8]"
+                                }`}
+                              >
+                                <Shield className="w-4 h-4" />
+                                Admin
+                              </button>
+                              <button
+                                onClick={() => setNewAdminRole("super_admin")}
+                                className={`flex-1 px-4 py-3 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                                  newAdminRole === "super_admin"
+                                    ? "bg-yellow-500 text-[#131314]"
+                                    : "bg-[#131314] border border-[#3c4043] text-[#9aa0a6] hover:border-yellow-500"
+                                }`}
+                              >
+                                <Crown className="w-4 h-4" />
+                                Super Admin
+                              </button>
+                            </div>
+                            {newAdminRole === "super_admin" && (
+                              <p className="text-xs text-yellow-400/70 mt-2 px-1">
+                                Super admins have access to all enterprises and full system control.
+                              </p>
+                            )}
                           </div>
-                        </div>
+                        )}
+
+                        {/* Enterprise Selector (only for admin role) */}
+                        {newAdminRole === "admin" && isSuperAdmin && (
+                          <div>
+                            <label className="block text-sm text-[#9aa0a6] mb-2">Enterprise</label>
+                            <select
+                              value={newAdminEnterprise}
+                              onChange={(e) => {
+                                setNewAdminEnterprise(e.target.value);
+                                setNewAdminBundles([]);
+                              }}
+                              className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white focus:outline-none focus:border-[#8ab4f8] transition-colors appearance-none cursor-pointer"
+                            >
+                              <option value="">Select enterprise...</option>
+                              {enterprises.map((ent) => (
+                                <option key={ent.id} value={ent.id}>{ent.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* ED Access (only for admin role) */}
+                        {newAdminRole === "admin" && (
+                          <div>
+                            <label className="block text-sm text-[#9aa0a6] mb-2">ED Access</label>
+                            <div className="space-y-2">
+                              {(isSuperAdmin
+                                ? (enterprises.find(e => e.id === newAdminEnterprise)?.eds || []).map(ed => ed.id)
+                                : availableEDs
+                              ).map((ed) => (
+                                <label key={ed} className="flex items-center gap-3 px-4 py-2 bg-[#131314] rounded-full cursor-pointer hover:bg-[#2c2d2e] transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={newAdminBundles.includes(ed)}
+                                    onChange={() => toggleEDSelection(ed)}
+                                    className="w-4 h-4"
+                                  />
+                                  <span className="text-white">{ed}</span>
+                                </label>
+                              ))}
+                              {isSuperAdmin && !newAdminEnterprise && (
+                                <p className="text-sm text-[#5f6368] px-1">Select an enterprise first</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex gap-3 mt-6">
@@ -904,6 +979,8 @@ export default function OwnerDashboard() {
                           onClick={() => {
                             setShowAddAdmin(false);
                             setNewAdminEmail("");
+                            setNewAdminRole("admin");
+                            setNewAdminEnterprise("");
                             setNewAdminBundles([]);
                           }}
                           className="flex-1 px-4 py-3 bg-[#3c4043] text-white rounded-full hover:bg-[#5f6368] transition-colors"
@@ -912,10 +989,10 @@ export default function OwnerDashboard() {
                         </button>
                         <button
                           onClick={handleAddAdmin}
-                          disabled={!newAdminEmail.trim()}
+                          disabled={!newAdminEmail.trim() || (newAdminRole === "admin" && !newAdminEnterprise && !userProfile?.enterpriseId)}
                           className="flex-1 px-4 py-3 bg-[#8ab4f8] text-[#131314] rounded-full font-medium hover:bg-[#aecbfa] disabled:bg-[#3c4043] disabled:text-[#5f6368] disabled:cursor-not-allowed transition-colors"
                         >
-                          Add Admin
+                          {newAdminRole === "super_admin" ? "Add Super Admin" : "Add Admin"}
                         </button>
                       </div>
                     </div>
