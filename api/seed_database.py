@@ -1,6 +1,6 @@
 """
 Seed Firestore Database
-Creates initial organizations and admin users for testing
+Creates initial enterprises, EDs, bundles, and admin users
 """
 
 from google.cloud import firestore
@@ -9,108 +9,73 @@ from google.cloud import firestore
 db = firestore.Client(project="clinical-assistant-457902")
 
 
-def seed_organizations():
-    """Create initial organizations with domain whitelists"""
+def seed_enterprises():
+    """Create initial enterprises with EDs and bundles"""
     
-    organizations = [
-        {
-            "id": "demo-hospital",
-            "name": "Demo Hospital",
-            "slug": "demo-hospital",
-            "allowed_domains": ["demo.hospital.org", "gmail.com"],  # gmail.com for testing
-            "default_bundles": ["practice"],
-            "subscription_tier": "professional",
-            "settings": {
-                "allow_user_signup": True,
-                "max_protocols": 100,
-            },
-        },
+    enterprises = [
         {
             "id": "mayo-clinic",
             "name": "Mayo Clinic",
             "slug": "mayo-clinic",
-            "allowed_domains": ["mayo.edu", "mayo.org"],
-            "default_bundles": ["practice", "nursing"],
+            "allowed_domains": ["mayo.edu", "mayo.org", "gmail.com"],
             "subscription_tier": "enterprise",
             "settings": {
                 "allow_user_signup": True,
                 "max_protocols": 500,
             },
+            "eds": [
+                {
+                    "id": "rochester",
+                    "name": "Rochester",
+                    "slug": "rochester",
+                    "location": "Rochester, MN",
+                    "bundles": [
+                        {
+                            "id": "acls",
+                            "name": "ACLS",
+                            "slug": "acls",
+                            "description": "Advanced Cardiac Life Support algorithms",
+                            "icon": "heart",
+                            "color": "#EF4444",
+                            "order": 1,
+                        },
+                        {
+                            "id": "jit-education",
+                            "name": "JIT Education",
+                            "slug": "jit-education",
+                            "description": "Just-in-time procedural quick reference guides",
+                            "icon": "clipboard-list",
+                            "color": "#3B82F6",
+                            "order": 2,
+                        },
+                    ]
+                },
+            ]
         },
     ]
     
-    for org in organizations:
-        org_id = org.pop("id")
-        doc_ref = db.collection("organizations").document(org_id)
-        doc_ref.set(org)
-        print(f"✅ Created organization: {org['name']} ({org_id})")
+    for enterprise in enterprises:
+        enterprise_id = enterprise.pop("id")
+        eds_data = enterprise.pop("eds")
         
-        # Create default bundles for each org
-        seed_bundles(org_id)
-
-
-def seed_bundles(org_id: str):
-    """Create default bundles for an organization"""
-    
-    bundles = [
-        {
-            "id": "practice",
-            "name": "Practice Protocols",
-            "slug": "practice",
-            "description": "Clinical protocols and guidelines",
-            "icon": "clipboard-list",
-            "color": "#3B82F6",
-            "is_default": True,
-            "order": 1,
-        },
-        {
-            "id": "nursing",
-            "name": "Nursing Protocols",
-            "slug": "nursing",
-            "description": "Nursing-specific workflows and assessments",
-            "icon": "heart-pulse",
-            "color": "#EC4899",
-            "is_default": False,
-            "order": 2,
-        },
-        {
-            "id": "telemed",
-            "name": "Telemed Protocols",
-            "slug": "telemed",
-            "description": "Telemedicine procedures and workflows",
-            "icon": "video",
-            "color": "#8B5CF6",
-            "is_default": False,
-            "order": 3,
-        },
-        {
-            "id": "pediatric",
-            "name": "Pediatric Protocols",
-            "slug": "pediatric",
-            "description": "Pediatric-specific guidelines",
-            "icon": "baby",
-            "color": "#F59E0B",
-            "is_default": False,
-            "order": 4,
-        },
-        {
-            "id": "trauma",
-            "name": "Trauma Protocols",
-            "slug": "trauma",
-            "description": "Trauma center specific protocols",
-            "icon": "alert-triangle",
-            "color": "#EF4444",
-            "is_default": False,
-            "order": 5,
-        },
-    ]
-    
-    bundles_ref = db.collection("organizations").document(org_id).collection("bundles")
-    
-    for bundle in bundles:
-        bundle_id = bundle.pop("id")
-        bundles_ref.document(bundle_id).set(bundle)
-        print(f"  📦 Created bundle: {bundle['name']}")
+        # Create enterprise doc
+        doc_ref = db.collection("enterprises").document(enterprise_id)
+        doc_ref.set(enterprise)
+        print(f"✅ Created enterprise: {enterprise['name']} ({enterprise_id})")
+        
+        # Create EDs and bundles
+        for ed in eds_data:
+            ed_id = ed.pop("id")
+            bundles_data = ed.pop("bundles")
+            
+            ed_ref = doc_ref.collection("eds").document(ed_id)
+            ed_ref.set(ed)
+            print(f"  🏥 Created ED: {ed['name']} ({ed_id})")
+            
+            for bundle in bundles_data:
+                bundle_id = bundle.pop("id")
+                ed_ref.collection("bundles").document(bundle_id).set(bundle)
+                print(f"    📦 Created bundle: {bundle['name']} ({bundle_id})")
 
 
 def create_super_admin(email: str, uid: str):
@@ -120,9 +85,9 @@ def create_super_admin(email: str, uid: str):
     user_ref.set({
         "email": email,
         "role": "super_admin",
-        "bundle_access": ["all"],
-        "org_id": None,  # Super admins are not bound to an org
-        "org_name": "System Admin",
+        "ed_access": [],
+        "enterprise_id": None,
+        "enterprise_name": "System Admin",
         "created_at": firestore.SERVER_TIMESTAMP,
     })
     print(f"✅ Created super admin: {email}")
@@ -130,7 +95,7 @@ def create_super_admin(email: str, uid: str):
 
 if __name__ == "__main__":
     print("\n🌱 Seeding Firestore database...\n")
-    seed_organizations()
+    seed_enterprises()
     print("\n✅ Seed complete!\n")
     
     print("To create a super admin, call:")

@@ -19,31 +19,31 @@ security = HTTPBearer(auto_error=False)
 
 
 class UserProfile:
-    """User profile with org and bundle access"""
+    """User profile with enterprise and ED access"""
     def __init__(
         self,
         uid: str,
         email: str,
-        org_id: Optional[str] = None,
-        org_name: Optional[str] = None,
+        enterprise_id: Optional[str] = None,
+        enterprise_name: Optional[str] = None,
         role: str = "user",
-        bundle_access: list = None
+        ed_access: list = None
     ):
         self.uid = uid
         self.email = email
-        self.org_id = org_id
-        self.org_name = org_name
+        self.enterprise_id = enterprise_id
+        self.enterprise_name = enterprise_name
         self.role = role
-        self.bundle_access = bundle_access or []
+        self.ed_access = ed_access or []
 
     def to_dict(self):
         return {
             "uid": self.uid,
             "email": self.email,
-            "orgId": self.org_id,
-            "orgName": self.org_name,
+            "enterpriseId": self.enterprise_id,
+            "enterpriseName": self.enterprise_name,
             "role": self.role,
-            "bundleAccess": self.bundle_access,
+            "edAccess": self.ed_access,
         }
 
 
@@ -75,21 +75,21 @@ def check_email_verified(decoded_token: dict) -> bool:
     return decoded_token.get("email_verified", False)
 
 
-def get_org_by_domain(email_domain: str) -> Optional[dict]:
+def get_enterprise_by_domain(email_domain: str) -> Optional[dict]:
     """
-    Look up organization by email domain
-    Returns org data if domain is whitelisted, None otherwise
+    Look up enterprise by email domain
+    Returns enterprise data if domain is whitelisted, None otherwise
     """
-    # Query organizations where allowed_domains contains this domain
-    orgs_ref = db.collection("organizations")
+    # Query enterprises where allowed_domains contains this domain
+    enterprises_ref = db.collection("enterprises")
     
     # Check for exact domain match in allowed_domains array
-    query = orgs_ref.where("allowed_domains", "array_contains", email_domain)
+    query = enterprises_ref.where("allowed_domains", "array_contains", email_domain)
     results = list(query.stream())
     
     if results:
-        org_doc = results[0]
-        return {"id": org_doc.id, **org_doc.to_dict()}
+        enterprise_doc = results[0]
+        return {"id": enterprise_doc.id, **enterprise_doc.to_dict()}
     
     return None
 
@@ -117,32 +117,33 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
         return UserProfile(
             uid=uid,
             email=email,
-            org_id=data.get("org_id"),
-            org_name=data.get("org_name"),
+            enterprise_id=data.get("enterprise_id"),
+            enterprise_name=data.get("enterprise_name"),
             role=data.get("role", "user"),
-            bundle_access=data.get("bundle_access", [])
+            ed_access=data.get("ed_access", [])
         )
     
     # New user - validate domain
     email_domain = email.split("@")[-1] if "@" in email else ""
-    org = get_org_by_domain(email_domain)
+    enterprise = get_enterprise_by_domain(email_domain)
     
-    if not org:
+    if not enterprise:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Email domain '{email_domain}' is not registered with any organization. Contact your administrator."
+            detail=f"Email domain '{email_domain}' is not registered with any enterprise. Contact your administrator."
         )
     
-    # Get default bundles for this org
-    default_bundles = org.get("default_bundles", [])
+    # Get all EDs for this enterprise (default: access to all)
+    eds_ref = db.collection("enterprises").document(enterprise["id"]).collection("eds")
+    all_eds = [doc.id for doc in eds_ref.stream()]
     
     # Create new user
     user_data = {
         "email": email,
-        "org_id": org["id"],
-        "org_name": org.get("name", ""),
+        "enterprise_id": enterprise["id"],
+        "enterprise_name": enterprise.get("name", ""),
         "role": "user",
-        "bundle_access": default_bundles,
+        "ed_access": all_eds,
         "created_at": firestore.SERVER_TIMESTAMP,
     }
     user_ref.set(user_data)
@@ -150,10 +151,10 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
     return UserProfile(
         uid=uid,
         email=email,
-        org_id=org["id"],
-        org_name=org.get("name", ""),
+        enterprise_id=enterprise["id"],
+        enterprise_name=enterprise.get("name", ""),
         role="user",
-        bundle_access=default_bundles
+        ed_access=all_eds
     )
 
 
@@ -222,28 +223,28 @@ async def get_optional_user(
         return None
 
 
-def require_bundle_access(user: UserProfile, bundle_id: str):
+def require_ed_access(user: UserProfile, ed_id: str):
     """
-    Check if user has access to a specific bundle
+    Check if user has access to a specific ED
     Raises 403 if not authorized
     """
-    # Super admins have access to everything
-    if user.role == "super_admin":
+    # Super admins and owners have access to everything
+    if user.role in ["super_admin", "owner"]:
         return
     
-    # Check bundle access
-    if bundle_id not in user.bundle_access and "all" not in user.bundle_access:
+    # Check ED access
+    if ed_id not in user.ed_access and "all" not in user.ed_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You don't have access to bundle '{bundle_id}'"
+            detail=f"You don't have access to ED '{ed_id}'"
         )
 
 
 def require_admin(user: UserProfile):
     """
-    Check if user is an admin
+    Check if user is an admin (ed_admin, owner, or super_admin)
     """
-    if user.role not in ["admin", "super_admin"]:
+    if user.role not in ["ed_admin", "owner", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"

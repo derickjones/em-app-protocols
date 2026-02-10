@@ -20,10 +20,10 @@ import { auth, googleProvider, microsoftProvider } from "./firebase";
 interface UserProfile {
   uid: string;
   email: string | null;
-  orgId: string | null;
-  orgName: string | null;
+  enterpriseId: string | null;
+  enterpriseName: string | null;
   role: "user" | "admin" | "super_admin";
-  bundleAccess: string[];
+  edAccess: string[];
 }
 
 interface AuthContextType {

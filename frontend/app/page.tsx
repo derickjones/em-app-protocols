@@ -10,7 +10,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-9300
 const STORAGE_KEY = "em-protocol-conversations";
 const THEME_KEY = "em-protocol-theme";
 const BUNDLE_KEY = "em-protocol-selected-bundles";
-const HOSPITAL_KEY = "em-protocol-selected-hospital";
+const ED_KEY = "em-protocol-selected-eds";
 
 interface QueryResponse {
   answer: string;
@@ -27,12 +27,29 @@ interface Conversation {
   response: QueryResponse | null;
 }
 
-interface HospitalData {
-  [bundle: string]: unknown[];
+interface BundleData {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  icon?: string;
+  color?: string;
 }
 
-interface AllHospitals {
-  [hospital: string]: HospitalData;
+interface EDData {
+  id: string;
+  name: string;
+  slug: string;
+  location?: string;
+  bundles: BundleData[];
+}
+
+interface EnterpriseData {
+  id: string;
+  name: string;
+  eds: EDData[];
+  userEdAccess: string[];
+  userRole: string;
 }
 
 export default function Home() {
@@ -47,13 +64,12 @@ export default function Home() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   
-  // Hospital/Bundle selection state
-  const [allHospitals, setAllHospitals] = useState<AllHospitals>({});
+  // Enterprise/ED/Bundle selection state
+  const [enterprise, setEnterprise] = useState<EnterpriseData | null>(null);
+  const [selectedEds, setSelectedEds] = useState<Set<string>>(new Set());
   const [selectedBundles, setSelectedBundles] = useState<Set<string>>(new Set());
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
   const [showBundleSelector, setShowBundleSelector] = useState(false);
-  const [selectedHospital, setSelectedHospital] = useState<string>("");
-  const [showHospitalDropdown, setShowHospitalDropdown] = useState(false);
 
   // Search mode: "universe" = local + wikem, "protocol" = local only
   const [searchMode, setSearchMode] = useState<"universe" | "protocol">("universe");
@@ -110,35 +126,43 @@ export default function Home() {
     }
   }, [conversations]);
 
-  // Fetch hospitals and bundles
-  const fetchHospitals = useCallback(async () => {
+  // Fetch enterprise data (EDs + bundles) for logged-in user
+  const fetchEnterprise = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/hospitals`);
+      const token = await getIdToken();
+      if (!token) return;
+      const res = await fetch(`${API_URL}/enterprise`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
-        const data = await res.json();
-        const hospitals = data.hospitals || {};
-        setAllHospitals(hospitals);
+        const data: EnterpriseData = await res.json();
+        setEnterprise(data);
         
-        // Auto-select hospital if none selected
-        const hospitalNames = Object.keys(hospitals);
-        if (hospitalNames.length > 0) {
-          const savedHospital = localStorage.getItem(HOSPITAL_KEY);
-          if (savedHospital && hospitalNames.includes(savedHospital)) {
-            setSelectedHospital(savedHospital);
-          } else {
-            setSelectedHospital(hospitalNames[0]);
+        // Auto-select EDs from saved or default to all
+        const savedEds = localStorage.getItem(ED_KEY);
+        if (savedEds) {
+          try {
+            const parsed: string[] = JSON.parse(savedEds);
+            const valid = parsed.filter((id: string) => data.eds.some(ed => ed.id === id));
+            setSelectedEds(new Set(valid.length > 0 ? valid : data.eds.map(ed => ed.id)));
+          } catch {
+            setSelectedEds(new Set(data.eds.map(ed => ed.id)));
           }
+        } else {
+          setSelectedEds(new Set(data.eds.map(ed => ed.id)));
         }
       }
     } catch (err) {
-      console.error("Failed to fetch hospitals:", err);
+      console.error("Failed to fetch enterprise:", err);
     }
-  }, []);
+  }, [getIdToken]);
 
-  // Load hospitals on mount
+  // Load enterprise when user is available
   useEffect(() => {
-    fetchHospitals();
-  }, [fetchHospitals]);
+    if (user && emailVerified) {
+      fetchEnterprise();
+    }
+  }, [user, emailVerified, fetchEnterprise]);
 
   // Load selected bundles from localStorage
   useEffect(() => {
@@ -162,12 +186,12 @@ export default function Home() {
     }
   }, [selectedBundles]);
 
-  // Save selected hospital to localStorage
+  // Save selected EDs to localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined' && selectedHospital) {
-      localStorage.setItem(HOSPITAL_KEY, selectedHospital);
+    if (typeof window !== 'undefined' && selectedEds.size > 0) {
+      localStorage.setItem(ED_KEY, JSON.stringify(Array.from(selectedEds)));
     }
-  }, [selectedHospital]);
+  }, [selectedEds]);
 
   // Toggle hospital expansion in selector
   const toggleHospitalExpand = (hospital: string) => {
@@ -235,27 +259,36 @@ export default function Home() {
     });
   };
 
-  // Select all bundles for a hospital
-  const selectAllHospitalBundles = (hospital: string) => {
-    const bundles = Object.keys(allHospitals[hospital] || {});
-    setSelectedBundles(prev => {
+  // Toggle ED selection
+  const toggleEdSelection = (edId: string) => {
+    setSelectedEds(prev => {
       const next = new Set(prev);
-      bundles.forEach(bundle => next.add(`${hospital}/${bundle}`));
+      if (next.has(edId)) {
+        // Don't allow deselecting all — keep at least one
+        if (next.size > 1) next.delete(edId);
+      } else {
+        next.add(edId);
+      }
       return next;
     });
   };
 
-  // Deselect all bundles for a hospital
-  const deselectAllHospitalBundles = (hospital: string) => {
-    setSelectedBundles(prev => {
-      const next = new Set(prev);
-      Array.from(next).forEach(key => {
-        if (key.startsWith(`${hospital}/`)) {
-          next.delete(key);
+  // Get available bundles across all selected EDs (union)
+  const getAvailableBundles = (): BundleData[] => {
+    if (!enterprise) return [];
+    const seen = new Set<string>();
+    const bundles: BundleData[] = [];
+    for (const ed of enterprise.eds) {
+      if (selectedEds.has(ed.id)) {
+        for (const b of ed.bundles) {
+          if (!seen.has(b.id)) {
+            seen.add(b.id);
+            bundles.push(b);
+          }
         }
-      });
-      return next;
-    });
+      }
+    }
+    return bundles;
   };
 
   const handleSubmit = async () => {
@@ -294,6 +327,7 @@ export default function Home() {
         headers,
         body: JSON.stringify({ 
           query: question.trim(),
+          ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
           sources: searchMode === "universe" ? ["local", "wikem"] : ["local"]
@@ -514,67 +548,59 @@ export default function Home() {
             <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Dark</span>
           </div>
 
-          {/* Hospital Selector */}
-          {user && Object.keys(allHospitals).length > 0 && (
+          {/* Enterprise + ED Selector */}
+          {user && enterprise && (
             <div className="mb-4">
-              <p className={`text-xs font-medium mb-2 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Logged into
-              </p>
-              <div className="relative">
-                <button
-                  onClick={() => setShowHospitalDropdown(!showHospitalDropdown)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                    darkMode 
-                      ? 'bg-neutral-800 border-neutral-700 hover:border-neutral-600' 
-                      : 'bg-white border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                  <span className={`flex-1 text-left text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                    {selectedHospital ? selectedHospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Select hospital...'}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${darkMode ? 'text-gray-500' : 'text-gray-400'} ${showHospitalDropdown ? 'rotate-180' : ''}`} />
-                </button>
-
-                {showHospitalDropdown && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-10" 
-                      onClick={() => setShowHospitalDropdown(false)}
-                    />
-                    <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
-                      {Object.keys(allHospitals).map((hospital) => (
+              {/* Enterprise name */}
+              <div className={`flex items-center gap-2 px-1 mb-3`}>
+                <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                <span className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                  {enterprise.name}
+                </span>
+              </div>
+              
+              {/* ED multi-select chips */}
+              {enterprise.eds.length > 0 && (
+                <div>
+                  <p className={`text-xs font-medium mb-2 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Emergency Departments
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {enterprise.eds.map((ed) => {
+                      const isSelected = selectedEds.has(ed.id);
+                      return (
                         <button
-                          key={hospital}
-                          onClick={() => {
-                            setSelectedHospital(hospital);
-                            setShowHospitalDropdown(false);
-                            // Clear bundle selection when switching hospitals
-                            setSelectedBundles(new Set());
-                          }}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg ${
-                            selectedHospital === hospital
-                              ? darkMode 
-                                ? 'bg-blue-900/30 text-blue-400' 
-                                : 'bg-blue-50 text-blue-700'
-                              : darkMode 
-                                ? 'text-gray-300 hover:bg-neutral-800' 
-                                : 'text-gray-700 hover:bg-gray-50'
+                          key={ed.id}
+                          onClick={() => toggleEdSelection(ed.id)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                            isSelected
+                              ? darkMode
+                                ? 'bg-blue-900/40 text-blue-300 border border-blue-700'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : darkMode
+                                ? 'text-gray-400 hover:bg-neutral-800 border border-transparent'
+                                : 'text-gray-500 hover:bg-gray-50 border border-transparent'
                           }`}
                         >
-                          <Building2 className="w-4 h-4 flex-shrink-0" />
-                          <span className="flex-1 text-left truncate">
-                            {hospital.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                          </span>
-                          {selectedHospital === hospital && (
-                            <Check className="w-4 h-4 flex-shrink-0" />
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                            isSelected 
+                              ? 'bg-blue-500 border-blue-500' 
+                              : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                          }`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <span className="flex-1 text-left">{ed.name}</span>
+                          {ed.location && (
+                            <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                              {ed.location}
+                            </span>
                           )}
                         </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -599,7 +625,7 @@ export default function Home() {
                 )}
                 <div className="flex-1 min-w-0 text-left">
                   <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                    {userProfile?.orgName || user.email?.split("@")[0]}
+                    {userProfile?.enterpriseName || user.email?.split("@")[0]}
                   </p>
                   <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{user.email}</p>
                 </div>
@@ -615,12 +641,12 @@ export default function Home() {
                   <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
                     <div className={`px-4 py-3 border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}>
                       <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user.email}</p>
-                      {userProfile?.orgName && (
-                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{userProfile.orgName}</p>
+                      {userProfile?.enterpriseName && (
+                        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{userProfile.enterpriseName}</p>
                       )}
-                      {userProfile?.bundleAccess && userProfile.bundleAccess.length > 0 && (
+                      {userProfile?.edAccess && userProfile.edAccess.length > 0 && (
                         <p className={`text-xs mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                          Bundles: {userProfile.bundleAccess.join(", ")}
+                          EDs: {userProfile.edAccess.join(", ")}
                         </p>
                       )}
                     </div>
@@ -824,17 +850,16 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Bundle Toggle Chips - Gemini Style */}
-              {selectedHospital && allHospitals[selectedHospital] && Object.keys(allHospitals[selectedHospital]).length > 0 && (
+              {/* Bundle Toggle Chips */}
+              {getAvailableBundles().length > 0 && (
                 <div className="mt-6">
                   <div className="flex flex-wrap gap-3 justify-center">
-                    {Object.keys(allHospitals[selectedHospital]).map((bundle, index) => {
-                      const bundleKey = `${selectedHospital}/${bundle}`;
-                      const isSelected = selectedBundles.has(bundleKey);
+                    {getAvailableBundles().map((bundle, index) => {
+                      const isSelected = selectedBundles.has(bundle.id);
                       return (
                         <button
-                          key={bundleKey}
-                          onClick={() => toggleBundleSelection(bundleKey)}
+                          key={bundle.id}
+                          onClick={() => toggleBundleSelection(bundle.id)}
                           className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
                             isSelected
                               ? darkMode
@@ -845,8 +870,8 @@ export default function Home() {
                                 : 'bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200 hover:border-gray-300'
                           }`}
                         >
-                          {getBundleIcon(bundle, index, isSelected)}
-                          <span>{bundle}</span>
+                          {getBundleIcon(bundle.name, index, isSelected)}
+                          <span>{bundle.name}</span>
                         </button>
                       );
                     })}

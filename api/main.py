@@ -16,7 +16,7 @@ from google.cloud import storage
 
 from rag_service import RAGService
 from protocol_service import ProtocolService
-from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_bundle_access, verify_firebase_token, check_email_verified
+from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_ed_access, require_admin, verify_firebase_token, check_email_verified
 
 # RAG Configuration
 PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
@@ -121,6 +121,7 @@ def delete_from_rag_corpus(org_id: str, protocol_id: str) -> bool:
 class QueryRequest(BaseModel):
     """Request model for protocol queries"""
     query: str = Field(..., description="The question to ask", min_length=3, max_length=500)
+    ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
     sources: List[str] = Field(default=["local", "wikem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference)")
@@ -170,10 +171,10 @@ class UserProfileResponse(BaseModel):
     """User profile response"""
     uid: str
     email: str
-    orgId: Optional[str]
-    orgName: Optional[str]
+    enterpriseId: Optional[str]
+    enterpriseName: Optional[str]
     role: str
-    bundleAccess: List[str]
+    edAccess: List[str]
 
 
 # ----- Endpoints -----
@@ -209,6 +210,60 @@ async def get_current_user_profile(user: UserProfile = Depends(get_current_user)
     return UserProfileResponse(**user.to_dict())
 
 
+@app.get("/enterprise")
+async def get_user_enterprise(user: UserProfile = Depends(get_current_user)):
+    """
+    Get the current user's enterprise with all EDs and their bundles.
+    Returns the full hierarchy for the frontend to populate selectors.
+    """
+    from google.cloud import firestore as fs
+    db_client = fs.Client(project="clinical-assistant-457902")
+    
+    if not user.enterprise_id:
+        raise HTTPException(status_code=404, detail="No enterprise associated with this user")
+    
+    try:
+        # Get enterprise doc
+        enterprise_ref = db_client.collection("enterprises").document(user.enterprise_id)
+        enterprise_doc = enterprise_ref.get()
+        
+        if not enterprise_doc.exists:
+            raise HTTPException(status_code=404, detail="Enterprise not found")
+        
+        enterprise_data = enterprise_doc.to_dict()
+        
+        # Get all EDs under this enterprise
+        eds = []
+        eds_ref = enterprise_ref.collection("eds")
+        for ed_doc in eds_ref.stream():
+            ed_data = ed_doc.to_dict()
+            ed_data["id"] = ed_doc.id
+            
+            # Get bundles for this ED
+            bundles = []
+            bundles_ref = eds_ref.document(ed_doc.id).collection("bundles")
+            for bundle_doc in bundles_ref.stream():
+                bundle_data = bundle_doc.to_dict()
+                bundle_data["id"] = bundle_doc.id
+                bundles.append(bundle_data)
+            
+            ed_data["bundles"] = bundles
+            eds.append(ed_data)
+        
+        return {
+            "id": user.enterprise_id,
+            "name": enterprise_data.get("name", ""),
+            "eds": eds,
+            "userEdAccess": user.ed_access,
+            "userRole": user.role
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ----- Query Endpoints -----
 
 @app.post("/query", response_model=QueryResponse)
@@ -225,11 +280,18 @@ async def query_protocols(
     start_time = time.time()
     
     try:
-        # Get RAG results
+        # Determine which EDs to search
+        ed_ids = request.ed_ids if request.ed_ids else (user.ed_access if user else [])
+        enterprise_id = user.enterprise_id if user else None
+        
+        # Get RAG results with ED/bundle filtering
         result = rag_service.query(
             query=request.query,
             include_images=request.include_images,
-            sources=request.sources
+            sources=request.sources,
+            enterprise_id=enterprise_id,
+            ed_ids=ed_ids,
+            bundle_ids=request.bundle_ids
         )
         
         query_time_ms = int((time.time() - start_time) * 1000)
@@ -264,23 +326,25 @@ async def query_protocols(
             
             # Handle local protocol citations
             # Extract protocol info from path like:
-            # gs://bucket/org_id/bundle_id/protocol_id/extracted_text.txt
+            # gs://bucket/enterprise_id/ed_id/bundle_id/protocol_id/extracted_text.txt
             parts = source.replace("gs://", "").split("/")
             
             # Skip legacy rag-input files (no longer exist)
             if "rag-input" in source:
                 continue
             
-            if len(parts) >= 5:
-                # Format: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
-                org_id = parts[1]
+            if len(parts) >= 6:
+                # New format: bucket/enterprise_id/ed_id/bundle_id/protocol_id/extracted_text.txt
+                enterprise_id_part = parts[1]
+                ed_id_part = parts[2]
+                bundle_id = parts[3]
+                protocol_id = parts[4]
+            elif len(parts) >= 5:
+                # Legacy format: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
+                enterprise_id_part = parts[1]
+                ed_id_part = None
                 bundle_id = parts[2]
                 protocol_id = parts[3]
-            elif len(parts) >= 4:
-                # Legacy format: bucket/org_id/protocol_id/extracted_text.txt
-                org_id = parts[1]
-                bundle_id = None
-                protocol_id = parts[2]
             else:
                 continue
             
@@ -289,11 +353,11 @@ async def query_protocols(
                 continue
             seen_protocols.add(protocol_id)
             
-            # Build public PDF URL (include bundle if present)
-            if bundle_id:
-                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{org_id}/{bundle_id}/{protocol_id}.pdf"
+            # Build public PDF URL
+            if ed_id_part:
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{enterprise_id_part}/{ed_id_part}/{bundle_id}/{protocol_id}.pdf"
             else:
-                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{org_id}/{protocol_id}.pdf"
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{enterprise_id_part}/{bundle_id}/{protocol_id}.pdf"
             
             citations.append(Citation(
                 protocol_id=protocol_id,
@@ -322,19 +386,21 @@ async def query_protocols(
 
 @app.get("/protocols", response_model=ProtocolListResponse)
 async def list_protocols(
-    org_id: str = Query(default="demo-hospital", description="Organization ID")
+    enterprise_id: str = Query(default="mayo-clinic", description="Enterprise ID"),
+    ed_id: str = Query(default=None, description="ED ID"),
+    bundle_id: str = Query(default=None, description="Bundle ID")
 ):
     """
-    List all protocols for an organization
+    List all protocols for an enterprise, optionally filtered by ED and bundle
     """
     try:
-        protocols = protocol_service.list_protocols(org_id)
+        protocols = protocol_service.list_protocols(enterprise_id, ed_id, bundle_id)
         
         return ProtocolListResponse(
             protocols=[
                 ProtocolInfo(
                     protocol_id=p.get("protocol_id", "unknown"),
-                    org_id=p.get("org_id", org_id),
+                    org_id=p.get("org_id", enterprise_id),
                     page_count=p.get("page_count", 0),
                     char_count=p.get("char_count", 0),
                     image_count=p.get("image_count", 0),
@@ -353,26 +419,41 @@ async def list_protocols(
 @app.get("/hospitals")
 async def list_all_hospitals():
     """
-    List all hospitals with their bundles and protocols.
-    Returns hierarchical structure: { hospitals: { hospital: { bundle: [protocols] } } }
+    List all enterprises with their EDs, bundles, and protocols.
+    Returns hierarchical structure: { enterprises: { enterprise: { ed: { bundle: [protocols] } } } }
+    Also available at /enterprises for the new naming.
     """
     try:
-        hospitals = protocol_service.list_all_hospitals()
-        return {"hospitals": hospitals}
+        enterprises = protocol_service.list_all_enterprises()
+        return {"hospitals": enterprises, "enterprises": enterprises}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/protocols/{org_id}/{protocol_id}")
-async def delete_protocol(org_id: str, protocol_id: str):
+@app.get("/enterprises")
+async def list_all_enterprises():
+    """
+    List all enterprises with their EDs, bundles, and protocols.
+    Returns hierarchical structure: { enterprises: { enterprise: { ed: { bundle: [protocols] } } } }
+    """
+    try:
+        enterprises = protocol_service.list_all_enterprises()
+        return {"enterprises": enterprises}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/protocols/{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}")
+async def delete_protocol(enterprise_id: str, ed_id: str, bundle_id: str, protocol_id: str):
     """
     Delete a protocol from the system.
     Removes from processed bucket, raw bucket, and RAG corpus.
     """
     try:
         # Delete from processed bucket
-        success = protocol_service.delete_protocol(org_id, protocol_id)
+        success = protocol_service.delete_protocol(enterprise_id, ed_id, bundle_id, protocol_id)
         
         if not success:
             raise HTTPException(status_code=404, detail="Protocol not found")
@@ -384,18 +465,20 @@ async def delete_protocol(org_id: str, protocol_id: str):
         
         # Try to delete the PDF (could be .pdf or other extensions)
         for ext in [".pdf", ".PDF"]:
-            blob = bucket.blob(f"{org_id}/{protocol_id}{ext}")
+            blob = bucket.blob(f"{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}{ext}")
             if blob.exists():
                 blob.delete()
                 break
         
         # Delete from RAG corpus
-        rag_deleted = delete_from_rag_corpus(org_id, protocol_id)
+        rag_deleted = delete_from_rag_corpus(enterprise_id, protocol_id)
         
         return {
             "status": "deleted", 
             "protocol_id": protocol_id, 
-            "org_id": org_id,
+            "enterprise_id": enterprise_id,
+            "ed_id": ed_id,
+            "bundle_id": bundle_id,
             "rag_removed": rag_deleted
         }
         
@@ -484,13 +567,13 @@ async def reindex_rag_corpus():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/protocols/{org_id}/{protocol_id}")
-async def get_protocol(org_id: str, protocol_id: str):
+@app.get("/protocols/{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}")
+async def get_protocol(enterprise_id: str, ed_id: str, bundle_id: str, protocol_id: str):
     """
     Get details for a specific protocol
     """
     try:
-        protocol = protocol_service.get_protocol(org_id, protocol_id)
+        protocol = protocol_service.get_protocol(enterprise_id, ed_id, bundle_id, protocol_id)
         
         if not protocol:
             raise HTTPException(status_code=404, detail="Protocol not found")
@@ -503,13 +586,13 @@ async def get_protocol(org_id: str, protocol_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/protocols/{org_id}/{protocol_id}/images")
-async def get_protocol_images(org_id: str, protocol_id: str):
+@app.get("/protocols/{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}/images")
+async def get_protocol_images(enterprise_id: str, ed_id: str, bundle_id: str, protocol_id: str):
     """
     Get images for a specific protocol
     """
     try:
-        images = protocol_service.get_protocol_images(org_id, protocol_id)
+        images = protocol_service.get_protocol_images(enterprise_id, ed_id, bundle_id, protocol_id)
         return {"images": images, "count": len(images)}
         
     except Exception as e:
@@ -518,7 +601,9 @@ async def get_protocol_images(org_id: str, protocol_id: str):
 
 class UploadURLRequest(BaseModel):
     """Request for generating upload URL"""
-    org_id: str = Field(..., description="Organization ID")
+    enterprise_id: str = Field(..., description="Enterprise ID")
+    ed_id: str = Field(..., description="ED ID")
+    bundle_id: str = Field(..., description="Bundle ID")
     filename: str = Field(..., description="PDF filename")
 
 class UploadURLResponse(BaseModel):
@@ -538,7 +623,7 @@ async def get_upload_url(request: UploadURLRequest, http_request: Request):
     if not safe_filename.lower().endswith(".pdf"):
         safe_filename += ".pdf"
     
-    gcs_path = f"gs://clinical-assistant-457902-protocols-raw/{request.org_id}/{safe_filename}"
+    gcs_path = f"gs://clinical-assistant-457902-protocols-raw/{request.enterprise_id}/{request.ed_id}/{request.bundle_id}/{safe_filename}"
     
     # Get base URL from request
     base_url = str(http_request.base_url).rstrip('/')
@@ -546,14 +631,16 @@ async def get_upload_url(request: UploadURLRequest, http_request: Request):
     return UploadURLResponse(
         upload_url=f"{base_url}/upload",
         gcs_path=gcs_path,
-        method="POST multipart/form-data with 'file' and 'org_id' fields"
+        method="POST multipart/form-data with 'file', 'enterprise_id', 'ed_id', and 'bundle_id' fields"
     )
 
 
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
-    org_id: str = Form(...)
+    enterprise_id: str = Form(...),
+    ed_id: str = Form(...),
+    bundle_id: str = Form(...)
 ):
     """
     Upload a PDF protocol directly.
@@ -570,7 +657,7 @@ async def upload_pdf(
         
         # Upload to GCS (triggers Cloud Function)
         bucket_name = "clinical-assistant-457902-protocols-raw"
-        blob_path = f"{org_id}/{safe_filename}"
+        blob_path = f"{enterprise_id}/{ed_id}/{bundle_id}/{safe_filename}"
         
         client = storage.Client()
         bucket = client.bucket(bucket_name)
@@ -602,9 +689,9 @@ db = firestore.Client(project="clinical-assistant-457902")
 class AdminUser(BaseModel):
     """Admin user data model"""
     email: str
-    org_id: str
+    enterprise_id: str
     role: str = "admin"
-    bundle_access: List[str] = []
+    ed_access: List[str] = []
 
 
 class AdminUserResponse(BaseModel):
@@ -612,18 +699,19 @@ class AdminUserResponse(BaseModel):
     uid: str
     email: str
     role: str
-    bundleAccess: List[str]
+    edAccess: List[str]
+    enterpriseId: Optional[str] = None
     createdAt: str
 
 
 @app.get("/admin/users")
 async def list_admin_users(
-    org_id: Optional[str] = Query(None),
+    enterprise_id: Optional[str] = Query(None),
     user: UserProfile = Depends(get_current_user)
 ):
     """
     List all admin users (super_admin only)
-    Optionally filter by org_id
+    Optionally filter by enterprise_id
     """
     if user.role not in ["super_admin"]:
         raise HTTPException(status_code=403, detail="Only super admins can view admin users")
@@ -631,9 +719,9 @@ async def list_admin_users(
     try:
         users_ref = db.collection("users")
         
-        # Filter by org if provided
-        if org_id:
-            query = users_ref.where("orgId", "==", org_id)
+        # Filter by enterprise if provided
+        if enterprise_id:
+            query = users_ref.where("enterprise_id", "==", enterprise_id)
         else:
             query = users_ref
         
@@ -644,7 +732,8 @@ async def list_admin_users(
                 "uid": doc.id,
                 "email": user_data.get("email", ""),
                 "role": user_data.get("role", "user"),
-                "bundleAccess": user_data.get("bundleAccess", []),
+                "edAccess": user_data.get("ed_access", []),
+                "enterpriseId": user_data.get("enterprise_id", ""),
                 "createdAt": user_data.get("createdAt", ""),
             })
         
@@ -673,9 +762,9 @@ async def create_admin_user(
         
         user_data = {
             "email": admin_data.email,
-            "orgId": admin_data.org_id,
+            "enterprise_id": admin_data.enterprise_id,
             "role": admin_data.role,
-            "bundleAccess": admin_data.bundle_access,
+            "ed_access": admin_data.ed_access,
             "updatedAt": firestore.SERVER_TIMESTAMP,
         }
         

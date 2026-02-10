@@ -12,7 +12,8 @@ interface Admin {
   uid: string;
   email: string;
   role: string;
-  bundleAccess: string[];
+  edAccess: string[];
+  enterpriseId: string;
   createdAt: string;
 }
 
@@ -55,14 +56,14 @@ export default function OwnerDashboard() {
     }
   }, [user, userProfile, authLoading, router]);
 
-  // Fetch admins for the org
+  // Fetch admins for the enterprise
   const fetchAdmins = async () => {
-    if (!userProfile?.orgId) return;
+    if (!userProfile?.enterpriseId) return;
     
     setLoading(true);
     try {
       const token = await user?.getIdToken();
-      const res = await fetch(`${API_URL}/admin/users?org_id=${userProfile.orgId}`, {
+      const res = await fetch(`${API_URL}/admin/users?enterprise_id=${userProfile.enterpriseId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -79,19 +80,19 @@ export default function OwnerDashboard() {
     }
   };
 
-  // Fetch all hospitals and bundles
+  // Fetch all enterprises and protocols
   const fetchHospitals = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/hospitals`);
+      const res = await fetch(`${API_URL}/enterprises`);
       if (res.ok) {
         const data = await res.json();
         const hospitals = data.hospitals || {};
         setAllHospitals(hospitals);
         
-        // Extract available bundles for this org
-        if (userProfile?.orgId && hospitals[userProfile.orgId]) {
-          setAvailableBundles(Object.keys(hospitals[userProfile.orgId]));
+        // Extract available EDs for this enterprise
+        if (userProfile?.enterpriseId && hospitals[userProfile.enterpriseId]) {
+          setAvailableBundles(Object.keys(hospitals[userProfile.enterpriseId]));
         }
       }
     } catch (err) {
@@ -109,7 +110,7 @@ export default function OwnerDashboard() {
   }, [userProfile]);
 
   const handleAddAdmin = async () => {
-    if (!newAdminEmail.trim() || !userProfile?.orgId) return;
+    if (!newAdminEmail.trim() || !userProfile?.enterpriseId) return;
     
     try {
       const token = await user?.getIdToken();
@@ -121,9 +122,9 @@ export default function OwnerDashboard() {
         },
         body: JSON.stringify({
           email: newAdminEmail,
-          org_id: userProfile.orgId,
+          enterprise_id: userProfile.enterpriseId,
           role: "admin",
-          bundle_access: newAdminBundles,
+          ed_access: newAdminBundles,
         }),
       });
       
@@ -216,7 +217,7 @@ export default function OwnerDashboard() {
             <Crown className="w-6 h-6 text-yellow-500" />
             <span className="text-xl font-normal text-white">Owner Dashboard</span>
             <span className="text-xs text-[#9aa0a6]">•</span>
-            <span className="text-sm text-[#8ab4f8]">{userProfile.orgName || userProfile.orgId}</span>
+            <span className="text-sm text-[#8ab4f8]">{userProfile.enterpriseName || userProfile.enterpriseId}</span>
           </div>
           <Link
             href="/admin"
@@ -370,9 +371,9 @@ export default function OwnerDashboard() {
                                 }`}>
                                   {admin.role}
                                 </span>
-                                {admin.bundleAccess && admin.bundleAccess.length > 0 && (
+                                {admin.edAccess && admin.edAccess.length > 0 && (
                                   <span className="text-xs text-[#9aa0a6]">
-                                    {admin.bundleAccess.length} bundle(s)
+                                    {admin.edAccess.length} ED(s)
                                   </span>
                                 )}
                               </div>
@@ -421,7 +422,7 @@ export default function OwnerDashboard() {
                 ) : (
                   <div className="divide-y divide-[#3c4043]">
                     {Object.entries(allHospitals)
-                      .filter(([hospital]) => !userProfile.orgId || hospital === userProfile.orgId)
+                      .filter(([hospital]) => !userProfile.enterpriseId || hospital === userProfile.enterpriseId)
                       .sort()
                       .map(([hospital, bundles]) => (
                         <div key={hospital}>

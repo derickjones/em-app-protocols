@@ -157,13 +157,32 @@ A:"""
     
     def _get_protocol_metadata(self, source_uri: str) -> Optional[Dict]:
         """Get metadata for a protocol from its source URI"""
-        # Parse source URI to get org_id, bundle_id, and protocol_id
-        # Format: gs://bucket/org_id/bundle_id/protocol_id/extracted_text.txt
+        # Parse source URI to get enterprise_id, ed_id, bundle_id, and protocol_id
+        # Format: gs://bucket/enterprise_id/ed_id/bundle_id/protocol_id/extracted_text.txt
         try:
             if source_uri.startswith("gs://"):
                 parts = source_uri.split("/")
-                if len(parts) >= 6:
-                    # New format with bundle: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
+                if len(parts) >= 7:
+                    # New format: bucket/enterprise_id/ed_id/bundle_id/protocol_id/extracted_text.txt
+                    enterprise_id = parts[3]
+                    ed_id = parts[4]
+                    bundle_id = parts[5]
+                    protocol_id = parts[6]
+                    
+                    cache_key = f"{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}"
+                    if cache_key in self._metadata_cache:
+                        return self._metadata_cache[cache_key]
+                    
+                    bucket = self.storage_client.bucket(PROCESSED_BUCKET)
+                    blob = bucket.blob(f"{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}/metadata.json")
+                    
+                    if blob.exists():
+                        content = blob.download_as_string()
+                        metadata = json.loads(content)
+                        self._metadata_cache[cache_key] = metadata
+                        return metadata
+                elif len(parts) >= 6:
+                    # Legacy format with bundle: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
                     org_id = parts[3]
                     bundle_id = parts[4]
                     protocol_id = parts[5]
@@ -174,23 +193,6 @@ A:"""
                     
                     bucket = self.storage_client.bucket(PROCESSED_BUCKET)
                     blob = bucket.blob(f"{org_id}/{bundle_id}/{protocol_id}/metadata.json")
-                    
-                    if blob.exists():
-                        content = blob.download_as_string()
-                        metadata = json.loads(content)
-                        self._metadata_cache[cache_key] = metadata
-                        return metadata
-                elif len(parts) >= 5:
-                    # Legacy format: bucket/org_id/protocol_id/extracted_text.txt
-                    org_id = parts[3]
-                    protocol_id = parts[4]
-                    
-                    cache_key = f"{org_id}/{protocol_id}"
-                    if cache_key in self._metadata_cache:
-                        return self._metadata_cache[cache_key]
-                    
-                    bucket = self.storage_client.bucket(PROCESSED_BUCKET)
-                    blob = bucket.blob(f"{org_id}/{protocol_id}/metadata.json")
                     
                     if blob.exists():
                         content = blob.download_as_string()
@@ -331,7 +333,8 @@ A:"""
         
         return all_contexts
 
-    def query(self, query: str, include_images: bool = True, sources: List[str] = None) -> Dict:
+    def query(self, query: str, include_images: bool = True, sources: List[str] = None,
+              enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None) -> Dict:
         """
         Execute a full RAG query with multi-source retrieval
         
@@ -339,6 +342,9 @@ A:"""
             query: The search query
             include_images: Whether to include protocol images
             sources: List of sources to query ('local', 'wikem'). Default: both.
+            enterprise_id: Enterprise ID for path-prefix filtering
+            ed_ids: List of ED IDs to filter by
+            bundle_ids: List of bundle IDs to filter by
         
         Returns:
             dict with answer, images, citations
@@ -352,6 +358,33 @@ A:"""
                 "images": [],
                 "citations": []
             }
+        
+        # Step 1.5: Filter local contexts by ED/bundle path prefixes
+        if enterprise_id and ed_ids:
+            prefixes = []
+            for ed_id in ed_ids:
+                if bundle_ids and "all" not in bundle_ids:
+                    for bundle_id in bundle_ids:
+                        prefixes.append(f"{enterprise_id}/{ed_id}/{bundle_id}/")
+                else:
+                    prefixes.append(f"{enterprise_id}/{ed_id}/")
+            
+            filtered_contexts = []
+            for ctx in contexts:
+                if ctx.get("source_type") == "wikem":
+                    # Always keep WikEM results
+                    filtered_contexts.append(ctx)
+                elif any(prefix in ctx.get("source", "") for prefix in prefixes):
+                    filtered_contexts.append(ctx)
+            
+            contexts = filtered_contexts
+            
+            if not contexts:
+                return {
+                    "answer": "No relevant protocols found for the selected EDs and bundles.",
+                    "images": [],
+                    "citations": []
+                }
         
         # Step 2: Generate answer with Gemini (fast, no grounding overhead)
         answer = self._generate_answer(query, contexts)
