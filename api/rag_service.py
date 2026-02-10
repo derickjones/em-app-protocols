@@ -83,11 +83,11 @@ class RAGService:
     
     def _generate_answer(self, query: str, contexts: List[Dict]) -> str:
         """Generate answer using Gemini with source-aware context"""
-        # Build context string with source labels - limit to top 5 for speed
+        # Build context string with source labels - limit to top 5
         context_parts = []
         for i, c in enumerate(contexts[:5]):
             source_label = "WikEM" if c.get("source_type") == "wikem" else "Local Protocol"
-            context_parts.append(f"[{i+1}] ({source_label}) {c['text'][:1500]}")
+            context_parts.append(f"[{i+1}] ({source_label}) {c['text'][:4000]}")
         context_text = "\n---\n".join(context_parts)
         
         # Gemini endpoint (us-central1 for low latency)
@@ -98,52 +98,32 @@ class RAGService:
             "Content-Type": "application/json"
         }
         
-        prompt = f"""Emergency medicine assistant for ED physicians. Use markdown formatting.
+        prompt = f"""You are an emergency medicine clinical assistant for ED physicians.
 
-You have context from two possible sources:
-- "Local Protocol" = department-specific clinical protocols (prioritize these)
-- "WikEM" = general emergency medicine reference (wikem.org, CC BY-SA 3.0)
+CRITICAL RULES:
+1. Answer the user's SPECIFIC QUESTION directly. Do NOT summarize the entire document.
+2. ONLY use information from the provided context. Do NOT add outside medical knowledge.
+3. If the context does not contain enough information to answer the question, say so clearly.
+4. Add [1], [2] etc. citation numbers matching the context sources used.
 
-MARKDOWN FORMAT RULES:
-- Use "- " (dash space) at start of line for bullet points
-- Use "**text**" for bold headers and drug names  
-- Use blank lines between sections
-- Add [1] citations at end of sentences matching the context numbers
-
-STRUCTURE:
-1. Bold header + 1-2 sentence intro paragraph
-2. Subheaders with bullet lists under them
-3. Keep bullets short
-
-EXAMPLE (copy this exact markdown style):
-
-**Cardiac Arrest Management**
-
-Start CPR immediately at 100-120/min with 2+ inch depth. Secure IV/IO access. [1]
-
-**For VF/pVT:**
-
-- Defibrillate 200J biphasic
-- Resume CPR 2 min, reassess rhythm
-- **Epinephrine** 1mg IV q3-5min after 2nd shock
-- **Amiodarone** 300mg IV if refractory [1]
-
-**For Asystole/PEA:**
-
-- Start CPR and **epinephrine** 1mg IV immediately
-- Identify reversible causes (Hs and Ts) [1]
+FORMAT:
+- Use markdown: **bold** for headers/drug names, "- " for bullets, blank lines between sections
+- Prefer concise bullet points for quick ED reference
+- Keep answers as short as the question requires — a simple question gets a short answer, a complex question gets a thorough answer
+- Start with a bold header, then 1 sentence summary, then bullets if needed
 
 CONTEXT:
 {context_text}
 
-Q: {query}
-A:"""
+QUESTION: {query}
+
+ANSWER:"""
 
         payload = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 400
+                "maxOutputTokens": 1000
             }
         }
         
