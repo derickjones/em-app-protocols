@@ -117,10 +117,6 @@ export default function AdminPage() {
     fetchEnterprises();
   }, [user, userProfile]);
 
-  const orgId = selectedEnterprise && selectedED && selectedBundle
-    ? `${selectedEnterprise}/${selectedED}/${selectedBundle}`
-    : "";
-
   const fetchAllHospitals = useCallback(async () => {
     setLoading(true);
     try {
@@ -137,10 +133,15 @@ export default function AdminPage() {
   }, []);
 
   const fetchProtocols = useCallback(async () => {
-    if (!orgId) return;
+    if (!selectedEnterprise || !selectedED || !selectedBundle) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/protocols?org_id=${encodeURIComponent(orgId)}`);
+      const params = new URLSearchParams({
+        enterprise_id: selectedEnterprise,
+        ed_id: selectedED,
+        bundle_id: selectedBundle,
+      });
+      const res = await fetch(`${API_URL}/protocols?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setProtocols(data.protocols || []);
@@ -150,7 +151,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [orgId]);
+  }, [selectedEnterprise, selectedED, selectedBundle]);
 
   useEffect(() => {
     if (isAuthenticated) {
