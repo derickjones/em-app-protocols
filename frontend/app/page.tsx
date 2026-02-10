@@ -72,8 +72,21 @@ export default function Home() {
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
   const [showBundleSelector, setShowBundleSelector] = useState(false);
 
-  // Search mode: "universe" = local + wikem, "protocol" = local only
-  const [searchMode, setSearchMode] = useState<"universe" | "protocol">("universe");
+  // Search sources: multi-select - "wikem" (EM Universe), "local" (Protocols)
+  const [searchSources, setSearchSources] = useState<Set<string>>(new Set(["wikem", "local"]));
+
+  // Toggle a search source on/off (must keep at least one)
+  const toggleSource = (source: string) => {
+    setSearchSources(prev => {
+      const next = new Set(prev);
+      if (next.has(source)) {
+        if (next.size > 1) next.delete(source);
+      } else {
+        next.add(source);
+      }
+      return next;
+    });
+  };
 
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
   const router = useRouter();
@@ -347,7 +360,7 @@ export default function Home() {
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
-          sources: searchMode === "universe" ? ["local", "wikem"] : ["local"],
+          sources: Array.from(searchSources),
           enterprise_id: enterprise?.id || undefined
         }),
       });
@@ -809,8 +822,12 @@ export default function Home() {
           /* Initial Search View */
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="w-full max-w-3xl px-4">
-              {/* Input Box */}
-              <div className="relative mt-2">
+              {/* Input Box - Gemini style with source icons inside */}
+              <div className={`relative mt-2 border-2 rounded-3xl shadow-lg transition-all duration-200 hover:shadow-xl ${
+                darkMode 
+                  ? 'bg-neutral-900 border-neutral-700 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-900' 
+                  : 'bg-gray-50 border-gray-300 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100'
+              }`}>
                 <textarea
                   placeholder="Enter a clinical question or use the mic..."
                   value={question}
@@ -822,79 +839,85 @@ export default function Home() {
                     }
                   }}
                   rows={2}
-                  className={`w-full p-4 pl-5 pr-28 border-2 rounded-3xl text-sm shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 transition-all duration-200 hover:shadow-xl ${
+                  className={`w-full p-4 pl-5 pr-28 rounded-t-3xl text-sm resize-none focus:outline-none bg-transparent ${
                     darkMode 
-                      ? 'bg-neutral-900 border-neutral-700 text-gray-100 placeholder-gray-500 focus:ring-blue-900' 
-                      : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-blue-100'
+                      ? 'text-gray-100 placeholder-gray-500' 
+                      : 'text-gray-800'
                   }`}
                 />
 
-                {/* Mic Button */}
-                <button
-                  title="Voice input"
-                  className={`absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl flex items-center justify-center border-2 transition-all duration-200 shadow-md hover:shadow-lg ${
-                    darkMode 
-                      ? 'bg-neutral-800 text-gray-300 border-neutral-700 hover:bg-neutral-700' 
-                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
-                  }`}
-                >
-                  <Mic className="w-4 h-4" />
-                </button>
+                {/* Bottom bar inside search box */}
+                <div className={`flex items-center justify-between px-4 pb-3 pt-0`}>
+                  {/* Source toggles - left side */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => toggleSource("wikem")}
+                      title="EM Universe — General emergency medicine knowledge from WikEM"
+                      className={`p-2 rounded-xl transition-all duration-200 ${
+                        searchSources.has("wikem")
+                          ? darkMode
+                            ? 'bg-blue-600/20 text-blue-400'
+                            : 'bg-blue-50 text-blue-600'
+                          : darkMode
+                            ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Globe className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => toggleSource("local")}
+                      title="Protocols — Your department's uploaded clinical protocols"
+                      className={`p-2 rounded-xl transition-all duration-200 ${
+                        searchSources.has("local")
+                          ? darkMode
+                            ? 'bg-blue-600/20 text-blue-400'
+                            : 'bg-blue-50 text-blue-600'
+                          : darkMode
+                            ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <FileText className="w-5 h-5" />
+                    </button>
+                  </div>
 
-                {/* Submit Button */}
-                <button
-                  onClick={handleSubmit}
-                  disabled={!question.trim() || loading}
-                  title="Submit"
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl text-white flex items-center justify-center transition-all duration-200 hover:scale-105 border-2 border-transparent disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg ${
-                    darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800 hover:border-gray-300'
-                  }`}
-                >
-                  {loading ? (
-                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <ArrowUp className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-
-              {/* Search Mode Toggle - Gemini Style */}
-              <div className="mt-4 flex items-center gap-2">
-                <button
-                  onClick={() => setSearchMode("universe")}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border-2 ${
-                    searchMode === "universe"
-                      ? darkMode
-                        ? 'bg-blue-600/20 text-blue-400 border-blue-500'
-                        : 'bg-blue-50 text-blue-700 border-blue-300'
-                      : darkMode
-                        ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
-                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-                  }`}
-                >
-                  <Globe className="w-4 h-4" />
-                  EM Universe
-                </button>
-                <button
-                  onClick={() => setSearchMode("protocol")}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border-2 ${
-                    searchMode === "protocol"
-                      ? darkMode
-                        ? 'bg-blue-600/20 text-blue-400 border-blue-500'
-                        : 'bg-blue-50 text-blue-700 border-blue-300'
-                      : darkMode
-                        ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
-                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  Protocol
-                </button>
+                  {/* Right side - mic & submit */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      title="Voice input"
+                      className={`w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                        darkMode 
+                          ? 'text-gray-400 hover:bg-neutral-800 hover:text-gray-200' 
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                      }`}
+                    >
+                      <Mic className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleSubmit}
+                      disabled={!question.trim() || loading}
+                      title="Submit"
+                      className={`w-9 h-9 flex-shrink-0 rounded-xl text-white flex items-center justify-center transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 ${
+                        darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800'
+                      }`}
+                    >
+                      {loading ? (
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <ArrowUp className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Bundle Toggle Chips */}
               {getAvailableBundles().length > 0 && (
-                <div className="mt-6">
+                <div className="mt-5">
+                  <p className={`text-xs font-medium mb-2.5 text-center ${darkMode ? 'text-neutral-500' : 'text-gray-400'}`}>
+                    Available Bundles
+                  </p>
                   <div className="flex flex-wrap gap-3 justify-center">
                     {getAvailableBundles().map((bundle, index) => {
                       const isSelected = selectedBundles.has(bundle.id);
@@ -1050,7 +1073,11 @@ export default function Home() {
       {/* Pinned Input (when searching) */}
       {hasSearched && (
         <div className={`fixed bottom-0 right-0 border-t px-4 py-4 z-40 transition-all duration-300 ${sidebarOpen ? 'left-72' : 'left-0'} ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-gray-100'}`}>
-          <div className="max-w-3xl mx-auto relative">
+          <div className={`max-w-3xl mx-auto border-2 rounded-3xl shadow-lg transition-all duration-200 ${
+            darkMode 
+              ? 'bg-neutral-900 border-neutral-700 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-900' 
+              : 'bg-gray-50 border-gray-300 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100'
+          }`}>
             <textarea
               placeholder="Ask a follow-up question..."
               value={question}
@@ -1061,74 +1088,78 @@ export default function Home() {
                   handleSubmit();
                 }
               }}
-              rows={2}
-              className={`w-full p-4 pl-5 pr-28 border-2 rounded-3xl text-sm shadow-lg resize-none focus:outline-none focus:border-blue-400 focus:ring-4 transition-all duration-200 hover:shadow-xl ${
+              rows={1}
+              className={`w-full p-4 pl-5 pr-4 rounded-t-3xl text-sm resize-none focus:outline-none bg-transparent ${
                 darkMode 
-                  ? 'bg-neutral-900 border-neutral-700 text-gray-100 placeholder-gray-500 focus:ring-blue-900' 
-                  : 'bg-gray-50 border-gray-300 text-gray-800 focus:ring-blue-100'
+                  ? 'text-gray-100 placeholder-gray-500' 
+                  : 'text-gray-800'
               }`}
             />
 
-            {/* Mic Button */}
-            <button
-              title="Voice input"
-              className={`absolute right-16 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl flex items-center justify-center border-2 transition-all duration-200 shadow-md hover:shadow-lg ${
-                darkMode 
-                  ? 'bg-neutral-800 text-gray-300 border-neutral-700 hover:bg-neutral-700' 
-                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
-              }`}
-            >
-              <Mic className="w-4 h-4" />
-            </button>
+            {/* Bottom bar */}
+            <div className="flex items-center justify-between px-4 pb-3 pt-0">
+              {/* Source toggles */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => toggleSource("wikem")}
+                  title="EM Universe — General emergency medicine knowledge from WikEM"
+                  className={`p-1.5 rounded-lg transition-all duration-200 ${
+                    searchSources.has("wikem")
+                      ? darkMode
+                        ? 'bg-blue-600/20 text-blue-400'
+                        : 'bg-blue-50 text-blue-600'
+                      : darkMode
+                        ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => toggleSource("local")}
+                  title="Protocols — Your department's uploaded clinical protocols"
+                  className={`p-1.5 rounded-lg transition-all duration-200 ${
+                    searchSources.has("local")
+                      ? darkMode
+                        ? 'bg-blue-600/20 text-blue-400'
+                        : 'bg-blue-50 text-blue-600'
+                      : darkMode
+                        ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                </button>
+              </div>
 
-            <button
-              onClick={handleSubmit}
-              disabled={!question.trim() || loading}
-              title="Submit"
-              className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex-shrink-0 rounded-2xl text-white flex items-center justify-center transition-all duration-200 hover:scale-105 border-2 border-transparent disabled:opacity-50 disabled:hover:scale-100 shadow-md hover:shadow-lg ${
-                darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800 hover:border-gray-300'
-              }`}
-            >
-              {loading ? (
-                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <ArrowUp className="w-4 h-4" />
-              )}
-            </button>
-          </div>
-
-          {/* Search Mode Toggle */}
-          <div className="max-w-3xl mx-auto mt-2 flex items-center gap-2">
-            <button
-              onClick={() => setSearchMode("universe")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border ${
-                searchMode === "universe"
-                  ? darkMode
-                    ? 'bg-blue-600/20 text-blue-400 border-blue-500'
-                    : 'bg-blue-50 text-blue-700 border-blue-300'
-                  : darkMode
-                    ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
-                    : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5" />
-              EM Universe
-            </button>
-            <button
-              onClick={() => setSearchMode("protocol")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border ${
-                searchMode === "protocol"
-                  ? darkMode
-                    ? 'bg-blue-600/20 text-blue-400 border-blue-500'
-                    : 'bg-blue-50 text-blue-700 border-blue-300'
-                  : darkMode
-                    ? 'bg-neutral-800 text-gray-400 border-neutral-700 hover:bg-neutral-700 hover:text-gray-300'
-                    : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Protocol
-            </button>
+              {/* Right side */}
+              <div className="flex items-center gap-2">
+                <button
+                  title="Voice input"
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                    darkMode 
+                      ? 'text-gray-400 hover:bg-neutral-800 hover:text-gray-200' 
+                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                  }`}
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!question.trim() || loading}
+                  title="Submit"
+                  className={`w-8 h-8 rounded-lg text-white flex items-center justify-center transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 ${
+                    darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800'
+                  }`}
+                >
+                  {loading ? (
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ArrowUp className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
