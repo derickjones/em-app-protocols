@@ -1167,22 +1167,65 @@ async def delete_bundle(
     bundle_id: str,
     user: UserProfile = Depends(get_current_user)
 ):
-    """Delete a bundle from Firestore (super_admin only)"""
+    """Delete a bundle: removes all GCS files, RAG entries, and Firestore doc (super_admin only)"""
     if user.role != "super_admin":
         raise HTTPException(status_code=403, detail="Only super admins can delete bundles")
     
     try:
+        deleted_gcs = 0
+        deleted_rag = 0
+        
+        # Step 1: Delete all files from GCS processed bucket
+        storage_client = storage.Client()
+        processed_bucket = storage_client.bucket("clinical-assistant-457902-protocols-processed")
+        prefix = f"{enterprise_id}/{ed_id}/{bundle_id}/"
+        blobs = list(processed_bucket.list_blobs(prefix=prefix))
+        for blob in blobs:
+            blob.delete()
+            deleted_gcs += 1
+        
+        # Step 2: Delete from GCS raw bucket
+        raw_bucket = storage_client.bucket("clinical-assistant-457902-protocols-raw")
+        raw_blobs = list(raw_bucket.list_blobs(prefix=prefix))
+        for blob in raw_blobs:
+            blob.delete()
+        
+        # Step 3: Delete matching files from RAG corpus
+        corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
+        headers = {"Authorization": f"Bearer {get_access_token()}"}
+        list_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles"
+        response = requests.get(list_url, headers=headers)
+        
+        if response.status_code == 200:
+            rag_files = response.json().get("ragFiles", [])
+            target_path = f"{enterprise_id}/{ed_id}/{bundle_id}/"
+            
+            for rag_file in rag_files:
+                file_name = rag_file.get("name", "")
+                gcs_uris = rag_file.get("gcsSource", {}).get("uris", [])
+                
+                if any(target_path in uri for uri in gcs_uris):
+                    delete_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{file_name}"
+                    del_resp = requests.delete(delete_url, headers=headers)
+                    if del_resp.status_code == 200:
+                        deleted_rag += 1
+        
+        # Step 4: Delete Firestore bundle doc
         bundle_ref = (
             db.collection("enterprises").document(enterprise_id)
             .collection("eds").document(ed_id)
             .collection("bundles").document(bundle_id)
         )
-        
-        if not bundle_ref.get().exists:
-            raise HTTPException(status_code=404, detail=f"Bundle '{bundle_id}' not found")
-        
         bundle_ref.delete()
-        return {"status": "deleted", "enterprise_id": enterprise_id, "ed_id": ed_id, "bundle_id": bundle_id}
+        
+        return {
+            "status": "deleted",
+            "enterprise_id": enterprise_id,
+            "ed_id": ed_id,
+            "bundle_id": bundle_id,
+            "deleted_gcs_files": deleted_gcs,
+            "deleted_rag_files": deleted_rag
+        }
     
     except HTTPException:
         raise

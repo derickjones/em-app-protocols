@@ -217,6 +217,38 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteBundle = async (enterpriseId: string, edId: string, bundleId: string, protocolCount: number) => {
+    if (!confirm(`Delete bundle "${bundleId}" and all ${protocolCount} protocol(s)? This removes all files from storage and search index. This cannot be undone.`)) {
+      return;
+    }
+
+    const deleteKey = `bundle:${enterpriseId}/${edId}/${bundleId}`;
+    setDeleting(deleteKey);
+
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/enterprises/${encodeURIComponent(enterpriseId)}/eds/${encodeURIComponent(edId)}/bundles/${encodeURIComponent(bundleId)}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Deleted bundle "${bundleId}": ${data.deleted_gcs_files} files removed from storage, ${data.deleted_rag_files} removed from search index`);
+        await fetchAllHospitals();
+        await fetchProtocols();
+      } else {
+        const error = await res.text();
+        alert(`Failed to delete bundle: ${error}`);
+      }
+    } catch (err) {
+      console.error("Delete bundle error:", err);
+      alert("Failed to delete bundle");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedEnterprise && selectedED && selectedBundle) {
@@ -794,21 +826,35 @@ export default function AdminPage() {
                                         const bundleKey = `${edKey}/${bundle}`;
                                         return (
                                           <div key={bundleKey}>
-                                            <button
-                                              onClick={() => toggleBundle(bundleKey)}
-                                              className="w-full pl-20 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
-                                            >
-                                              {expandedBundles.has(bundleKey) ? (
-                                                <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
-                                              ) : (
-                                                <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
-                                              )}
-                                              <FolderOpen className="w-4 h-4 text-yellow-500" />
-                                              <span className="text-[#e8eaed]">{bundle}</span>
-                                              <span className="text-xs text-[#5f6368] ml-auto">
-                                                {bundleProtocols.length} protocol(s)
-                                              </span>
-                                            </button>
+                                            <div className="flex items-center">
+                                              <button
+                                                onClick={() => toggleBundle(bundleKey)}
+                                                className="flex-1 pl-20 pr-2 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
+                                              >
+                                                {expandedBundles.has(bundleKey) ? (
+                                                  <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
+                                                ) : (
+                                                  <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                                                )}
+                                                <FolderOpen className="w-4 h-4 text-yellow-500" />
+                                                <span className="text-[#e8eaed]">{bundle}</span>
+                                                <span className="text-xs text-[#5f6368] ml-auto">
+                                                  {bundleProtocols.length} protocol(s)
+                                                </span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteBundle(enterprise, ed, bundle, bundleProtocols.length)}
+                                                disabled={deleting === `bundle:${enterprise}/${ed}/${bundle}`}
+                                                className="p-2 mr-3 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors disabled:opacity-50"
+                                                title={`Delete bundle "${bundle}" and all protocols`}
+                                              >
+                                                {deleting === `bundle:${enterprise}/${ed}/${bundle}` ? (
+                                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                  <Trash2 className="w-4 h-4" />
+                                                )}
+                                              </button>
+                                            </div>
 
                                             {expandedBundles.has(bundleKey) && (
                                               <ul className="bg-[#131314]">
