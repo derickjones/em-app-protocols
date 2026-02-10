@@ -50,6 +50,7 @@ interface EnterpriseData {
   eds: EDData[];
   userEdAccess: string[];
   userRole: string;
+  allEnterprises?: { id: string; name: string; eds: EDData[] }[];
 }
 
 export default function Home() {
@@ -156,6 +157,22 @@ export default function Home() {
       console.error("Failed to fetch enterprise:", err);
     }
   }, [getIdToken]);
+
+  // Switch active enterprise (super_admin only)
+  const switchEnterprise = (entId: string) => {
+    if (!enterprise?.allEnterprises) return;
+    const target = enterprise.allEnterprises.find(e => e.id === entId);
+    if (!target) return;
+    setEnterprise({
+      ...enterprise,
+      id: target.id,
+      name: target.name,
+      eds: target.eds,
+    });
+    // Reset ED and bundle selections to the new enterprise's EDs
+    setSelectedEds(new Set(target.eds.map(ed => ed.id)));
+    setSelectedBundles(new Set());
+  };
 
   // Load enterprise when user is available
   useEffect(() => {
@@ -330,7 +347,8 @@ export default function Home() {
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
-          sources: searchMode === "universe" ? ["local", "wikem"] : ["local"]
+          sources: searchMode === "universe" ? ["local", "wikem"] : ["local"],
+          enterprise_id: enterprise?.id || undefined
         }),
       });
       if (!res.ok) {
@@ -551,13 +569,37 @@ export default function Home() {
           {/* Enterprise + ED Selector */}
           {user && enterprise && (
             <div className="mb-4">
-              {/* Enterprise name */}
-              <div className={`flex items-center gap-2 px-1 mb-3`}>
-                <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                <span className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                  {enterprise.name}
-                </span>
-              </div>
+              {/* Enterprise selector (super_admin) or name (regular user) */}
+              {enterprise.allEnterprises && enterprise.allEnterprises.length > 1 ? (
+                <div className="mb-3">
+                  <p className={`text-xs font-medium mb-1.5 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Enterprise
+                  </p>
+                  <div className="relative">
+                    <select
+                      value={enterprise.id}
+                      onChange={(e) => switchEnterprise(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-lg text-sm font-semibold appearance-none cursor-pointer pr-8 ${
+                        darkMode
+                          ? 'bg-neutral-800 text-gray-200 border border-neutral-700 focus:border-blue-500'
+                          : 'bg-white text-gray-700 border border-gray-200 focus:border-blue-400'
+                      } focus:outline-none transition-colors`}
+                    >
+                      {enterprise.allEnterprises.map((ent) => (
+                        <option key={ent.id} value={ent.id}>{ent.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                  </div>
+                </div>
+              ) : (
+                <div className={`flex items-center gap-2 px-1 mb-3`}>
+                  <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                  <span className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    {enterprise.name}
+                  </span>
+                </div>
+              )}
               
               {/* ED multi-select chips */}
               {enterprise.eds.length > 0 && (

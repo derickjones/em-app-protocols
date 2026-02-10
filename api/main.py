@@ -125,6 +125,7 @@ class QueryRequest(BaseModel):
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
     sources: List[str] = Field(default=["local", "wikem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference)")
+    enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
 
 class ImageInfo(BaseModel):
     """Image information in query response"""
@@ -215,9 +216,53 @@ async def get_user_enterprise(user: UserProfile = Depends(get_current_user)):
     """
     Get the current user's enterprise with all EDs and their bundles.
     Returns the full hierarchy for the frontend to populate selectors.
+    
+    For super_admin users with no enterprise_id, returns ALL enterprises
+    so they can switch between them.
     """
     from google.cloud import firestore as fs
     db_client = fs.Client(project="clinical-assistant-457902")
+    
+    # Super admin with no enterprise - return all enterprises
+    if not user.enterprise_id and user.role == "super_admin":
+        try:
+            all_enterprises = []
+            for ent_doc in db_client.collection("enterprises").stream():
+                ent_data = ent_doc.to_dict()
+                eds = []
+                for ed_doc in ent_doc.reference.collection("eds").stream():
+                    ed_data = ed_doc.to_dict()
+                    ed_data["id"] = ed_doc.id
+                    bundles = []
+                    for bundle_doc in ed_doc.reference.collection("bundles").stream():
+                        bundle_data = bundle_doc.to_dict()
+                        bundle_data["id"] = bundle_doc.id
+                        bundles.append(bundle_data)
+                    ed_data["bundles"] = bundles
+                    eds.append(ed_data)
+                all_enterprises.append({
+                    "id": ent_doc.id,
+                    "name": ent_data.get("name", ""),
+                    "eds": eds,
+                })
+            
+            # Return first enterprise as primary, but include all in response
+            if not all_enterprises:
+                raise HTTPException(status_code=404, detail="No enterprises found")
+            
+            primary = all_enterprises[0]
+            return {
+                "id": primary["id"],
+                "name": primary["name"],
+                "eds": primary["eds"],
+                "userEdAccess": [ed["id"] for ed in primary["eds"]],
+                "userRole": user.role,
+                "allEnterprises": all_enterprises
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
     
     if not user.enterprise_id:
         raise HTTPException(status_code=404, detail="No enterprise associated with this user")
@@ -283,6 +328,10 @@ async def query_protocols(
         # Determine which EDs to search
         ed_ids = request.ed_ids if request.ed_ids else (user.ed_access if user else [])
         enterprise_id = user.enterprise_id if user else None
+        
+        # Super admin can override enterprise_id from request body
+        if user and user.role == "super_admin" and not enterprise_id and request.enterprise_id:
+            enterprise_id = request.enterprise_id
         
         # Get RAG results with ED/bundle filtering
         result = rag_service.query(
