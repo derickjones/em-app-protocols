@@ -859,6 +859,192 @@ async def make_super_admin(
         raise HTTPException(status_code=500, detail=f"Failed to make super admin: {str(e)}")
 
 
+# ============================================================================
+# ENTERPRISE / ED / BUNDLE CRUD ENDPOINTS
+# ============================================================================
+
+class CreateEnterprise(BaseModel):
+    """Request to create a new enterprise"""
+    id: str = Field(..., description="URL-safe enterprise ID (e.g. 'mayo-clinic')")
+    name: str = Field(..., description="Display name")
+    allowed_domains: List[str] = Field(default=[], description="Allowed email domains for auto-signup")
+
+
+class CreateED(BaseModel):
+    """Request to create a new ED under an enterprise"""
+    id: str = Field(..., description="URL-safe ED ID (e.g. 'rochester')")
+    name: str = Field(..., description="Display name")
+    location: str = Field(default="", description="Location description")
+
+
+class CreateBundle(BaseModel):
+    """Request to create a new bundle under an ED"""
+    id: str = Field(..., description="URL-safe bundle ID (e.g. 'acls')")
+    name: str = Field(..., description="Display name")
+    description: str = Field(default="", description="Bundle description")
+    icon: str = Field(default="folder", description="Icon name")
+    color: str = Field(default="#3B82F6", description="Hex color")
+
+
+@app.get("/admin/enterprises")
+async def list_all_firestore_enterprises(
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    List all enterprises with EDs and bundles from Firestore.
+    Super admin: sees all. Enterprise admin: sees their own.
+    """
+    if user.role not in ["super_admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        enterprises = []
+        enterprises_ref = db.collection("enterprises")
+        
+        for ent_doc in enterprises_ref.stream():
+            # Non-super admins only see their own enterprise
+            if user.role != "super_admin" and ent_doc.id != user.enterprise_id:
+                continue
+            
+            ent_data = ent_doc.to_dict()
+            ent_data["id"] = ent_doc.id
+            
+            # Get EDs
+            eds = []
+            for ed_doc in ent_doc.reference.collection("eds").stream():
+                ed_data = ed_doc.to_dict()
+                ed_data["id"] = ed_doc.id
+                
+                # Get bundles
+                bundles = []
+                for bundle_doc in ed_doc.reference.collection("bundles").stream():
+                    bundle_data = bundle_doc.to_dict()
+                    bundle_data["id"] = bundle_doc.id
+                    bundles.append(bundle_data)
+                
+                ed_data["bundles"] = bundles
+                eds.append(ed_data)
+            
+            ent_data["eds"] = eds
+            enterprises.append(ent_data)
+        
+        return {"enterprises": enterprises}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list enterprises: {str(e)}")
+
+
+@app.post("/admin/enterprises")
+async def create_enterprise(
+    data: CreateEnterprise,
+    user: UserProfile = Depends(get_current_user)
+):
+    """Create a new enterprise (super_admin only)"""
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can create enterprises")
+    
+    try:
+        doc_ref = db.collection("enterprises").document(data.id)
+        
+        # Check if already exists
+        if doc_ref.get().exists:
+            raise HTTPException(status_code=409, detail=f"Enterprise '{data.id}' already exists")
+        
+        doc_ref.set({
+            "name": data.name,
+            "slug": data.id,
+            "allowed_domains": data.allowed_domains,
+            "subscription_tier": "enterprise",
+            "settings": {
+                "allow_user_signup": True,
+                "max_protocols": 500,
+            },
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        })
+        
+        return {"status": "created", "id": data.id, "name": data.name}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create enterprise: {str(e)}")
+
+
+@app.post("/admin/enterprises/{enterprise_id}/eds")
+async def create_ed(
+    enterprise_id: str,
+    data: CreateED,
+    user: UserProfile = Depends(get_current_user)
+):
+    """Create a new ED under an enterprise (super_admin only)"""
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can create EDs")
+    
+    try:
+        ent_ref = db.collection("enterprises").document(enterprise_id)
+        if not ent_ref.get().exists:
+            raise HTTPException(status_code=404, detail=f"Enterprise '{enterprise_id}' not found")
+        
+        ed_ref = ent_ref.collection("eds").document(data.id)
+        if ed_ref.get().exists:
+            raise HTTPException(status_code=409, detail=f"ED '{data.id}' already exists")
+        
+        ed_ref.set({
+            "name": data.name,
+            "slug": data.id,
+            "location": data.location,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        })
+        
+        return {"status": "created", "enterprise_id": enterprise_id, "id": data.id, "name": data.name}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create ED: {str(e)}")
+
+
+@app.post("/admin/enterprises/{enterprise_id}/eds/{ed_id}/bundles")
+async def create_bundle(
+    enterprise_id: str,
+    ed_id: str,
+    data: CreateBundle,
+    user: UserProfile = Depends(get_current_user)
+):
+    """Create a new bundle under an ED (super_admin only)"""
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can create bundles")
+    
+    try:
+        ent_ref = db.collection("enterprises").document(enterprise_id)
+        if not ent_ref.get().exists:
+            raise HTTPException(status_code=404, detail=f"Enterprise '{enterprise_id}' not found")
+        
+        ed_ref = ent_ref.collection("eds").document(ed_id)
+        if not ed_ref.get().exists:
+            raise HTTPException(status_code=404, detail=f"ED '{ed_id}' not found")
+        
+        bundle_ref = ed_ref.collection("bundles").document(data.id)
+        if bundle_ref.get().exists:
+            raise HTTPException(status_code=409, detail=f"Bundle '{data.id}' already exists")
+        
+        bundle_ref.set({
+            "name": data.name,
+            "slug": data.id,
+            "description": data.description,
+            "icon": data.icon,
+            "color": data.color,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        })
+        
+        return {"status": "created", "enterprise_id": enterprise_id, "ed_id": ed_id, "id": data.id, "name": data.name}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create bundle: {str(e)}")
+
+
 # Run with: uvicorn main:app --reload
 if __name__ == "__main__":
     import uvicorn

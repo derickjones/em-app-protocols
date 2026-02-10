@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Building2, FolderOpen, FileText, Shield, Crown, Mail, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Check, X, Database } from "lucide-react";
+import { Users, Building2, FolderOpen, FileText, Shield, Crown, Mail, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Check, X, Database, MapPin, Palette } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -17,37 +17,56 @@ interface Admin {
   createdAt: string;
 }
 
-interface Protocol {
-  protocol_id: string;
-  org_id: string;
-  page_count: number;
-  char_count: number;
-  image_count: number;
-  processed_at: string;
+interface BundleData {
+  id: string;
+  name: string;
+  slug?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
 }
 
-interface HospitalData {
-  [bundle: string]: Protocol[];
+interface EDData {
+  id: string;
+  name: string;
+  slug?: string;
+  location?: string;
+  bundles: BundleData[];
 }
 
-interface AllHospitals {
-  [hospital: string]: HospitalData;
+interface EnterpriseData {
+  id: string;
+  name: string;
+  slug?: string;
+  allowed_domains?: string[];
+  eds: EDData[];
 }
 
 export default function OwnerDashboard() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
   
-  const [view, setView] = useState<"admins" | "protocols">("admins");
+  const [view, setView] = useState<"admins" | "hierarchy">("hierarchy");
   const [admins, setAdmins] = useState<Admin[]>([]);
-  const [allHospitals, setAllHospitals] = useState<AllHospitals>({});
-  const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
-  const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
+  const [enterprises, setEnterprises] = useState<EnterpriseData[]>([]);
+  const [expandedEnterprises, setExpandedEnterprises] = useState<Set<string>>(new Set());
+  const [expandedEDs, setExpandedEDs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminBundles, setNewAdminBundles] = useState<string[]>([]);
-  const [availableBundles, setAvailableBundles] = useState<string[]>([]);
+  const [availableEDs, setAvailableEDs] = useState<string[]>([]);
+
+  // Create modals
+  const [showCreateEnterprise, setShowCreateEnterprise] = useState(false);
+  const [showCreateED, setShowCreateED] = useState<string | null>(null); // enterprise_id or null
+  const [showCreateBundle, setShowCreateBundle] = useState<{ enterpriseId: string; edId: string } | null>(null);
+
+  // Form state
+  const [newEnterprise, setNewEnterprise] = useState({ id: "", name: "", domains: "" });
+  const [newED, setNewED] = useState({ id: "", name: "", location: "" });
+  const [newBundle, setNewBundle] = useState({ id: "", name: "", description: "", color: "#3B82F6" });
+  const [creating, setCreating] = useState(false);
 
   // Check if user is owner or super_admin
   useEffect(() => {
@@ -56,17 +75,20 @@ export default function OwnerDashboard() {
     }
   }, [user, userProfile, authLoading, router]);
 
+  const isSuperAdmin = userProfile?.role === "super_admin";
+
   // Fetch admins for the enterprise
   const fetchAdmins = async () => {
-    if (!userProfile?.enterpriseId) return;
+    if (!userProfile?.enterpriseId && !isSuperAdmin) return;
     
     setLoading(true);
     try {
       const token = await user?.getIdToken();
-      const res = await fetch(`${API_URL}/admin/users?enterprise_id=${userProfile.enterpriseId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const url = userProfile?.enterpriseId
+        ? `${API_URL}/admin/users?enterprise_id=${userProfile.enterpriseId}`
+        : `${API_URL}/admin/users`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
       });
       
       if (res.ok) {
@@ -80,23 +102,28 @@ export default function OwnerDashboard() {
     }
   };
 
-  // Fetch all enterprises and protocols
-  const fetchHospitals = async () => {
+  // Fetch enterprises hierarchy from Firestore
+  const fetchEnterprises = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/enterprises`);
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/enterprises`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
-        const hospitals = data.hospitals || {};
-        setAllHospitals(hospitals);
+        setEnterprises(data.enterprises || []);
         
-        // Extract available EDs for this enterprise
-        if (userProfile?.enterpriseId && hospitals[userProfile.enterpriseId]) {
-          setAvailableBundles(Object.keys(hospitals[userProfile.enterpriseId]));
+        // Extract available EDs for admin form
+        if (userProfile?.enterpriseId) {
+          const ent = (data.enterprises || []).find((e: EnterpriseData) => e.id === userProfile.enterpriseId);
+          if (ent) {
+            setAvailableEDs(ent.eds.map((ed: EDData) => ed.id));
+          }
         }
       }
     } catch (err) {
-      console.error("Failed to fetch hospitals:", err);
+      console.error("Failed to fetch enterprises:", err);
     } finally {
       setLoading(false);
     }
@@ -105,7 +132,7 @@ export default function OwnerDashboard() {
   useEffect(() => {
     if (userProfile?.role === "super_admin" || userProfile?.role === "admin") {
       fetchAdmins();
-      fetchHospitals();
+      fetchEnterprises();
     }
   }, [userProfile]);
 
@@ -149,9 +176,7 @@ export default function OwnerDashboard() {
       const token = await user?.getIdToken();
       const res = await fetch(`${API_URL}/admin/users/${uid}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       
       if (res.ok) {
@@ -165,31 +190,130 @@ export default function OwnerDashboard() {
     }
   };
 
-  const toggleHospital = (hospital: string) => {
-    const newExpanded = new Set(expandedHospitals);
-    if (newExpanded.has(hospital)) {
-      newExpanded.delete(hospital);
-    } else {
-      newExpanded.add(hospital);
+  const handleCreateEnterprise = async () => {
+    if (!newEnterprise.id.trim() || !newEnterprise.name.trim()) return;
+    setCreating(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/enterprises`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: newEnterprise.id.toLowerCase().replace(/\s+/g, "-"),
+          name: newEnterprise.name,
+          allowed_domains: newEnterprise.domains
+            .split(",")
+            .map((d) => d.trim())
+            .filter(Boolean),
+        }),
+      });
+      
+      if (res.ok) {
+        setShowCreateEnterprise(false);
+        setNewEnterprise({ id: "", name: "", domains: "" });
+        fetchEnterprises();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to create enterprise");
+      }
+    } catch (err) {
+      console.error("Failed to create enterprise:", err);
+      alert("Failed to create enterprise");
+    } finally {
+      setCreating(false);
     }
-    setExpandedHospitals(newExpanded);
   };
 
-  const toggleBundle = (key: string) => {
-    const newExpanded = new Set(expandedBundles);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
+  const handleCreateED = async () => {
+    if (!showCreateED || !newED.id.trim() || !newED.name.trim()) return;
+    setCreating(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/enterprises/${showCreateED}/eds`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: newED.id.toLowerCase().replace(/\s+/g, "-"),
+          name: newED.name,
+          location: newED.location,
+        }),
+      });
+      
+      if (res.ok) {
+        setShowCreateED(null);
+        setNewED({ id: "", name: "", location: "" });
+        fetchEnterprises();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to create ED");
+      }
+    } catch (err) {
+      console.error("Failed to create ED:", err);
+      alert("Failed to create ED");
+    } finally {
+      setCreating(false);
     }
-    setExpandedBundles(newExpanded);
   };
 
-  const toggleBundleSelection = (bundle: string) => {
-    setNewAdminBundles(prev => 
-      prev.includes(bundle) 
-        ? prev.filter(b => b !== bundle)
-        : [...prev, bundle]
+  const handleCreateBundle = async () => {
+    if (!showCreateBundle || !newBundle.id.trim() || !newBundle.name.trim()) return;
+    setCreating(true);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(
+        `${API_URL}/admin/enterprises/${showCreateBundle.enterpriseId}/eds/${showCreateBundle.edId}/bundles`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            id: newBundle.id.toLowerCase().replace(/\s+/g, "-"),
+            name: newBundle.name,
+            description: newBundle.description,
+            color: newBundle.color,
+          }),
+        }
+      );
+      
+      if (res.ok) {
+        setShowCreateBundle(null);
+        setNewBundle({ id: "", name: "", description: "", color: "#3B82F6" });
+        fetchEnterprises();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to create bundle");
+      }
+    } catch (err) {
+      console.error("Failed to create bundle:", err);
+      alert("Failed to create bundle");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const toggleEnterprise = (id: string) => {
+    const next = new Set(expandedEnterprises);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setExpandedEnterprises(next);
+  };
+
+  const toggleED = (key: string) => {
+    const next = new Set(expandedEDs);
+    next.has(key) ? next.delete(key) : next.add(key);
+    setExpandedEDs(next);
+  };
+
+  const toggleEDSelection = (ed: string) => {
+    setNewAdminBundles((prev) =>
+      prev.includes(ed) ? prev.filter((b) => b !== ed) : [...prev, ed]
     );
   };
 
@@ -217,7 +341,7 @@ export default function OwnerDashboard() {
             <Crown className="w-6 h-6 text-yellow-500" />
             <span className="text-xl font-normal text-white">Owner Dashboard</span>
             <span className="text-xs text-[#9aa0a6]">•</span>
-            <span className="text-sm text-[#8ab4f8]">{userProfile.enterpriseName || userProfile.enterpriseId}</span>
+            <span className="text-sm text-[#8ab4f8]">{userProfile.enterpriseName || userProfile.enterpriseId || "System Admin"}</span>
           </div>
           <Link
             href="/admin"
@@ -231,6 +355,17 @@ export default function OwnerDashboard() {
         <div className="px-6 pt-4">
           <div className="flex gap-2">
             <button
+              onClick={() => setView("hierarchy")}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${
+                view === "hierarchy"
+                  ? "bg-[#8ab4f8] text-[#131314]"
+                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              Enterprises & EDs
+            </button>
+            <button
               onClick={() => setView("admins")}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${
                 view === "admins"
@@ -241,25 +376,376 @@ export default function OwnerDashboard() {
               <Users className="w-4 h-4" />
               Admin Users
             </button>
-            <button
-              onClick={() => setView("protocols")}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${
-                view === "protocols"
-                  ? "bg-[#8ab4f8] text-[#131314]"
-                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Database className="w-4 h-4" />
-              Protocols & Bundles
-            </button>
           </div>
         </div>
 
         {/* Main Content */}
         <div className="flex-1 overflow-auto p-6">
           <div className="max-w-5xl mx-auto space-y-6">
-            
-            {/* Admins View */}
+
+            {/* ===== Hierarchy View ===== */}
+            {view === "hierarchy" && (
+              <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
+                <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
+                  <h2 className="text-lg font-medium text-white flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-[#8ab4f8]" />
+                    Enterprises → EDs → Bundles
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={fetchEnterprises}
+                      disabled={loading}
+                      className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                      Refresh
+                    </button>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => setShowCreateEnterprise(true)}
+                        className="bg-[#8ab4f8] text-[#131314] px-4 py-2 rounded-full text-sm font-medium hover:bg-[#aecbfa] transition-colors flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        New Enterprise
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {enterprises.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Building2 className="w-12 h-12 mx-auto text-[#5f6368] mb-3" />
+                    <p className="text-[#9aa0a6]">No enterprises found</p>
+                    <p className="text-sm text-[#5f6368]">Create an enterprise to get started</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-[#3c4043]">
+                    {enterprises.map((enterprise) => (
+                      <div key={enterprise.id}>
+                        {/* Enterprise row */}
+                        <button
+                          onClick={() => toggleEnterprise(enterprise.id)}
+                          className="w-full px-5 py-4 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
+                        >
+                          {expandedEnterprises.has(enterprise.id) ? (
+                            <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                          )}
+                          <Building2 className="w-5 h-5 text-[#8ab4f8]" />
+                          <div className="text-left">
+                            <span className="font-medium text-white">{enterprise.name}</span>
+                            <span className="text-xs text-[#5f6368] ml-2">{enterprise.id}</span>
+                          </div>
+                          {enterprise.allowed_domains && enterprise.allowed_domains.length > 0 && (
+                            <span className="text-xs text-[#5f6368] ml-2">
+                              {enterprise.allowed_domains.join(", ")}
+                            </span>
+                          )}
+                          <span className="text-xs text-[#5f6368] ml-auto">
+                            {enterprise.eds.length} ED(s)
+                          </span>
+                        </button>
+
+                        {/* EDs under enterprise */}
+                        {expandedEnterprises.has(enterprise.id) && (
+                          <div className="bg-[#1a1a1b]">
+                            {enterprise.eds.map((ed) => {
+                              const edKey = `${enterprise.id}/${ed.id}`;
+                              return (
+                                <div key={edKey}>
+                                  {/* ED row */}
+                                  <button
+                                    onClick={() => toggleED(edKey)}
+                                    className="w-full pl-12 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
+                                  >
+                                    {expandedEDs.has(edKey) ? (
+                                      <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                                    )}
+                                    <MapPin className="w-4 h-4 text-green-400" />
+                                    <div className="text-left">
+                                      <span className="text-[#e8eaed]">{ed.name}</span>
+                                      <span className="text-xs text-[#5f6368] ml-2">{ed.id}</span>
+                                    </div>
+                                    {ed.location && (
+                                      <span className="text-xs text-[#5f6368] ml-2">{ed.location}</span>
+                                    )}
+                                    <span className="text-xs text-[#5f6368] ml-auto">
+                                      {ed.bundles.length} bundle(s)
+                                    </span>
+                                  </button>
+
+                                  {/* Bundles under ED */}
+                                  {expandedEDs.has(edKey) && (
+                                    <div className="bg-[#131314]">
+                                      {ed.bundles.map((bundle) => (
+                                        <div
+                                          key={`${edKey}/${bundle.id}`}
+                                          className="pl-20 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
+                                        >
+                                          <div
+                                            className="w-3 h-3 rounded-full flex-shrink-0"
+                                            style={{ backgroundColor: bundle.color || "#3B82F6" }}
+                                          />
+                                          <FolderOpen className="w-4 h-4 text-yellow-500" />
+                                          <div>
+                                            <span className="text-[#e8eaed]">{bundle.name}</span>
+                                            <span className="text-xs text-[#5f6368] ml-2">{bundle.id}</span>
+                                            {bundle.description && (
+                                              <p className="text-xs text-[#5f6368] mt-0.5">{bundle.description}</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+
+                                      {/* Add Bundle button */}
+                                      {isSuperAdmin && (
+                                        <button
+                                          onClick={() => setShowCreateBundle({ enterpriseId: enterprise.id, edId: ed.id })}
+                                          className="pl-20 pr-5 py-3 w-full flex items-center gap-3 text-[#8ab4f8] hover:bg-[#8ab4f8]/10 transition-colors"
+                                        >
+                                          <Plus className="w-4 h-4" />
+                                          <span className="text-sm">Add Bundle</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Add ED button */}
+                            {isSuperAdmin && (
+                              <button
+                                onClick={() => setShowCreateED(enterprise.id)}
+                                className="pl-12 pr-5 py-3 w-full flex items-center gap-3 text-[#8ab4f8] hover:bg-[#8ab4f8]/10 transition-colors border-t border-[#3c4043]/50"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span className="text-sm">Add ED</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== Create Enterprise Modal ===== */}
+            {showCreateEnterprise && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-6 w-full max-w-md mx-4">
+                  <h3 className="text-xl font-medium text-white mb-4 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-[#8ab4f8]" />
+                    New Enterprise
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">Enterprise Name</label>
+                      <input
+                        type="text"
+                        value={newEnterprise.name}
+                        onChange={(e) => {
+                          const name = e.target.value;
+                          setNewEnterprise({
+                            ...newEnterprise,
+                            name,
+                            id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+                          });
+                        }}
+                        placeholder="Mayo Clinic"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">ID (URL-safe)</label>
+                      <input
+                        type="text"
+                        value={newEnterprise.id}
+                        onChange={(e) => setNewEnterprise({ ...newEnterprise, id: e.target.value })}
+                        placeholder="mayo-clinic"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">Allowed Domains (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={newEnterprise.domains}
+                        onChange={(e) => setNewEnterprise({ ...newEnterprise, domains: e.target.value })}
+                        placeholder="mayo.edu, mayo.org"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => { setShowCreateEnterprise(false); setNewEnterprise({ id: "", name: "", domains: "" }); }}
+                      className="flex-1 px-4 py-3 bg-[#3c4043] text-white rounded-full hover:bg-[#5f6368] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCreateEnterprise}
+                      disabled={!newEnterprise.id.trim() || !newEnterprise.name.trim() || creating}
+                      className="flex-1 px-4 py-3 bg-[#8ab4f8] text-[#131314] rounded-full font-medium hover:bg-[#aecbfa] disabled:bg-[#3c4043] disabled:text-[#5f6368] disabled:cursor-not-allowed transition-colors"
+                    >
+                      {creating ? "Creating..." : "Create Enterprise"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Create ED Modal ===== */}
+            {showCreateED && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-6 w-full max-w-md mx-4">
+                  <h3 className="text-xl font-medium text-white mb-4 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-green-400" />
+                    New ED in <span className="text-[#8ab4f8]">{showCreateED}</span>
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">ED Name</label>
+                      <input
+                        type="text"
+                        value={newED.name}
+                        onChange={(e) => {
+                          const name = e.target.value;
+                          setNewED({
+                            ...newED,
+                            name,
+                            id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+                          });
+                        }}
+                        placeholder="Rochester"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">ID (URL-safe)</label>
+                      <input
+                        type="text"
+                        value={newED.id}
+                        onChange={(e) => setNewED({ ...newED, id: e.target.value })}
+                        placeholder="rochester"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">Location</label>
+                      <input
+                        type="text"
+                        value={newED.location}
+                        onChange={(e) => setNewED({ ...newED, location: e.target.value })}
+                        placeholder="Rochester, MN"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => { setShowCreateED(null); setNewED({ id: "", name: "", location: "" }); }}
+                      className="flex-1 px-4 py-3 bg-[#3c4043] text-white rounded-full hover:bg-[#5f6368] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCreateED}
+                      disabled={!newED.id.trim() || !newED.name.trim() || creating}
+                      className="flex-1 px-4 py-3 bg-[#8ab4f8] text-[#131314] rounded-full font-medium hover:bg-[#aecbfa] disabled:bg-[#3c4043] disabled:text-[#5f6368] disabled:cursor-not-allowed transition-colors"
+                    >
+                      {creating ? "Creating..." : "Create ED"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Create Bundle Modal ===== */}
+            {showCreateBundle && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-6 w-full max-w-md mx-4">
+                  <h3 className="text-xl font-medium text-white mb-4 flex items-center gap-2">
+                    <FolderOpen className="w-5 h-5 text-yellow-500" />
+                    New Bundle in <span className="text-[#8ab4f8]">{showCreateBundle.edId}</span>
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">Bundle Name</label>
+                      <input
+                        type="text"
+                        value={newBundle.name}
+                        onChange={(e) => {
+                          const name = e.target.value;
+                          setNewBundle({
+                            ...newBundle,
+                            name,
+                            id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+                          });
+                        }}
+                        placeholder="ACLS"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">ID (URL-safe)</label>
+                      <input
+                        type="text"
+                        value={newBundle.id}
+                        onChange={(e) => setNewBundle({ ...newBundle, id: e.target.value })}
+                        placeholder="acls"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">Description</label>
+                      <input
+                        type="text"
+                        value={newBundle.description}
+                        onChange={(e) => setNewBundle({ ...newBundle, description: e.target.value })}
+                        placeholder="Advanced Cardiac Life Support algorithms"
+                        className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[#9aa0a6] mb-2">Color</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={newBundle.color}
+                          onChange={(e) => setNewBundle({ ...newBundle, color: e.target.value })}
+                          className="w-10 h-10 rounded-full border border-[#3c4043] bg-transparent cursor-pointer"
+                        />
+                        <span className="text-sm text-[#9aa0a6]">{newBundle.color}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => { setShowCreateBundle(null); setNewBundle({ id: "", name: "", description: "", color: "#3B82F6" }); }}
+                      className="flex-1 px-4 py-3 bg-[#3c4043] text-white rounded-full hover:bg-[#5f6368] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCreateBundle}
+                      disabled={!newBundle.id.trim() || !newBundle.name.trim() || creating}
+                      className="flex-1 px-4 py-3 bg-[#8ab4f8] text-[#131314] rounded-full font-medium hover:bg-[#aecbfa] disabled:bg-[#3c4043] disabled:text-[#5f6368] disabled:cursor-not-allowed transition-colors"
+                    >
+                      {creating ? "Creating..." : "Create Bundle"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Admins View ===== */}
             {view === "admins" && (
               <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
                 <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
@@ -305,17 +791,17 @@ export default function OwnerDashboard() {
                         </div>
 
                         <div>
-                          <label className="block text-sm text-[#9aa0a6] mb-2">Bundle Access</label>
+                          <label className="block text-sm text-[#9aa0a6] mb-2">ED Access</label>
                           <div className="space-y-2">
-                            {availableBundles.map((bundle) => (
-                              <label key={bundle} className="flex items-center gap-3 px-4 py-2 bg-[#131314] rounded-full cursor-pointer hover:bg-[#2c2d2e] transition-colors">
+                            {availableEDs.map((ed) => (
+                              <label key={ed} className="flex items-center gap-3 px-4 py-2 bg-[#131314] rounded-full cursor-pointer hover:bg-[#2c2d2e] transition-colors">
                                 <input
                                   type="checkbox"
-                                  checked={newAdminBundles.includes(bundle)}
-                                  onChange={() => toggleBundleSelection(bundle)}
+                                  checked={newAdminBundles.includes(ed)}
+                                  onChange={() => toggleEDSelection(ed)}
                                   className="w-4 h-4"
                                 />
-                                <span className="text-white">{bundle}</span>
+                                <span className="text-white">{ed}</span>
                               </label>
                             ))}
                           </div>
@@ -391,112 +877,6 @@ export default function OwnerDashboard() {
                       </li>
                     ))}
                   </ul>
-                )}
-              </div>
-            )}
-
-            {/* Protocols View */}
-            {view === "protocols" && (
-              <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
-                <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
-                  <h2 className="text-lg font-medium text-white flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-[#8ab4f8]" />
-                    All Protocols & Bundles
-                  </h2>
-                  <button
-                    onClick={fetchHospitals}
-                    disabled={loading}
-                    className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                    Refresh
-                  </button>
-                </div>
-
-                {Object.keys(allHospitals).length === 0 ? (
-                  <div className="p-8 text-center">
-                    <Building2 className="w-12 h-12 mx-auto text-[#5f6368] mb-3" />
-                    <p className="text-[#9aa0a6]">No protocols found</p>
-                    <p className="text-sm text-[#5f6368]">Upload protocols to see them here</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-[#3c4043]">
-                    {Object.entries(allHospitals)
-                      .filter(([hospital]) => !userProfile.enterpriseId || hospital === userProfile.enterpriseId)
-                      .sort()
-                      .map(([hospital, bundles]) => (
-                        <div key={hospital}>
-                          <button
-                            onClick={() => toggleHospital(hospital)}
-                            className="w-full px-5 py-4 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
-                          >
-                            {expandedHospitals.has(hospital) ? (
-                              <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
-                            )}
-                            <Building2 className="w-5 h-5 text-[#8ab4f8]" />
-                            <span className="font-medium text-white">{hospital}</span>
-                            <span className="text-xs text-[#5f6368] ml-auto">
-                              {Object.keys(bundles).length} bundle(s)
-                            </span>
-                          </button>
-
-                          {expandedHospitals.has(hospital) && (
-                            <div className="bg-[#1a1a1b]">
-                              {Object.entries(bundles).sort().map(([bundle, bundleProtocols]) => {
-                                const bundleKey = `${hospital}/${bundle}`;
-                                return (
-                                  <div key={bundleKey}>
-                                    <button
-                                      onClick={() => toggleBundle(bundleKey)}
-                                      className="w-full pl-12 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
-                                    >
-                                      {expandedBundles.has(bundleKey) ? (
-                                        <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
-                                      ) : (
-                                        <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
-                                      )}
-                                      <FolderOpen className="w-4 h-4 text-yellow-500" />
-                                      <span className="text-[#e8eaed]">{bundle}</span>
-                                      <span className="text-xs text-[#5f6368] ml-auto">
-                                        {bundleProtocols.length} protocol(s)
-                                      </span>
-                                    </button>
-
-                                    {expandedBundles.has(bundleKey) && (
-                                      <ul className="bg-[#131314]">
-                                        {bundleProtocols.map((protocol) => (
-                                          <li
-                                            key={protocol.protocol_id}
-                                            className="pl-20 pr-5 py-3 flex items-center justify-between hover:bg-[#2c2d2e] transition-colors"
-                                          >
-                                            <div className="flex items-center gap-3">
-                                              <FileText className="w-4 h-4 text-[#5f6368]" />
-                                              <div>
-                                                <span className="text-[#e8eaed]">
-                                                  {protocol.protocol_id.replace(/_/g, " ")}
-                                                </span>
-                                                <p className="text-xs text-[#5f6368]">
-                                                  {protocol.page_count} pages • {protocol.image_count} images • {protocol.char_count?.toLocaleString() || 0} chars
-                                                </p>
-                                              </div>
-                                            </div>
-                                            <span className="text-xs text-[#5f6368]">
-                                              {new Date(protocol.processed_at).toLocaleDateString()}
-                                            </span>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                  </div>
                 )}
               </div>
             )}
