@@ -1045,6 +1045,106 @@ async def create_bundle(
         raise HTTPException(status_code=500, detail=f"Failed to create bundle: {str(e)}")
 
 
+def _delete_collection(coll_ref):
+    """Recursively delete all documents in a collection."""
+    for doc in coll_ref.stream():
+        # Delete sub-collections first
+        for sub_coll in doc.reference.collections():
+            _delete_collection(sub_coll)
+        doc.reference.delete()
+
+
+@app.delete("/admin/enterprises/{enterprise_id}/eds/{ed_id}/bundles/{bundle_id}")
+async def delete_bundle(
+    enterprise_id: str,
+    ed_id: str,
+    bundle_id: str,
+    user: UserProfile = Depends(get_current_user)
+):
+    """Delete a bundle from Firestore (super_admin only)"""
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can delete bundles")
+    
+    try:
+        bundle_ref = (
+            db.collection("enterprises").document(enterprise_id)
+            .collection("eds").document(ed_id)
+            .collection("bundles").document(bundle_id)
+        )
+        
+        if not bundle_ref.get().exists:
+            raise HTTPException(status_code=404, detail=f"Bundle '{bundle_id}' not found")
+        
+        bundle_ref.delete()
+        return {"status": "deleted", "enterprise_id": enterprise_id, "ed_id": ed_id, "bundle_id": bundle_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete bundle: {str(e)}")
+
+
+@app.delete("/admin/enterprises/{enterprise_id}/eds/{ed_id}")
+async def delete_ed(
+    enterprise_id: str,
+    ed_id: str,
+    user: UserProfile = Depends(get_current_user)
+):
+    """Delete an ED and all its bundles from Firestore (super_admin only)"""
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can delete EDs")
+    
+    try:
+        ed_ref = (
+            db.collection("enterprises").document(enterprise_id)
+            .collection("eds").document(ed_id)
+        )
+        
+        if not ed_ref.get().exists:
+            raise HTTPException(status_code=404, detail=f"ED '{ed_id}' not found")
+        
+        # Delete all bundles under this ED first
+        _delete_collection(ed_ref.collection("bundles"))
+        ed_ref.delete()
+        
+        return {"status": "deleted", "enterprise_id": enterprise_id, "ed_id": ed_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete ED: {str(e)}")
+
+
+@app.delete("/admin/enterprises/{enterprise_id}")
+async def delete_enterprise(
+    enterprise_id: str,
+    user: UserProfile = Depends(get_current_user)
+):
+    """Delete an enterprise and all its EDs/bundles from Firestore (super_admin only)"""
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can delete enterprises")
+    
+    try:
+        ent_ref = db.collection("enterprises").document(enterprise_id)
+        
+        if not ent_ref.get().exists:
+            raise HTTPException(status_code=404, detail=f"Enterprise '{enterprise_id}' not found")
+        
+        # Delete all EDs (and their bundles) under this enterprise
+        for ed_doc in ent_ref.collection("eds").stream():
+            _delete_collection(ed_doc.reference.collection("bundles"))
+            ed_doc.reference.delete()
+        
+        ent_ref.delete()
+        
+        return {"status": "deleted", "enterprise_id": enterprise_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete enterprise: {str(e)}")
+
+
 # Run with: uvicorn main:app --reload
 if __name__ == "__main__":
     import uvicorn

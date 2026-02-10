@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database } from "lucide-react";
+import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
@@ -15,12 +16,34 @@ interface Protocol {
   processed_at: string;
 }
 
+interface BundleInfo {
+  id: string;
+  name: string;
+  color?: string;
+  description?: string;
+}
+
+interface EDInfo {
+  id: string;
+  name: string;
+  location?: string;
+  bundles: BundleInfo[];
+}
+
+interface EnterpriseInfo {
+  id: string;
+  name: string;
+  eds: EDInfo[];
+}
+
 interface HospitalData {
-  [bundle: string]: Protocol[];
+  [ed: string]: {
+    [bundle: string]: Protocol[];
+  };
 }
 
 interface AllHospitals {
-  [hospital: string]: HospitalData;
+  [enterprise: string]: HospitalData;
 }
 
 interface UploadStatus {
@@ -32,13 +55,20 @@ interface UploadStatus {
 }
 
 export default function AdminPage() {
-  const [hospitalId, setHospitalId] = useState("");
-  const [bundleName, setBundleName] = useState("");
+  const { user, userProfile, loading: authLoading } = useAuth();
+
+  // Selection state
+  const [enterprises, setEnterprises] = useState<EnterpriseInfo[]>([]);
+  const [selectedEnterprise, setSelectedEnterprise] = useState("");
+  const [selectedED, setSelectedED] = useState("");
+  const [selectedBundle, setSelectedBundle] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   const [viewMode, setViewMode] = useState<"upload" | "browse">("upload");
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [allHospitals, setAllHospitals] = useState<AllHospitals>({});
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
+  const [expandedEDs, setExpandedEDs] = useState<Set<string>>(new Set());
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -47,7 +77,49 @@ export default function AdminPage() {
   const [reindexing, setReindexing] = useState(false);
   const [reindexStatus, setReindexStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
 
-  const orgId = hospitalId && bundleName ? `${hospitalId}/${bundleName}` : hospitalId;
+  // Derived helpers
+  const currentEnterprise = enterprises.find((e) => e.id === selectedEnterprise);
+  const currentED = currentEnterprise?.eds.find((ed) => ed.id === selectedED);
+  const currentBundle = currentED?.bundles.find((b) => b.id === selectedBundle);
+
+  // Fetch enterprises hierarchy from Firestore
+  useEffect(() => {
+    if (!user) return;
+    const fetchEnterprises = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`${API_URL}/admin/enterprises`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const ents = data.enterprises || [];
+          setEnterprises(ents);
+
+          // Auto-select if user has an enterprise
+          if (userProfile?.enterpriseId) {
+            setSelectedEnterprise(userProfile.enterpriseId);
+            const ent = ents.find((e: EnterpriseInfo) => e.id === userProfile.enterpriseId);
+            if (ent && ent.eds.length === 1) {
+              setSelectedED(ent.eds[0].id);
+            }
+          } else if (ents.length === 1) {
+            setSelectedEnterprise(ents[0].id);
+            if (ents[0].eds.length === 1) {
+              setSelectedED(ents[0].eds[0].id);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch enterprises:", err);
+      }
+    };
+    fetchEnterprises();
+  }, [user, userProfile]);
+
+  const orgId = selectedEnterprise && selectedED && selectedBundle
+    ? `${selectedEnterprise}/${selectedED}/${selectedBundle}`
+    : "";
 
   const fetchAllHospitals = useCallback(async () => {
     setLoading(true);
@@ -65,7 +137,7 @@ export default function AdminPage() {
   }, []);
 
   const fetchProtocols = useCallback(async () => {
-    if (!hospitalId) return;
+    if (!orgId) return;
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/protocols?org_id=${encodeURIComponent(orgId)}`);
@@ -78,7 +150,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [orgId, hospitalId]);
+  }, [orgId]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -107,16 +179,26 @@ export default function AdminPage() {
     setExpandedBundles(newExpanded);
   };
 
-  const handleDelete = async (deleteOrgId: string, protocolId: string) => {
+  const toggleED = (key: string) => {
+    const newExpanded = new Set(expandedEDs);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedEDs(newExpanded);
+  };
+
+  const handleDelete = async (enterpriseId: string, edId: string, bundleId: string, protocolId: string) => {
     if (!confirm(`Delete protocol "${protocolId.replace(/_/g, " ")}"? This cannot be undone.`)) {
       return;
     }
 
-    const deleteKey = `${deleteOrgId}/${protocolId}`;
+    const deleteKey = `${enterpriseId}/${edId}/${bundleId}/${protocolId}`;
     setDeleting(deleteKey);
 
     try {
-      const res = await fetch(`${API_URL}/protocols/${encodeURIComponent(deleteOrgId)}/${encodeURIComponent(protocolId)}`, {
+      const res = await fetch(`${API_URL}/protocols/${encodeURIComponent(enterpriseId)}/${encodeURIComponent(edId)}/${encodeURIComponent(bundleId)}/${encodeURIComponent(protocolId)}`, {
         method: "DELETE",
       });
 
@@ -136,7 +218,7 @@ export default function AdminPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (hospitalId.trim() && bundleName.trim()) {
+    if (selectedEnterprise && selectedED && selectedBundle) {
       setIsAuthenticated(true);
     }
   };
@@ -198,7 +280,9 @@ export default function AdminPage() {
       try {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("org_id", orgId);
+        formData.append("enterprise_id", selectedEnterprise);
+        formData.append("ed_id", selectedED);
+        formData.append("bundle_id", selectedBundle);
 
         setUploadStatus({ 
           status: "uploading", 
@@ -314,34 +398,70 @@ export default function AdminPage() {
               <form onSubmit={handleLogin} className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-6 space-y-4">
                 <div>
                   <label className="block text-sm text-[#9aa0a6] mb-2">
-                    Hospital / Organization
+                    Enterprise
                   </label>
-                  <input
-                    type="text"
-                    value={hospitalId}
-                    onChange={(e) => setHospitalId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                    placeholder="e.g., mayo-clinic"
-                    className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8] transition-colors"
-                  />
+                  <select
+                    value={selectedEnterprise}
+                    onChange={(e) => {
+                      setSelectedEnterprise(e.target.value);
+                      setSelectedED("");
+                      setSelectedBundle("");
+                    }}
+                    className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white focus:outline-none focus:border-[#8ab4f8] transition-colors appearance-none cursor-pointer"
+                  >
+                    <option value="" className="bg-[#131314]">Select enterprise...</option>
+                    {enterprises.map((ent) => (
+                      <option key={ent.id} value={ent.id} className="bg-[#131314]">
+                        {ent.name} ({ent.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-[#9aa0a6] mb-2">
+                    Emergency Department
+                  </label>
+                  <select
+                    value={selectedED}
+                    onChange={(e) => {
+                      setSelectedED(e.target.value);
+                      setSelectedBundle("");
+                    }}
+                    disabled={!selectedEnterprise}
+                    className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white focus:outline-none focus:border-[#8ab4f8] transition-colors appearance-none cursor-pointer disabled:text-[#5f6368] disabled:cursor-not-allowed"
+                  >
+                    <option value="" className="bg-[#131314]">Select ED...</option>
+                    {currentEnterprise?.eds.map((ed) => (
+                      <option key={ed.id} value={ed.id} className="bg-[#131314]">
+                        {ed.name}{ed.location ? ` — ${ed.location}` : ""} ({ed.id})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm text-[#9aa0a6] mb-2">
                     Protocol Bundle
                   </label>
-                  <input
-                    type="text"
-                    value={bundleName}
-                    onChange={(e) => setBundleName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                    placeholder="e.g., emergency, cardiac, trauma"
-                    className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8] transition-colors"
-                  />
+                  <select
+                    value={selectedBundle}
+                    onChange={(e) => setSelectedBundle(e.target.value)}
+                    disabled={!selectedED}
+                    className="w-full px-4 py-3 bg-[#131314] border border-[#3c4043] rounded-full text-white focus:outline-none focus:border-[#8ab4f8] transition-colors appearance-none cursor-pointer disabled:text-[#5f6368] disabled:cursor-not-allowed"
+                  >
+                    <option value="" className="bg-[#131314]">Select bundle...</option>
+                    {currentED?.bundles.map((b) => (
+                      <option key={b.id} value={b.id} className="bg-[#131314]">
+                        {b.name}{b.description ? ` — ${b.description}` : ""} ({b.id})
+                      </option>
+                    ))}
+                  </select>
                   <p className="text-xs text-[#5f6368] mt-2 px-2">
-                    Bundles help organize protocols by specialty or use case
+                    Bundles organize protocols by specialty or use case
                   </p>
                 </div>
                 <button
                   type="submit"
-                  disabled={!hospitalId.trim() || !bundleName.trim()}
+                  disabled={!selectedEnterprise || !selectedED || !selectedBundle}
                   className="w-full py-3 bg-[#8ab4f8] text-[#131314] rounded-full font-medium hover:bg-[#aecbfa] disabled:bg-[#3c4043] disabled:text-[#5f6368] disabled:cursor-not-allowed transition-all"
                 >
                   Continue
@@ -376,9 +496,11 @@ export default function AdminPage() {
               EM Protocols
             </Link>
             <span className="text-xs text-[#9aa0a6]">•</span>
-            <span className="text-sm text-white">{hospitalId}</span>
+            <span className="text-sm text-white">{currentEnterprise?.name || selectedEnterprise}</span>
             <span className="text-xs text-[#9aa0a6]">/</span>
-            <span className="text-sm text-[#8ab4f8]">{bundleName}</span>
+            <span className="text-sm text-green-400">{currentED?.name || selectedED}</span>
+            <span className="text-xs text-[#9aa0a6]">/</span>
+            <span className="text-sm text-[#8ab4f8]">{currentBundle?.name || selectedBundle}</span>
           </div>
           <button
             onClick={() => setIsAuthenticated(false)}
@@ -409,7 +531,7 @@ export default function AdminPage() {
                     : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
                 }`}
               >
-                Browse All Hospitals
+                Browse All Enterprises
               </button>
             </div>
             
@@ -515,7 +637,7 @@ export default function AdminPage() {
                 <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
                   <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
                     <h2 className="text-lg font-medium text-white">
-                      Protocols in {hospitalId}/{bundleName}
+                      Protocols in {currentEnterprise?.name || selectedEnterprise} / {currentED?.name || selectedED} / {currentBundle?.name || selectedBundle}
                     </h2>
                     <button
                       onClick={fetchProtocols}
@@ -551,11 +673,11 @@ export default function AdminPage() {
                                 {new Date(protocol.processed_at).toLocaleDateString()}
                               </p>
                               <button
-                                onClick={() => handleDelete(orgId, protocol.protocol_id)}
-                                disabled={deleting === `${orgId}/${protocol.protocol_id}`}
+                                onClick={() => handleDelete(selectedEnterprise, selectedED, selectedBundle, protocol.protocol_id)}
+                                disabled={deleting === `${selectedEnterprise}/${selectedED}/${selectedBundle}/${protocol.protocol_id}`}
                                 className="p-2 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors disabled:opacity-50"
                               >
-                                {deleting === `${orgId}/${protocol.protocol_id}` ? (
+                                {deleting === `${selectedEnterprise}/${selectedED}/${selectedBundle}/${protocol.protocol_id}` ? (
                                   <RefreshCw className="w-4 h-4 animate-spin" />
                                 ) : (
                                   <Trash2 className="w-4 h-4" />
@@ -574,7 +696,7 @@ export default function AdminPage() {
             {viewMode === "browse" && (
               <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
                 <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
-                  <h2 className="text-lg font-medium text-white">All Hospitals & Bundles</h2>
+                  <h2 className="text-lg font-medium text-white">All Enterprises & Protocols</h2>
                   <button
                     onClick={fetchAllHospitals}
                     disabled={loading}
@@ -593,82 +715,108 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <div className="divide-y divide-[#3c4043]">
-                    {Object.entries(allHospitals).sort().map(([hospital, bundles]) => (
-                      <div key={hospital}>
+                    {Object.entries(allHospitals).sort().map(([enterprise, eds]) => (
+                      <div key={enterprise}>
                         <button
-                          onClick={() => toggleHospital(hospital)}
+                          onClick={() => toggleHospital(enterprise)}
                           className="w-full px-5 py-4 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
                         >
-                          {expandedHospitals.has(hospital) ? (
+                          {expandedHospitals.has(enterprise) ? (
                             <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
                           ) : (
                             <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
                           )}
                           <Building2 className="w-5 h-5 text-[#8ab4f8]" />
-                          <span className="font-medium text-white">{hospital}</span>
+                          <span className="font-medium text-white">{enterprise}</span>
                           <span className="text-xs text-[#5f6368] ml-auto">
-                            {Object.keys(bundles).length} bundle(s)
+                            {Object.keys(eds).length} ED(s)
                           </span>
                         </button>
 
-                        {expandedHospitals.has(hospital) && (
+                        {expandedHospitals.has(enterprise) && (
                           <div className="bg-[#1a1a1b]">
-                            {Object.entries(bundles).sort().map(([bundle, bundleProtocols]) => {
-                              const bundleKey = `${hospital}/${bundle}`;
+                            {Object.entries(eds).sort().map(([ed, bundles]) => {
+                              const edKey = `${enterprise}/${ed}`;
                               return (
-                                <div key={bundleKey}>
+                                <div key={edKey}>
                                   <button
-                                    onClick={() => toggleBundle(bundleKey)}
+                                    onClick={() => toggleED(edKey)}
                                     className="w-full pl-12 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
                                   >
-                                    {expandedBundles.has(bundleKey) ? (
+                                    {expandedEDs.has(edKey) ? (
                                       <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
                                     ) : (
                                       <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
                                     )}
-                                    <FolderOpen className="w-4 h-4 text-yellow-500" />
-                                    <span className="text-[#e8eaed]">{bundle}</span>
+                                    <MapPin className="w-4 h-4 text-green-400" />
+                                    <span className="text-[#e8eaed]">{ed}</span>
                                     <span className="text-xs text-[#5f6368] ml-auto">
-                                      {bundleProtocols.length} protocol(s)
+                                      {Object.keys(bundles).length} bundle(s)
                                     </span>
                                   </button>
 
-                                  {expandedBundles.has(bundleKey) && (
-                                    <ul className="bg-[#131314]">
-                                      {bundleProtocols.map((protocol) => {
-                                        const fullOrgId = `${hospital}/${bundle}`;
-                                        const deleteKey = `${fullOrgId}/${protocol.protocol_id}`;
+                                  {expandedEDs.has(edKey) && (
+                                    <div className="bg-[#171718]">
+                                      {Object.entries(bundles).sort().map(([bundle, bundleProtocols]) => {
+                                        const bundleKey = `${edKey}/${bundle}`;
                                         return (
-                                          <li 
-                                            key={protocol.protocol_id}
-                                            className="pl-20 pr-5 py-3 flex items-center justify-between hover:bg-[#2c2d2e] transition-colors"
-                                          >
-                                            <div className="flex items-center gap-3">
-                                              <FileText className="w-4 h-4 text-[#5f6368]" />
-                                              <div>
-                                                <span className="text-[#e8eaed]">
-                                                  {protocol.protocol_id.replace(/_/g, " ")}
-                                                </span>
-                                                <p className="text-xs text-[#5f6368]">
-                                                  {protocol.page_count} pages • {protocol.char_count?.toLocaleString() || 0} chars
-                                                </p>
-                                              </div>
-                                            </div>
+                                          <div key={bundleKey}>
                                             <button
-                                              onClick={() => handleDelete(fullOrgId, protocol.protocol_id)}
-                                              disabled={deleting === deleteKey}
-                                              className="p-2 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors disabled:opacity-50"
+                                              onClick={() => toggleBundle(bundleKey)}
+                                              className="w-full pl-20 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
                                             >
-                                              {deleting === deleteKey ? (
-                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                              {expandedBundles.has(bundleKey) ? (
+                                                <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
                                               ) : (
-                                                <Trash2 className="w-4 h-4" />
+                                                <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
                                               )}
+                                              <FolderOpen className="w-4 h-4 text-yellow-500" />
+                                              <span className="text-[#e8eaed]">{bundle}</span>
+                                              <span className="text-xs text-[#5f6368] ml-auto">
+                                                {bundleProtocols.length} protocol(s)
+                                              </span>
                                             </button>
-                                          </li>
+
+                                            {expandedBundles.has(bundleKey) && (
+                                              <ul className="bg-[#131314]">
+                                                {bundleProtocols.map((protocol) => {
+                                                  const deleteKey = `${enterprise}/${ed}/${bundle}/${protocol.protocol_id}`;
+                                                  return (
+                                                    <li
+                                                      key={protocol.protocol_id}
+                                                      className="pl-28 pr-5 py-3 flex items-center justify-between hover:bg-[#2c2d2e] transition-colors"
+                                                    >
+                                                      <div className="flex items-center gap-3">
+                                                        <FileText className="w-4 h-4 text-[#5f6368]" />
+                                                        <div>
+                                                          <span className="text-[#e8eaed]">
+                                                            {protocol.protocol_id.replace(/_/g, " ")}
+                                                          </span>
+                                                          <p className="text-xs text-[#5f6368]">
+                                                            {protocol.page_count} pages • {protocol.char_count?.toLocaleString() || 0} chars
+                                                          </p>
+                                                        </div>
+                                                      </div>
+                                                      <button
+                                                        onClick={() => handleDelete(enterprise, ed, bundle, protocol.protocol_id)}
+                                                        disabled={deleting === deleteKey}
+                                                        className="p-2 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors disabled:opacity-50"
+                                                      >
+                                                        {deleting === deleteKey ? (
+                                                          <RefreshCw className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                          <Trash2 className="w-4 h-4" />
+                                                        )}
+                                                      </button>
+                                                    </li>
+                                                  );
+                                                })}
+                                              </ul>
+                                            )}
+                                          </div>
                                         );
                                       })}
-                                    </ul>
+                                    </div>
                                   )}
                                 </div>
                               );

@@ -299,6 +299,66 @@ export default function OwnerDashboard() {
     }
   };
 
+  const handleDeleteBundle = async (enterpriseId: string, edId: string, bundleId: string) => {
+    if (!confirm(`Delete bundle "${bundleId}"? This only removes the Firestore record, not uploaded protocols.`)) return;
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/enterprises/${enterpriseId}/eds/${edId}/bundles/${bundleId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchEnterprises();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to delete bundle");
+      }
+    } catch (err) {
+      console.error("Failed to delete bundle:", err);
+      alert("Failed to delete bundle");
+    }
+  };
+
+  const handleDeleteED = async (enterpriseId: string, edId: string) => {
+    if (!confirm(`Delete ED "${edId}" and all its bundles? This only removes Firestore records, not uploaded protocols.`)) return;
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/enterprises/${enterpriseId}/eds/${edId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchEnterprises();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to delete ED");
+      }
+    } catch (err) {
+      console.error("Failed to delete ED:", err);
+      alert("Failed to delete ED");
+    }
+  };
+
+  const handleDeleteEnterprise = async (enterpriseId: string) => {
+    if (!confirm(`Delete enterprise "${enterpriseId}" and ALL its EDs and bundles? This only removes Firestore records, not uploaded protocols.`)) return;
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/admin/enterprises/${enterpriseId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchEnterprises();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to delete enterprise");
+      }
+    } catch (err) {
+      console.error("Failed to delete enterprise:", err);
+      alert("Failed to delete enterprise");
+    }
+  };
+
   const toggleEnterprise = (id: string) => {
     const next = new Set(expandedEnterprises);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -423,29 +483,40 @@ export default function OwnerDashboard() {
                     {enterprises.map((enterprise) => (
                       <div key={enterprise.id}>
                         {/* Enterprise row */}
-                        <button
-                          onClick={() => toggleEnterprise(enterprise.id)}
-                          className="w-full px-5 py-4 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
-                        >
-                          {expandedEnterprises.has(enterprise.id) ? (
-                            <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
-                          )}
-                          <Building2 className="w-5 h-5 text-[#8ab4f8]" />
-                          <div className="text-left">
-                            <span className="font-medium text-white">{enterprise.name}</span>
-                            <span className="text-xs text-[#5f6368] ml-2">{enterprise.id}</span>
-                          </div>
-                          {enterprise.allowed_domains && enterprise.allowed_domains.length > 0 && (
-                            <span className="text-xs text-[#5f6368] ml-2">
-                              {enterprise.allowed_domains.join(", ")}
+                        <div className="flex items-center hover:bg-[#2c2d2e] transition-colors">
+                          <button
+                            onClick={() => toggleEnterprise(enterprise.id)}
+                            className="flex-1 px-5 py-4 flex items-center gap-3"
+                          >
+                            {expandedEnterprises.has(enterprise.id) ? (
+                              <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                            )}
+                            <Building2 className="w-5 h-5 text-[#8ab4f8]" />
+                            <div className="text-left">
+                              <span className="font-medium text-white">{enterprise.name}</span>
+                              <span className="text-xs text-[#5f6368] ml-2">{enterprise.id}</span>
+                            </div>
+                            {enterprise.allowed_domains && enterprise.allowed_domains.length > 0 && (
+                              <span className="text-xs text-[#5f6368] ml-2">
+                                {enterprise.allowed_domains.join(", ")}
+                              </span>
+                            )}
+                            <span className="text-xs text-[#5f6368] ml-auto">
+                              {enterprise.eds.length} ED(s)
                             </span>
+                          </button>
+                          {isSuperAdmin && (
+                            <button
+                              onClick={() => handleDeleteEnterprise(enterprise.id)}
+                              className="p-2 mr-3 text-[#5f6368] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors"
+                              title="Delete enterprise"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
-                          <span className="text-xs text-[#5f6368] ml-auto">
-                            {enterprise.eds.length} ED(s)
-                          </span>
-                        </button>
+                        </div>
 
                         {/* EDs under enterprise */}
                         {expandedEnterprises.has(enterprise.id) && (
@@ -455,27 +526,38 @@ export default function OwnerDashboard() {
                               return (
                                 <div key={edKey}>
                                   {/* ED row */}
-                                  <button
-                                    onClick={() => toggleED(edKey)}
-                                    className="w-full pl-12 pr-5 py-3 flex items-center gap-3 hover:bg-[#2c2d2e] transition-colors"
-                                  >
-                                    {expandedEDs.has(edKey) ? (
-                                      <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
-                                    ) : (
-                                      <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                                  <div className="flex items-center hover:bg-[#2c2d2e] transition-colors">
+                                    <button
+                                      onClick={() => toggleED(edKey)}
+                                      className="flex-1 pl-12 pr-2 py-3 flex items-center gap-3"
+                                    >
+                                      {expandedEDs.has(edKey) ? (
+                                        <ChevronDown className="w-4 h-4 text-[#9aa0a6]" />
+                                      ) : (
+                                        <ChevronRight className="w-4 h-4 text-[#9aa0a6]" />
+                                      )}
+                                      <MapPin className="w-4 h-4 text-green-400" />
+                                      <div className="text-left">
+                                        <span className="text-[#e8eaed]">{ed.name}</span>
+                                        <span className="text-xs text-[#5f6368] ml-2">{ed.id}</span>
+                                      </div>
+                                      {ed.location && (
+                                        <span className="text-xs text-[#5f6368] ml-2">{ed.location}</span>
+                                      )}
+                                      <span className="text-xs text-[#5f6368] ml-auto">
+                                        {ed.bundles.length} bundle(s)
+                                      </span>
+                                    </button>
+                                    {isSuperAdmin && (
+                                      <button
+                                        onClick={() => handleDeleteED(enterprise.id, ed.id)}
+                                        className="p-2 mr-3 text-[#5f6368] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors"
+                                        title="Delete ED"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
                                     )}
-                                    <MapPin className="w-4 h-4 text-green-400" />
-                                    <div className="text-left">
-                                      <span className="text-[#e8eaed]">{ed.name}</span>
-                                      <span className="text-xs text-[#5f6368] ml-2">{ed.id}</span>
-                                    </div>
-                                    {ed.location && (
-                                      <span className="text-xs text-[#5f6368] ml-2">{ed.location}</span>
-                                    )}
-                                    <span className="text-xs text-[#5f6368] ml-auto">
-                                      {ed.bundles.length} bundle(s)
-                                    </span>
-                                  </button>
+                                  </div>
 
                                   {/* Bundles under ED */}
                                   {expandedEDs.has(edKey) && (
@@ -490,13 +572,22 @@ export default function OwnerDashboard() {
                                             style={{ backgroundColor: bundle.color || "#3B82F6" }}
                                           />
                                           <FolderOpen className="w-4 h-4 text-yellow-500" />
-                                          <div>
+                                          <div className="flex-1">
                                             <span className="text-[#e8eaed]">{bundle.name}</span>
                                             <span className="text-xs text-[#5f6368] ml-2">{bundle.id}</span>
                                             {bundle.description && (
                                               <p className="text-xs text-[#5f6368] mt-0.5">{bundle.description}</p>
                                             )}
                                           </div>
+                                          {isSuperAdmin && (
+                                            <button
+                                              onClick={() => handleDeleteBundle(enterprise.id, ed.id, bundle.id)}
+                                              className="p-1.5 text-[#5f6368] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors"
+                                              title="Delete bundle"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          )}
                                         </div>
                                       ))}
 
