@@ -12,6 +12,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   sendEmailVerification,
 } from "firebase/auth";
@@ -75,6 +77,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Handle redirect result (for corporate environments where popups are blocked)
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          const profile = await fetchUserProfile(result.user);
+          setUserProfile(profile);
+        }
+      })
+      .catch((err) => {
+        console.error("Redirect sign-in error:", err);
+        setError(err instanceof Error ? err.message : "Sign in failed after redirect");
+      });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
@@ -127,6 +142,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await fetchUserProfile(result.user);
       setUserProfile(profile);
     } catch (err: unknown) {
+      // If popup is blocked or closed by corporate policy, fall back to redirect
+      const code = (err as { code?: string })?.code;
+      if (code === "auth/popup-closed-by-user" || code === "auth/popup-blocked") {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
       const message = err instanceof Error ? err.message : "Google sign in failed";
       setError(message);
       throw err;
@@ -140,6 +161,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await fetchUserProfile(result.user);
       setUserProfile(profile);
     } catch (err: unknown) {
+      // If popup is blocked or closed by corporate policy, fall back to redirect
+      const code = (err as { code?: string })?.code;
+      if (code === "auth/popup-closed-by-user" || code === "auth/popup-blocked") {
+        await signInWithRedirect(auth, microsoftProvider);
+        return;
+      }
       const message = err instanceof Error ? err.message : "Microsoft sign in failed";
       setError(message);
       throw err;
