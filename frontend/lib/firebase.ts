@@ -8,7 +8,7 @@ import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB5zFvhhcLVAJ4aYgJT3MlhhUY__k8egMk",
-  authDomain: "clinical-assistant-457902.firebaseapp.com",
+  authDomain: "em-app-protocols.vercel.app",
   projectId: "clinical-assistant-457902",
   storageBucket: "clinical-assistant-457902.firebasestorage.app",
   messagingSenderId: "930035889332",
