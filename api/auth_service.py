@@ -107,7 +107,7 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
         )
     email = decoded_token.get("email", "")
     
-    # Check if user already exists
+    # Check if user already exists by UID
     user_ref = db.collection("users").document(uid)
     user_doc = user_ref.get()
     
@@ -123,7 +123,30 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
             ed_access=data.get("ed_access", [])
         )
     
-    # New user - validate domain
+    # No doc found by UID — check if a record exists by email
+    # (e.g. admin created via owner dashboard before user's first login)
+    if email:
+        email_query = db.collection("users").where("email", "==", email).limit(1)
+        email_matches = list(email_query.stream())
+        if email_matches:
+            existing_doc = email_matches[0]
+            existing_data = existing_doc.to_dict()
+            
+            # Migrate: copy data to the real UID document, delete the old one
+            existing_data["email"] = email  # ensure email is current
+            user_ref.set(existing_data)
+            existing_doc.reference.delete()
+            
+            return UserProfile(
+                uid=uid,
+                email=email,
+                enterprise_id=existing_data.get("enterprise_id"),
+                enterprise_name=existing_data.get("enterprise_name"),
+                role=existing_data.get("role", "user"),
+                ed_access=existing_data.get("ed_access", [])
+            )
+    
+    # Truly new user - validate domain
     email_domain = email.split("@")[-1] if "@" in email else ""
     enterprise = get_enterprise_by_domain(email_domain)
     
