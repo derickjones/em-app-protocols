@@ -27,6 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script type="text/javascript" src="https://js.live.net/v7.2/OneDrive.js" async defer></script>
+      </head>
       <body className={`${orbitron.variable} ${roboto.variable} antialiased`}>
         <AuthProvider>
           {children}

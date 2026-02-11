@@ -797,6 +797,105 @@ async def upload_pdf(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
+class UploadFromURLRequest(BaseModel):
+    """Request to upload a PDF from a URL"""
+    url: str = Field(..., description="URL of the PDF to download")
+    enterprise_id: str = Field(..., description="Enterprise ID")
+    ed_id: str = Field(..., description="ED ID")
+    bundle_id: str = Field(..., description="Bundle ID")
+    filename: Optional[str] = Field(default=None, description="Override filename (optional)")
+
+
+@app.post("/upload-from-url")
+async def upload_pdf_from_url(request: UploadFromURLRequest):
+    """
+    Upload a PDF by providing a URL. The server fetches the file and saves it to GCS.
+    Useful for corporate environments where local file access is restricted.
+    """
+    from google.cloud import storage
+    import re
+
+    try:
+        # Fetch the PDF from the URL
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; EMProtocols/1.0)"
+        }
+        response = requests.get(request.url, headers=headers, timeout=60, stream=True)
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to download file from URL (HTTP {response.status_code})"
+            )
+
+        # Check content type
+        content_type = response.headers.get("content-type", "")
+        if "pdf" not in content_type.lower() and not request.url.lower().endswith(".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"URL does not appear to be a PDF (content-type: {content_type})"
+            )
+
+        # Check file size (max 50MB)
+        content_length = response.headers.get("content-length")
+        if content_length and int(content_length) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large (max 50MB)")
+
+        content = response.content
+
+        # Determine filename
+        if request.filename:
+            filename = request.filename
+        else:
+            # Try to extract from URL or Content-Disposition
+            cd = response.headers.get("content-disposition", "")
+            cd_match = re.search(r'filename[^;=\n]*=(["\']?)(.+?)\1(;|$)', cd)
+            if cd_match:
+                filename = cd_match.group(2)
+            else:
+                # Extract from URL path
+                url_path = request.url.split("?")[0].split("#")[0]
+                filename = url_path.split("/")[-1]
+
+            if not filename or filename == "":
+                filename = "downloaded_protocol.pdf"
+
+        # Ensure .pdf extension
+        if not filename.lower().endswith(".pdf"):
+            filename += ".pdf"
+
+        # Sanitize filename
+        safe_filename = filename.replace(" ", "_")
+        safe_filename = re.sub(r'[^\w\-.]', '_', safe_filename)
+
+        # Upload to GCS
+        bucket_name = "clinical-assistant-457902-protocols-raw"
+        blob_path = f"{request.enterprise_id}/{request.ed_id}/{request.bundle_id}/{safe_filename}"
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        blob.upload_from_string(content, content_type="application/pdf")
+
+        return {
+            "status": "success",
+            "message": f"PDF '{safe_filename}' uploaded successfully from URL. Processing will begin shortly.",
+            "gcs_path": f"gs://{bucket_name}/{blob_path}",
+            "protocol_id": safe_filename.replace(".pdf", "").replace(".PDF", ""),
+            "filename": safe_filename,
+            "size_bytes": len(content),
+        }
+
+    except HTTPException:
+        raise
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=408, detail="URL download timed out (60s limit)")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=400, detail="Could not connect to the provided URL")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload from URL failed: {str(e)}")
+
+
 # ============================================================================
 # ADMIN MANAGEMENT ENDPOINTS
 # ============================================================================

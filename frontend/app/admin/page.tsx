@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin } from "lucide-react";
+import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin, Link2 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 
@@ -76,6 +76,8 @@ export default function AdminPage() {
   const [dragActive, setDragActive] = useState(false);
   const [reindexing, setReindexing] = useState(false);
   const [reindexStatus, setReindexStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
+  const [urlInput, setUrlInput] = useState("");
+  const [urlUploading, setUrlUploading] = useState(false);
 
   // Derived helpers
   const currentEnterprise = enterprises.find((e) => e.id === selectedEnterprise);
@@ -449,6 +451,158 @@ export default function AdminPage() {
     handleUpload(e.dataTransfer.files);
   };
 
+  const handleUrlUpload = async () => {
+    const url = urlInput.trim();
+    if (!url) return;
+
+    setUrlUploading(true);
+    setUploadStatus({ status: "uploading", message: "Downloading PDF from URL..." });
+
+    try {
+      const res = await fetch(`${API_URL}/upload-from-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url,
+          enterprise_id: selectedEnterprise,
+          ed_id: selectedED,
+          bundle_id: selectedBundle,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUploadStatus({
+          status: "success",
+          message: data.message || `Uploaded ${data.filename} successfully!`,
+        });
+        setUrlInput("");
+        setTimeout(() => {
+          fetchProtocols();
+          fetchAllHospitals();
+        }, 2000);
+      } else {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        setUploadStatus({
+          status: "error",
+          message: err.detail || "Failed to upload from URL",
+        });
+      }
+    } catch (err) {
+      console.error("URL upload error:", err);
+      setUploadStatus({ status: "error", message: "Failed to connect to API" });
+    } finally {
+      setUrlUploading(false);
+      setTimeout(() => {
+        setUploadStatus({ status: "idle", message: "" });
+      }, 5000);
+    }
+  };
+
+  const handleOneDrivePick = () => {
+    const clientId = process.env.NEXT_PUBLIC_ONEDRIVE_CLIENT_ID;
+    if (!clientId) {
+      setUploadStatus({ status: "error", message: "OneDrive integration not configured" });
+      setTimeout(() => setUploadStatus({ status: "idle", message: "" }), 3000);
+      return;
+    }
+
+    const odOptions = {
+      clientId,
+      action: "download",
+      multiSelect: true,
+      advanced: {
+        filter: ".pdf",
+        redirectUri: window.location.origin + "/admin",
+      },
+      success: async (files: { value: Array<{ name: string; ["@microsoft.graph.downloadUrl"]: string }> }) => {
+        const pdfFiles = files.value.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+        if (pdfFiles.length === 0) {
+          setUploadStatus({ status: "error", message: "No PDF files selected" });
+          setTimeout(() => setUploadStatus({ status: "idle", message: "" }), 3000);
+          return;
+        }
+
+        setUploadStatus({
+          status: "uploading",
+          message: `Uploading ${pdfFiles.length} file(s) from OneDrive...`,
+          totalFiles: pdfFiles.length,
+          completedFiles: 0,
+        });
+
+        let completed = 0;
+        const failed: string[] = [];
+
+        for (const file of pdfFiles) {
+          try {
+            const downloadUrl = file["@microsoft.graph.downloadUrl"];
+            const res = await fetch(`${API_URL}/upload-from-url`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                url: downloadUrl,
+                enterprise_id: selectedEnterprise,
+                ed_id: selectedED,
+                bundle_id: selectedBundle,
+                filename: file.name,
+              }),
+            });
+
+            if (res.ok) {
+              completed++;
+            } else {
+              failed.push(file.name);
+            }
+          } catch {
+            failed.push(file.name);
+          }
+
+          setUploadStatus({
+            status: "uploading",
+            message: `Uploading from OneDrive: ${completed + failed.length}/${pdfFiles.length}...`,
+            totalFiles: pdfFiles.length,
+            completedFiles: completed,
+            progress: Math.round(((completed + failed.length) / pdfFiles.length) * 100),
+          });
+        }
+
+        if (failed.length === 0) {
+          setUploadStatus({
+            status: "success",
+            message: `Successfully uploaded ${completed} file(s) from OneDrive!`,
+          });
+        } else {
+          setUploadStatus({
+            status: completed > 0 ? "success" : "error",
+            message: `Uploaded ${completed}/${pdfFiles.length}. Failed: ${failed.join(", ")}`,
+          });
+        }
+
+        setTimeout(() => {
+          fetchProtocols();
+          fetchAllHospitals();
+        }, 2000);
+        setTimeout(() => setUploadStatus({ status: "idle", message: "" }), 5000);
+      },
+      cancel: () => {
+        // User cancelled
+      },
+      error: (err: unknown) => {
+        console.error("OneDrive picker error:", err);
+        setUploadStatus({ status: "error", message: "OneDrive picker failed" });
+        setTimeout(() => setUploadStatus({ status: "idle", message: "" }), 3000);
+      },
+    };
+
+    // Launch the OneDrive file picker
+    if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).OneDrive) {
+      ((window as unknown as Record<string, { open: (opts: typeof odOptions) => void }>).OneDrive).open(odOptions);
+    } else {
+      setUploadStatus({ status: "error", message: "OneDrive SDK not loaded. Please refresh the page." });
+      setTimeout(() => setUploadStatus({ status: "idle", message: "" }), 3000);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#131314] text-white flex">
@@ -716,6 +870,57 @@ export default function AdminPage() {
                         </p>
                       </>
                     )}
+                  </div>
+                </div>
+
+                {/* Alternative upload methods */}
+                <div className="flex gap-4">
+                  {/* URL Upload */}
+                  <div className="flex-1 bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Link2 className="w-4 h-4 text-[#8ab4f8]" />
+                      <h3 className="text-sm font-medium text-white">Upload from URL</h3>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={urlInput}
+                        onChange={(e) => setUrlInput(e.target.value)}
+                        placeholder="Paste a direct link to a PDF..."
+                        className="flex-1 px-4 py-2.5 bg-[#131314] border border-[#3c4043] rounded-full text-white text-sm placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8] transition-colors"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && urlInput.trim()) handleUrlUpload();
+                        }}
+                        disabled={urlUploading}
+                      />
+                      <button
+                        onClick={handleUrlUpload}
+                        disabled={!urlInput.trim() || urlUploading}
+                        className="px-5 py-2.5 bg-[#8ab4f8] text-[#131314] rounded-full text-sm font-medium hover:bg-[#aecbfa] disabled:bg-[#3c4043] disabled:text-[#5f6368] disabled:cursor-not-allowed transition-colors"
+                      >
+                        {urlUploading ? "Uploading..." : "Upload"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-[#5f6368] mt-2 px-2">
+                      Works with direct PDF links (e.g. shared OneDrive/SharePoint download links)
+                    </p>
+                  </div>
+
+                  {/* OneDrive Picker */}
+                  <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-5 flex flex-col items-center justify-center min-w-[200px]">
+                    <button
+                      onClick={handleOneDrivePick}
+                      disabled={uploadStatus.status === "uploading"}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-[#0078d4] text-white rounded-full text-sm font-medium hover:bg-[#106ebe] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M10.182 7.2l4.63 2.69L19.3 7.7a4.947 4.947 0 00-2.092-2.218A4.99 4.99 0 0014.56 4.6a5.05 5.05 0 00-3.073 1.025A4.89 4.89 0 0010.182 7.2zM4.2 13.6l3.54-2.06 3.38 1.97-4.64 2.69-.18.1A3.65 3.65 0 014.5 14.66 3.59 3.59 0 014.2 13.6zm5.88-3l4.63 2.69 5.7-3.32A3.55 3.55 0 0020.78 9a3.64 3.64 0 00-.88-.61l-1.6-.93-3.49 2.03zM14.69 14.2l-4.63-2.69-2.42 1.41a3.65 3.65 0 00.55 3.21A3.69 3.69 0 0010.78 17.6h8.44a2.74 2.74 0 001.68-.57A2.7 2.7 0 0021.92 15.4a2.72 2.72 0 00-.48-1.32l-6.75 3.93z"/>
+                      </svg>
+                      OneDrive
+                    </button>
+                    <p className="text-xs text-[#5f6368] mt-2 text-center">
+                      Pick PDFs from OneDrive
+                    </p>
                   </div>
                 </div>
 
