@@ -708,13 +708,15 @@ export default function Home() {
                     {/* Admin Dashboard Links */}
                     {userProfile && (userProfile.role === "admin" || userProfile.role === "super_admin") && (
                       <>
-                        <button
-                          onClick={() => router.push("/owner")}
-                          className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-neutral-800' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}
-                        >
-                          <Crown className="w-4 h-4" />
-                          Owner Dashboard
-                        </button>
+                        {userProfile.role === "super_admin" && (
+                          <button
+                            onClick={() => router.push("/owner")}
+                            className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-neutral-800' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}
+                          >
+                            <Crown className="w-4 h-4" />
+                            Owner Dashboard
+                          </button>
+                        )}
                         <button
                           onClick={() => router.push("/admin")}
                           className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-neutral-800' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}

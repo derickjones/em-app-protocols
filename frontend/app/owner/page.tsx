@@ -73,9 +73,9 @@ export default function OwnerDashboard() {
   const [newBundle, setNewBundle] = useState({ id: "", name: "", description: "", color: "#3B82F6" });
   const [creating, setCreating] = useState(false);
 
-  // Check if user is owner or super_admin
+  // Check if user is owner or super_admin — only super_admins can access
   useEffect(() => {
-    if (!authLoading && (!user || (userProfile?.role !== "super_admin" && userProfile?.role !== "admin"))) {
+    if (!authLoading && (!user || userProfile?.role !== "super_admin")) {
       router.push("/");
     }
   }, [user, userProfile, authLoading, router]);
@@ -135,7 +135,7 @@ export default function OwnerDashboard() {
   };
 
   useEffect(() => {
-    if (userProfile?.role === "super_admin" || userProfile?.role === "admin") {
+    if (userProfile?.role === "super_admin") {
       fetchAdmins();
       fetchEnterprises();
       fetchAllUsers();
@@ -410,7 +410,7 @@ export default function OwnerDashboard() {
     );
   };
 
-  if (authLoading || !userProfile || (userProfile.role !== "super_admin" && userProfile.role !== "admin")) {
+  if (authLoading || !userProfile || userProfile.role !== "super_admin") {
     return (
       <div className="min-h-screen bg-[#131314] text-white flex items-center justify-center">
         <RefreshCw className="w-8 h-8 animate-spin text-[#8ab4f8]" />
