@@ -671,10 +671,10 @@ export default function Home() {
 
           {/* ED Universe — Knowledge Sources */}
           <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
-            <div className={`px-3 py-2.5 flex items-center gap-2`}>
-              <Globe className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-              <span className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                ED Universe
+            <div className={`px-3 py-2 flex items-center gap-2`}>
+              <Globe className={`w-3.5 h-3.5 flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+              <span className={`text-xs font-medium tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Ed Universe
               </span>
             </div>
 
@@ -825,27 +825,12 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Save Preferences */}
-            {universeDirty && (
-              <div className={`px-2 pb-2`}>
-                <button
-                  onClick={saveUniversePreferences}
-                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    darkMode
-                      ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
-                      : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
-                  }`}
-                >
-                  <Save className="w-3 h-3" />
-                  Save Preferences
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Enterprise + ED Selector */}
           {user && enterprise && (
-            <div className="mb-4">
+            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
+              <div className="p-3">
               {/* Enterprise selector (super_admin) or name (regular user) */}
               {enterprise.allEnterprises && enterprise.allEnterprises.length > 1 ? (
                 <div className="mb-3">
@@ -881,36 +866,36 @@ export default function Home() {
               {/* ED multi-select chips */}
               {enterprise.eds.length > 0 && (
                 <div>
-                  <p className={`text-xs font-medium mb-2 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <p className={`text-xs font-medium mb-1.5 px-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     Emergency Departments
                   </p>
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-0.5">
                     {enterprise.eds.map((ed) => {
                       const isSelected = selectedEds.has(ed.id);
                       return (
                         <button
                           key={ed.id}
                           onClick={() => toggleEdSelection(ed.id)}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-all ${
                             isSelected
                               ? darkMode
-                                ? 'bg-blue-900/40 text-blue-300 border border-blue-700'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                ? 'bg-blue-900/40 text-blue-300'
+                                : 'bg-blue-50 text-blue-700'
                               : darkMode
-                                ? 'text-gray-400 hover:bg-neutral-800 border border-transparent'
-                                : 'text-gray-500 hover:bg-gray-50 border border-transparent'
+                                ? 'text-gray-400 hover:bg-neutral-800'
+                                : 'text-gray-500 hover:bg-gray-100'
                           }`}
                         >
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
                             isSelected 
                               ? 'bg-blue-500 border-blue-500' 
                               : darkMode ? 'border-neutral-600' : 'border-gray-300'
                           }`}>
-                            {isSelected && <Check className="w-3 h-3 text-white" />}
+                            {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
-                          <span className="flex-1 text-left">{ed.name}</span>
+                          <span className="flex-1 text-left text-xs font-medium">{ed.name}</span>
                           {ed.location && (
-                            <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                            <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
                               {ed.location}
                             </span>
                           )}
@@ -920,6 +905,24 @@ export default function Home() {
                   </div>
                 </div>
               )}
+              </div>
+            </div>
+          )}
+
+          {/* Save Preferences — covers ED Universe + ED selections */}
+          {universeDirty && (
+            <div className="mb-4">
+              <button
+                onClick={saveUniversePreferences}
+                className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  darkMode
+                    ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
+                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
+                }`}
+              >
+                <Save className="w-3 h-3" />
+                Save Preferences
+              </button>
             </div>
           )}
 
