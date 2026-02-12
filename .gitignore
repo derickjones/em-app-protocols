@@ -1,2 +1,12 @@
 __pycache__/
-scrapers/output/raw/
+.DS_Store
+node_modules/
+.next/
+
+# Scraped content lives in GCS buckets, not git
+scrapers/output/
+scrapers/wikem/output/
+scrapers/wikem/discovery/
+scrapers/PMC/output/
+scrapers/PMC/discovery/
+scrapers/PMC/metadata/

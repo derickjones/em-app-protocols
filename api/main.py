@@ -124,7 +124,7 @@ class QueryRequest(BaseModel):
     ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
-    sources: List[str] = Field(default=["local", "wikem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference)")
+    sources: List[str] = Field(default=["local", "wikem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature)")
     enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
 
 class ImageInfo(BaseModel):
@@ -138,7 +138,7 @@ class Citation(BaseModel):
     protocol_id: str
     source_uri: str
     relevance_score: float
-    source_type: str = "local"  # "local" or "wikem"
+    source_type: str = "local"  # "local", "wikem", or "pmc"
 
 class QueryResponse(BaseModel):
     """Response model for protocol queries"""
@@ -370,6 +370,41 @@ async def query_protocols(
                     source_uri=f"https://wikem.org/wiki/{topic_id}",
                     relevance_score=c["score"],
                     source_type="wikem"
+                ))
+                continue
+            
+            # Handle PMC citations
+            if source_type == "pmc":
+                # Source is like: gs://clinical-assistant-457902-pmc/processed/PMC8123456.md
+                parts = source.replace("gs://", "").split("/")
+                filename = parts[-1] if parts else "unknown"
+                pmcid = filename.replace(".md", "")
+                
+                pmc_key = f"pmc-{pmcid}"
+                if pmc_key in seen_protocols:
+                    continue
+                seen_protocols.add(pmc_key)
+                
+                # Try to get metadata for richer citation
+                pmc_metadata = rag_service._get_pmc_metadata(source)
+                if pmc_metadata:
+                    title = pmc_metadata.get("title", pmcid)
+                    journal = pmc_metadata.get("journal", "")
+                    year = pmc_metadata.get("year", "")
+                    # Build display name: "Title (Journal, Year)"
+                    display_parts = [title]
+                    if journal or year:
+                        detail = ", ".join(filter(None, [journal, str(year) if year else None]))
+                        display_parts.append(f"({detail})")
+                    display_name = " ".join(display_parts)
+                else:
+                    display_name = pmcid
+                
+                citations.append(Citation(
+                    protocol_id=display_name,
+                    source_uri=f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/",
+                    relevance_score=c["score"],
+                    source_type="pmc"
                 ))
                 continue
             

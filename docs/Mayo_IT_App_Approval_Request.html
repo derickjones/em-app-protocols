@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Azure AD App Approval Request</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-markdown.min.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Azure AD App Approval Request</h1>
+</header>
+<h1 id="azure-ad-enterprise-application-approval-request">Azure AD
+Enterprise Application Approval Request</h1>
+<hr />
+<p><strong>Date:</strong> February 11, 2026</p>
+<p><strong>Requestor:</strong> Derick Jones (jones.derick@mayo.edu)</p>
+<p><strong>Department:</strong> Emergency Medicine</p>
+<p><strong>Request Type:</strong> Azure AD Third-Party Application
+Consent</p>
+<hr />
+<h2 id="application-details">Application Details</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Application Name</strong></td>
+<td>EM Protocol App</td>
+</tr>
+<tr>
+<td><strong>Application Type</strong></td>
+<td>Web Application (SPA)</td>
+</tr>
+<tr>
+<td><strong>Publisher</strong></td>
+<td>Emergency Medicine App (Internal Clinical Tool)</td>
+</tr>
+<tr>
+<td><strong>Authentication Method</strong></td>
+<td>Microsoft Identity Platform (OAuth 2.0 / OpenID Connect)</td>
+</tr>
+<tr>
+<td><strong>Azure AD Tenant</strong></td>
+<td>Common (Multi-tenant)</td>
+</tr>
+<tr>
+<td><strong>Application URL</strong></td>
+<td>https://em-app-protocols.vercel.app</td>
+</tr>
+<tr>
+<td><strong>Firebase Project ID</strong></td>
+<td>clinical-assistant-457902</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="purpose-business-justification">Purpose &amp; Business
+Justification</h2>
+<p>The EM Protocol App is a clinical decision support tool designed for
+Emergency Medicine physicians and staff. It provides:</p>
+<ul>
+<li><strong>Rapid access to evidence-based clinical protocols</strong>
+for emergency medical procedures</li>
+<li><strong>AI-powered search</strong> across institutional protocol
+libraries using Retrieval-Augmented Generation (RAG)</li>
+<li><strong>Centralized protocol management</strong> for ED leadership
+to upload, organize, and distribute clinical guidelines — administrators
+can upload protocol PDFs directly, via URL, or from OneDrive</li>
+<li><strong>Multi-site support</strong> for institutions with multiple
+Emergency Departments</li>
+</ul>
+<p>This tool improves clinical workflow efficiency by providing instant,
+searchable access to approved institutional protocols at the point of
+care.</p>
+<hr />
+<h2 id="permissions-requested">Permissions Requested</h2>
+<p>The application requests the following permissions through Microsoft
+Sign-In:</p>
+<table>
+<colgroup>
+<col style="width: 44%" />
+<col style="width: 22%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Permission</th>
+<th>Type</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>openid</code></td>
+<td>Delegated</td>
+<td>Standard OpenID Connect sign-in</td>
+</tr>
+<tr>
+<td><code>profile</code></td>
+<td>Delegated</td>
+<td>Read user’s basic profile (name)</td>
+</tr>
+<tr>
+<td><code>email</code></td>
+<td>Delegated</td>
+<td>Read user’s email address</td>
+</tr>
+<tr>
+<td><code>Files.Read</code></td>
+<td>Delegated</td>
+<td>Allow admins to select and upload protocol documents from
+OneDrive</td>
+</tr>
+</tbody>
+</table>
+<h3 id="file-access-details">File Access Details</h3>
+<p>Authorized administrators use the application to upload approved
+clinical protocol documents (PDFs) to the platform. The app supports
+multiple upload methods to accommodate corporate device
+restrictions:</p>
+<ol type="1">
+<li><p><strong>OneDrive File Picker</strong> — Admins can browse and
+select protocol PDFs stored in their OneDrive. The app uses the
+Microsoft OneDrive Picker SDK to allow file selection. Only files
+explicitly chosen by the user are accessed — the app does not browse,
+index, or access any other files.</p></li>
+<li><p><strong>URL Upload</strong> — Admins can paste a direct link to a
+protocol PDF (e.g., a OneDrive or SharePoint sharing link). The backend
+fetches the file from the provided URL.</p></li>
+<li><p><strong>Direct File Upload</strong> — Standard file picker upload
+from the local device.</p></li>
+</ol>
+<p><strong>Important:</strong> File access is limited to: - ✅ Only
+files explicitly selected by the administrator - ✅ Only PDF documents
+(clinical protocols and guidelines) - ✅ Read-only access — the app does
+not modify, delete, or write to OneDrive - ❌ No background or automatic
+file access - ❌ No access to Mail, Calendar, Teams, or Contacts - ❌ No
+access to SharePoint sites or lists beyond user-shared links - ❌ No
+directory data or organizational info - ❌ No on-premises resources</p>
+<hr />
+<h2 id="security-compliance">Security &amp; Compliance</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Data Storage</strong></td>
+<td>Google Cloud Platform (GCP), US regions only</td>
+</tr>
+<tr>
+<td><strong>Authentication</strong></td>
+<td>Firebase Authentication via Microsoft Identity Platform</td>
+</tr>
+<tr>
+<td><strong>Data in Transit</strong></td>
+<td>TLS 1.2+ encryption (HTTPS only)</td>
+</tr>
+<tr>
+<td><strong>Data at Rest</strong></td>
+<td>AES-256 encryption (GCP default)</td>
+</tr>
+<tr>
+<td><strong>PHI/PII</strong></td>
+<td>No patient data is stored or transmitted. The application only
+contains institutional clinical protocols and guidelines (non-PHI).
+Uploaded documents are standardized procedure protocols, not patient
+records.</td>
+</tr>
+<tr>
+<td><strong>HIPAA</strong></td>
+<td>Not applicable — no PHI is processed</td>
+</tr>
+<tr>
+<td><strong>User Data Stored</strong></td>
+<td>Email address, display name, and role assignment only</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="technical-architecture">Technical Architecture</h2>
+<pre><code>User Browser → em-app-protocols.vercel.app (Frontend)
+                    ↓
+              Microsoft Login (login.microsoftonline.com)
+                    ↓
+              Firebase Authentication (Token Validation)
+                    ↓
+              Cloud Run API (em-protocol-api, us-central1)
+                    ↓
+              Google Cloud Storage (Protocol Documents)</code></pre>
+<ul>
+<li><strong>Frontend:</strong> Next.js application hosted on Vercel</li>
+<li><strong>Backend API:</strong> FastAPI on Google Cloud Run</li>
+<li><strong>Authentication:</strong> Firebase Auth with Microsoft
+Identity Provider</li>
+<li><strong>Storage:</strong> Google Cloud Storage (clinical protocol
+PDFs and extracted text)</li>
+</ul>
+<hr />
+<h2 id="action-requested">Action Requested</h2>
+<p>Please grant <strong>tenant-wide admin consent</strong> for the “EM
+Protocol App” in the Mayo Clinic Azure AD tenant. This can be done
+via:</p>
+<ol type="1">
+<li><strong>Azure AD Admin Portal</strong> → Enterprise Applications →
+Admin consent requests</li>
+<li>Or directly at:
+<code>https://login.microsoftonline.com/{tenant-id}/adminconsent?client_id={app-client-id}</code></li>
+</ol>
+<p>This will allow Mayo Clinic users with authorized email domains to
+sign in to the application using their existing Mayo credentials via
+Single Sign-On (SSO).</p>
+<hr />
+<h2 id="contact-information">Contact Information</h2>
+<p><strong>Requestor:</strong> Derick Jones <strong>Email:</strong>
+jones.derick@mayo.edu <strong>Role:</strong> Application Developer /
+Emergency Medicine</p>
+<hr />
+<p><em>This application is currently in active development and pilot
+testing with Emergency Medicine staff. Admin consent will enable
+seamless SSO for all authorized Mayo Clinic users.</em></p>
+</body>
+</html>

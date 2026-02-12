@@ -1,0 +1,10 @@
+{
+  "project_id": "clinical-assistant-457902",
+  "project_number": "930035889332",
+  "location": "us-west4",
+  "corpus_id": "6838716034162098176",
+  "corpus_name": "projects/930035889332/locations/us-west4/ragCorpora/6838716034162098176",
+  "corpus_display_name": "pmc-em-literature",
+  "embedding_model": "text-embedding-005",
+  "last_indexed": "2026-02-12T05:03:25Z"
+}

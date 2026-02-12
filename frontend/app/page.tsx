@@ -365,7 +365,7 @@ export default function Home() {
           include_images: true,
           sources: [
             ...(selectedEds.size > 0 ? ["local"] : []),
-            ...(searchSources.has("wikem") ? ["wikem"] : [])
+            ...(searchSources.has("wikem") ? ["wikem", "pmc"] : [])
           ],
           enterprise_id: enterprise?.id || undefined
         }),
@@ -860,7 +860,7 @@ export default function Home() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => toggleSource("wikem")}
-                      title="EM Universe — General emergency medicine knowledge from WikEM"
+                      title="EM Universe — WikEM topics + PMC peer-reviewed literature"
                       className={`p-2 rounded-xl transition-all duration-200 ${
                         searchSources.has("wikem")
                           ? darkMode
@@ -1010,6 +1010,7 @@ export default function Home() {
                     <div className="space-y-2">
                       {response.citations.map((cite, idx) => {
                         const isWikEM = cite.source_type === "wikem";
+                        const isPMC = cite.source_type === "pmc";
                         return (
                           <a
                             key={idx}
@@ -1019,19 +1020,23 @@ export default function Home() {
                             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${darkMode ? 'text-blue-400 hover:bg-neutral-800' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
                           >
                             <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${
-                              isWikEM 
-                                ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
-                                : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
+                              isPMC
+                                ? (darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
+                                : isWikEM 
+                                  ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                                  : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
                             }`}>{idx + 1}</span>
-                            <span className="flex-1">{cite.protocol_id.replace(/_/g, " ")}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
-                              isWikEM
-                                ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
-                                : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
+                            <span className="flex-1 truncate">{cite.protocol_id.replace(/_/g, " ")}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${
+                              isPMC
+                                ? (darkMode ? 'bg-purple-900/50 text-purple-400' : 'bg-purple-100 text-purple-700')
+                                : isWikEM
+                                  ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
+                                  : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
                             }`}>
-                              {isWikEM ? 'WikEM' : 'Local'}
+                              {isPMC ? '📚 PMC' : isWikEM ? 'WikEM' : 'Local'}
                             </span>
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
                           </a>
@@ -1041,6 +1046,11 @@ export default function Home() {
                     {response.citations.some(c => c.source_type === "wikem") && (
                       <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                         WikEM content from <a href="https://wikem.org" target="_blank" rel="noopener noreferrer" className="underline">wikem.org</a> under CC BY-SA 3.0
+                      </p>
+                    )}
+                    {response.citations.some(c => c.source_type === "pmc") && (
+                      <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        PMC literature from <a href="https://www.ncbi.nlm.nih.gov/pmc/" target="_blank" rel="noopener noreferrer" className="underline">PubMed Central</a> — peer-reviewed EM research
                       </p>
                     )}
                   </div>
@@ -1116,7 +1126,7 @@ export default function Home() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => toggleSource("wikem")}
-                  title="EM Universe — General emergency medicine knowledge from WikEM"
+                  title="EM Universe — WikEM topics + PMC peer-reviewed literature"
                   className={`p-1.5 rounded-lg transition-all duration-200 ${
                     searchSources.has("wikem")
                       ? darkMode

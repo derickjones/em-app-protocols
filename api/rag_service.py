@@ -1,7 +1,7 @@
 """
 RAG Service
 Handles RAG queries and Gemini answer generation
-Supports multi-source queries (local protocols + WikEM)
+Supports multi-source queries (local protocols + WikEM + PMC literature)
 """
 
 import os
@@ -19,8 +19,10 @@ PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
 RAG_LOCATION = os.environ.get("RAG_LOCATION", "us-west4")
 CORPUS_ID = os.environ.get("CORPUS_ID", "2305843009213693952")
 WIKEM_CORPUS_ID = os.environ.get("WIKEM_CORPUS_ID", "6917529027641081856")
+PMC_CORPUS_ID = os.environ.get("PMC_CORPUS_ID", "")
 PROCESSED_BUCKET = f"{PROJECT_ID}-protocols-processed"
 WIKEM_BUCKET = f"{PROJECT_ID}-wikem"
+PMC_BUCKET = f"{PROJECT_ID}-pmc"
 
 
 class RAGService:
@@ -32,8 +34,10 @@ class RAGService:
         self.location = RAG_LOCATION
         self.corpus_id = CORPUS_ID
         self.wikem_corpus_id = WIKEM_CORPUS_ID
+        self.pmc_corpus_id = PMC_CORPUS_ID
         self.corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
         self.wikem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{WIKEM_CORPUS_ID}"
+        self.pmc_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{PMC_CORPUS_ID}" if PMC_CORPUS_ID else None
         self.storage_client = storage.Client()
         self._metadata_cache = {}
     
@@ -91,6 +95,11 @@ class RAGService:
             parts = source.replace("gs://", "").split("/")
             filename = parts[-1] if parts else "unknown"
             return f"wikem-{filename.replace('.md', '')}"
+        elif source_type == "pmc":
+            # gs://bucket/processed/PMC8123456.md → pmc-PMC8123456
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            return f"pmc-{filename.replace('.md', '')}"
         else:
             # gs://bucket/enterprise/ed/bundle/protocol_id/extracted_text.txt → protocol_id
             parts = source.replace("gs://", "").split("/")
@@ -117,7 +126,14 @@ class RAGService:
         # Build context string with deduplicated source numbers
         context_parts = []
         for i, (key, group) in enumerate(grouped.items()):
-            source_label = "WikEM" if group["source_type"] == "wikem" else "Local Protocol"
+            source_type = group["source_type"]
+            if source_type == "wikem":
+                source_label = "WikEM"
+            elif source_type == "pmc":
+                source_label = "PMC Literature"
+            else:
+                source_label = "Local Protocol"
+            
             combined_text = "\n".join(group["texts"])
             context_parts.append(f"[{i+1}] ({source_label}) {combined_text}")
         context_text = "\n---\n".join(context_parts)
@@ -242,6 +258,32 @@ ANSWER:"""
         
         return None
 
+    def _get_pmc_metadata(self, source_uri: str) -> Optional[Dict]:
+        """Get metadata for a PMC article from its source URI"""
+        # Format: gs://clinical-assistant-457902-pmc/processed/PMC8123456.md
+        try:
+            if source_uri.startswith("gs://"):
+                parts = source_uri.split("/")
+                filename = parts[-1] if parts else ""
+                pmcid = filename.replace(".md", "")
+                
+                cache_key = f"pmc/{pmcid}"
+                if cache_key in self._metadata_cache:
+                    return self._metadata_cache[cache_key]
+                
+                bucket = self.storage_client.bucket(PMC_BUCKET)
+                blob = bucket.blob(f"metadata/{pmcid}.json")
+                
+                if blob.exists():
+                    content = blob.download_as_string()
+                    metadata = json.loads(content)
+                    self._metadata_cache[cache_key] = metadata
+                    return metadata
+        except Exception as e:
+            print(f"Error getting PMC metadata for {source_uri}: {e}")
+        
+        return None
+
     def _get_images_from_contexts(self, contexts: List[Dict]) -> List[Dict]:
         """Extract images from context sources - maintains protocol relevance order"""
         seen_images = set()
@@ -263,6 +305,20 @@ ANSWER:"""
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"WikEM: {metadata.get('title', metadata.get('protocol_id', 'unknown'))}",
+                                "protocol_rank": ctx_idx
+                            })
+            elif source_type == "pmc":
+                # Get PMC metadata with image URLs  
+                metadata = self._get_pmc_metadata(ctx["source"])
+                if metadata:
+                    for img in metadata.get("images", []):
+                        img_url = img.get("url", "")
+                        if img_url and img_url not in seen_images:
+                            seen_images.add(img_url)
+                            images.append({
+                                "page": img.get("page", 0),
+                                "url": img_url,
+                                "source": f"PMC: {metadata.get('title', metadata.get('pmcid', 'unknown'))}",
                                 "protocol_rank": ctx_idx
                             })
             else:
@@ -298,7 +354,7 @@ ANSWER:"""
     def _retrieve_multi_source(self, query: str, sources: List[str] = None) -> List[Dict]:
         """
         Retrieve contexts from multiple corpora in parallel.
-        Each context is tagged with source_type ('local' or 'wikem').
+        Each context is tagged with source_type ('local', 'wikem', or 'pmc').
         Results are merged and sorted by relevance score.
         """
         if sources is None:
@@ -326,12 +382,26 @@ ANSWER:"""
                 print(f"WikEM corpus query failed: {e}")
                 return []
         
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        def fetch_pmc():
+            try:
+                if self.pmc_corpus_name:
+                    contexts = self._retrieve_contexts(query, self.pmc_corpus_name)
+                    for ctx in contexts:
+                        ctx["source_type"] = "pmc"
+                    return contexts
+                return []
+            except Exception as e:
+                print(f"PMC corpus query failed: {e}")
+                return []
+        
+        with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {}
             if "local" in sources:
                 futures["local"] = executor.submit(fetch_local)
             if "wikem" in sources:
                 futures["wikem"] = executor.submit(fetch_wikem)
+            if "pmc" in sources:
+                futures["pmc"] = executor.submit(fetch_pmc)
             
             for key, future in futures.items():
                 try:
@@ -353,7 +423,7 @@ ANSWER:"""
         Args:
             query: The search query
             include_images: Whether to include protocol images
-            sources: List of sources to query ('local', 'wikem'). Default: both.
+            sources: List of sources to query ('local', 'wikem', 'pmc'). Default: ['local', 'wikem'].
             enterprise_id: Enterprise ID for path-prefix filtering
             ed_ids: List of ED IDs to filter by
             bundle_ids: List of bundle IDs to filter by
@@ -383,8 +453,8 @@ ANSWER:"""
             
             filtered_contexts = []
             for ctx in contexts:
-                if ctx.get("source_type") == "wikem":
-                    # Always keep WikEM results
+                if ctx.get("source_type") in ("wikem", "pmc"):
+                    # Always keep WikEM and PMC results (not filtered by ED path)
                     filtered_contexts.append(ctx)
                 elif any(prefix in ctx.get("source", "") for prefix in prefixes):
                     filtered_contexts.append(ctx)
