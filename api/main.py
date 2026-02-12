@@ -241,7 +241,6 @@ async def get_user_enterprise(user: UserProfile = Depends(get_current_user)):
                         bundles.append(bundle_data)
                     ed_data["bundles"] = bundles
                     eds.append(ed_data)
-                eds.sort(key=lambda e: e.get("name", ""))
                 all_enterprises.append({
                     "id": ent_doc.id,
                     "name": ent_data.get("name", ""),
@@ -296,8 +295,6 @@ async def get_user_enterprise(user: UserProfile = Depends(get_current_user)):
             
             ed_data["bundles"] = bundles
             eds.append(ed_data)
-        
-        eds.sort(key=lambda e: e.get("name", ""))
         
         return {
             "id": user.enterprise_id,
