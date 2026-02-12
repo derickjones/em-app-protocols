@@ -125,6 +125,7 @@ class QueryRequest(BaseModel):
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
     sources: List[str] = Field(default=["local", "wikem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature)")
+    pmc_journals: Optional[List[str]] = Field(default=None, description="PMC journal names to include. None = all journals (no filter).")
     enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
 
 class ImageInfo(BaseModel):
@@ -338,6 +339,7 @@ async def query_protocols(
             query=request.query,
             include_images=request.include_images,
             sources=request.sources,
+            pmc_journals=request.pmc_journals,
             enterprise_id=enterprise_id,
             ed_ids=ed_ids,
             bundle_ids=request.bundle_ids

@@ -416,6 +416,7 @@ ANSWER:"""
         return all_contexts
 
     def query(self, query: str, include_images: bool = True, sources: List[str] = None,
+              pmc_journals: List[str] = None,
               enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None) -> Dict:
         """
         Execute a full RAG query with multi-source retrieval
@@ -424,6 +425,7 @@ ANSWER:"""
             query: The search query
             include_images: Whether to include protocol images
             sources: List of sources to query ('local', 'wikem', 'pmc'). Default: ['local', 'wikem'].
+            pmc_journals: Optional list of PMC journal names to keep. None = no filter (all journals).
             enterprise_id: Enterprise ID for path-prefix filtering
             ed_ids: List of ED IDs to filter by
             bundle_ids: List of bundle IDs to filter by
@@ -441,7 +443,24 @@ ANSWER:"""
                 "citations": []
             }
         
-        # Step 1.5: Filter local contexts by ED/bundle path prefixes
+        # Step 1.5a: Filter PMC contexts by journal if a journal filter is provided
+        if pmc_journals is not None:
+            journal_set = set(pmc_journals)
+            filtered = []
+            for ctx in contexts:
+                if ctx.get("source_type") != "pmc":
+                    filtered.append(ctx)
+                    continue
+                # Look up the journal from GCS metadata
+                metadata = self._get_pmc_metadata(ctx.get("source", ""))
+                if metadata and metadata.get("journal") in journal_set:
+                    filtered.append(ctx)
+                elif not metadata:
+                    # If we can't resolve metadata, keep the result (fail-open)
+                    filtered.append(ctx)
+            contexts = filtered
+        
+        # Step 1.5b: Filter local contexts by ED/bundle path prefixes
         if enterprise_id and ed_ids:
             prefixes = []
             for ed_id in ed_ids:

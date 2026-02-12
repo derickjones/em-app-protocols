@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth-context";
 
@@ -11,6 +11,24 @@ const STORAGE_KEY = "em-protocol-conversations";
 const THEME_KEY = "em-protocol-theme";
 const BUNDLE_KEY = "em-protocol-selected-bundles";
 const ED_KEY = "em-protocol-selected-eds";
+const UNIVERSE_KEY = "em-protocol-ed-universe";
+
+// PMC Journal registry — key is the exact string stored in GCS metadata
+const PMC_JOURNALS: { key: string; label: string; count: number }[] = [
+  { key: "The Western Journal of Emergency Medicine", label: "Western J EM", count: 2023 },
+  { key: "Journal of the American College of Emergency Physicians Open", label: "JACEP Open", count: 1561 },
+  { key: "The American Journal of Emergency Medicine", label: "Am J Emerg Med", count: 867 },
+  { key: "Annals of Emergency Medicine", label: "Annals of EM", count: 664 },
+  { key: "Acad Emerg Med", label: "Academic EM", count: 548 },
+  { key: "The Journal of Emergency Medicine", label: "J Emerg Med", count: 258 },
+  { key: "Pediatric Emergency Care", label: "Peds Emerg Care", count: 238 },
+  { key: "Advanced Journal of Emergency Medicine", label: "Adv J Emerg Med", count: 145 },
+  { key: "Eur J Emerg Med", label: "Eur J Emerg Med", count: 107 },
+  { key: "Prehospital Emergency Care", label: "Prehosp Emerg Care", count: 107 },
+  { key: "Air Medical Journal", label: "Air Med Journal", count: 86 },
+];
+const ALL_PMC_JOURNAL_KEYS = PMC_JOURNALS.map(j => j.key);
+const TOTAL_PMC_COUNT = PMC_JOURNALS.reduce((sum, j) => sum + j.count, 0);
 
 interface QueryResponse {
   answer: string;
@@ -72,23 +90,76 @@ export default function Home() {
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
   const [showBundleSelector, setShowBundleSelector] = useState(false);
 
-  // Search sources: "wikem" (EM Universe) - "local" is controlled by ED selection
-  const [searchSources, setSearchSources] = useState<Set<string>>(new Set(["wikem"]));
+  // ED Universe state
+  const [wikemEnabled, setWikemEnabled] = useState(true);
+  const [pmcEnabled, setPmcEnabled] = useState(true);
+  const [selectedJournals, setSelectedJournals] = useState<Set<string>>(new Set(ALL_PMC_JOURNAL_KEYS));
+  const [wikemExpanded, setWikemExpanded] = useState(false);
+  const [pmcExpanded, setPmcExpanded] = useState(false);
+  const [universeDirty, setUniverseDirty] = useState(false); // track unsaved changes
 
   // Toggle wikem source on/off (can be turned off if EDs are selected)
+  // Globe toggles BOTH wikem and PMC together
   const toggleSource = (source: string) => {
-    setSearchSources(prev => {
-      const next = new Set(prev);
-      if (next.has(source)) {
-        // Allow turning off wikem if we have EDs selected (local protocols available)
-        if (source === "wikem" && selectedEds.size > 0) {
-          next.delete(source);
+    if (source === "wikem") {
+      const isCurrentlyOn = wikemEnabled || pmcEnabled;
+      if (isCurrentlyOn) {
+        // Turn off both — only if we have EDs selected (need at least one source)
+        if (selectedEds.size > 0) {
+          setWikemEnabled(false);
+          setPmcEnabled(false);
         }
       } else {
-        next.add(source);
+        // Turn both back on
+        setWikemEnabled(true);
+        setPmcEnabled(true);
+      }
+    }
+  };
+
+  // Derive the effective sources array for API calls
+  const getEffectiveSources = (): string[] => {
+    const sources: string[] = [];
+    if (selectedEds.size > 0) sources.push("local");
+    if (wikemEnabled) sources.push("wikem");
+    if (pmcEnabled && selectedJournals.size > 0) sources.push("pmc");
+    return sources;
+  };
+
+  // Derive the effective PMC journal filter (null = no filter = all)
+  const getEffectivePmcJournals = (): string[] | undefined => {
+    if (!pmcEnabled) return undefined;
+    if (selectedJournals.size === ALL_PMC_JOURNAL_KEYS.length) return undefined; // all selected = no filter
+    return Array.from(selectedJournals);
+  };
+
+  // Is the globe "on"? (either wikem or pmc is active)
+  const globeActive = wikemEnabled || pmcEnabled;
+
+  // Save ED Universe preferences to localStorage
+  const saveUniversePreferences = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(UNIVERSE_KEY, JSON.stringify({
+        wikemEnabled,
+        pmcEnabled,
+        selectedJournals: Array.from(selectedJournals),
+      }));
+      setUniverseDirty(false);
+    }
+  };
+
+  // Toggle a single PMC journal
+  const toggleJournal = (journalKey: string) => {
+    setSelectedJournals(prev => {
+      const next = new Set(prev);
+      if (next.has(journalKey)) {
+        next.delete(journalKey);
+      } else {
+        next.add(journalKey);
       }
       return next;
     });
+    setUniverseDirty(true);
   };
 
   const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
@@ -105,6 +176,21 @@ export default function Home() {
         // Check system preference
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         setDarkMode(prefersDark);
+      }
+
+      // Load ED Universe preferences
+      const savedUniverse = localStorage.getItem(UNIVERSE_KEY);
+      if (savedUniverse) {
+        try {
+          const prefs = JSON.parse(savedUniverse);
+          if (typeof prefs.wikemEnabled === 'boolean') setWikemEnabled(prefs.wikemEnabled);
+          if (typeof prefs.pmcEnabled === 'boolean') setPmcEnabled(prefs.pmcEnabled);
+          if (Array.isArray(prefs.selectedJournals)) {
+            setSelectedJournals(new Set(prefs.selectedJournals));
+          }
+        } catch (e) {
+          console.warn("Failed to load ED Universe preferences", e);
+        }
       }
     }
   }, []);
@@ -363,10 +449,8 @@ export default function Home() {
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
-          sources: [
-            ...(selectedEds.size > 0 ? ["local"] : []),
-            ...(searchSources.has("wikem") ? ["wikem", "pmc"] : [])
-          ],
+          sources: getEffectiveSources(),
+          pmc_journals: getEffectivePmcJournals(),
           enterprise_id: enterprise?.id || undefined
         }),
       });
@@ -583,6 +667,180 @@ export default function Home() {
               />
             </button>
             <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Dark</span>
+          </div>
+
+          {/* ED Universe — Knowledge Sources */}
+          <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
+            <div className={`px-3 py-2.5 flex items-center gap-2`}>
+              <Globe className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+              <span className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                ED Universe
+              </span>
+            </div>
+
+            <div className={`px-2 pb-2 space-y-1`}>
+              {/* WikEM Section */}
+              <div>
+                <button
+                  onClick={() => setWikemExpanded(!wikemExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setWikemEnabled(!wikemEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      wikemEnabled
+                        ? 'bg-blue-500 border-blue-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {wikemEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <Globe className={`w-3.5 h-3.5 flex-shrink-0 ${wikemEnabled ? darkMode ? 'text-blue-400' : 'text-blue-600' : darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                  <span className={`flex-1 text-left font-medium ${wikemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    WikEM
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>1,899</span>
+                  {wikemExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {wikemExpanded && (
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
+                  }`}>
+                    Community-maintained EM knowledge base covering 1,899 clinical topics — diagnoses, procedures, and differentials.
+                  </div>
+                )}
+              </div>
+
+              {/* PMC Literature Section */}
+              <div>
+                <button
+                  onClick={() => setPmcExpanded(!pmcExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPmcEnabled(!pmcEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      pmcEnabled
+                        ? 'bg-purple-500 border-purple-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {pmcEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <BookOpen className={`w-3.5 h-3.5 flex-shrink-0 ${pmcEnabled ? darkMode ? 'text-purple-400' : 'text-purple-600' : darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                  <span className={`flex-1 text-left font-medium ${pmcEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    PMC Literature
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {selectedJournals.size === ALL_PMC_JOURNAL_KEYS.length
+                      ? TOTAL_PMC_COUNT.toLocaleString()
+                      : `${selectedJournals.size}/${PMC_JOURNALS.length}`
+                    }
+                  </span>
+                  {pmcExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {pmcExpanded && (
+                  <div className="ml-4 mt-1">
+                    {/* Select All / Clear */}
+                    <div className="flex items-center gap-2 px-2 mb-1">
+                      <button
+                        onClick={() => { setSelectedJournals(new Set(ALL_PMC_JOURNAL_KEYS)); setUniverseDirty(true); }}
+                        className={`text-xs transition-colors ${
+                          selectedJournals.size === ALL_PMC_JOURNAL_KEYS.length
+                            ? darkMode ? 'text-gray-600' : 'text-gray-300'
+                            : darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'
+                        }`}
+                        disabled={selectedJournals.size === ALL_PMC_JOURNAL_KEYS.length}
+                      >
+                        Select All
+                      </button>
+                      <span className={`text-xs ${darkMode ? 'text-gray-700' : 'text-gray-300'}`}>·</span>
+                      <button
+                        onClick={() => { setSelectedJournals(new Set()); setUniverseDirty(true); }}
+                        className={`text-xs transition-colors ${
+                          selectedJournals.size === 0
+                            ? darkMode ? 'text-gray-600' : 'text-gray-300'
+                            : darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'
+                        }`}
+                        disabled={selectedJournals.size === 0}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {/* Journal list */}
+                    <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                      {PMC_JOURNALS.map((j) => {
+                        const isChecked = selectedJournals.has(j.key);
+                        return (
+                          <button
+                            key={j.key}
+                            onClick={() => toggleJournal(j.key)}
+                            className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
+                              darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                            }`}
+                          >
+                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
+                              isChecked
+                                ? 'bg-purple-500 border-purple-500'
+                                : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                            }`}>
+                              {isChecked && <Check className="w-2.5 h-2.5 text-white" />}
+                            </div>
+                            <span className={`flex-1 text-left ${
+                              isChecked
+                                ? darkMode ? 'text-gray-300' : 'text-gray-700'
+                                : darkMode ? 'text-gray-500' : 'text-gray-400'
+                            }`}>
+                              {j.label}
+                            </span>
+                            <span className={`text-xs tabular-nums ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                              {j.count.toLocaleString()}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Save Preferences */}
+            {universeDirty && (
+              <div className={`px-2 pb-2`}>
+                <button
+                  onClick={saveUniversePreferences}
+                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    darkMode
+                      ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
+                      : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
+                  }`}
+                >
+                  <Save className="w-3 h-3" />
+                  Save Preferences
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Enterprise + ED Selector */}
@@ -860,9 +1118,9 @@ export default function Home() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => toggleSource("wikem")}
-                      title="EM Universe — WikEM topics + PMC peer-reviewed literature"
+                      title="ED Universe — WikEM topics + PMC peer-reviewed literature"
                       className={`p-2 rounded-xl transition-all duration-200 ${
-                        searchSources.has("wikem")
+                        globeActive
                           ? darkMode
                             ? 'bg-blue-600/20 text-blue-400'
                             : 'bg-blue-50 text-blue-600'
@@ -1126,9 +1384,9 @@ export default function Home() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => toggleSource("wikem")}
-                  title="EM Universe — WikEM topics + PMC peer-reviewed literature"
+                  title="ED Universe — WikEM topics + PMC peer-reviewed literature"
                   className={`p-1.5 rounded-lg transition-all duration-200 ${
-                    searchSources.has("wikem")
+                    globeActive
                       ? darkMode
                         ? 'bg-blue-600/20 text-blue-400'
                         : 'bg-blue-50 text-blue-600'
