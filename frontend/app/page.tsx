@@ -1196,11 +1196,11 @@ export default function Home() {
                           className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
                             isSelected
                               ? darkMode
-                                ? 'bg-blue-600 text-white border-2 border-blue-500'
-                                : 'bg-blue-500 text-white border-2 border-blue-400'
+                                ? 'bg-neutral-800 text-gray-200 border-2 border-blue-500/60'
+                                : 'bg-white text-gray-700 border-2 border-blue-400'
                               : darkMode
-                                ? 'bg-neutral-800 text-gray-300 border-2 border-neutral-700 hover:bg-neutral-700 hover:border-neutral-600'
-                                : 'bg-gray-100 text-gray-600 border-2 border-gray-200 hover:bg-gray-200 hover:border-gray-300'
+                                ? 'bg-neutral-800 text-gray-400 border-2 border-neutral-700 hover:text-gray-300 hover:border-neutral-600'
+                                : 'bg-gray-100 text-gray-500 border-2 border-gray-200 hover:text-gray-600 hover:border-gray-300'
                           }`}
                         >
                           {getBundleIcon(bundle.name, index, isSelected)}
