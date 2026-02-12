@@ -1182,9 +1182,9 @@ export default function Home() {
 
               {/* Bundle Toggle Chips */}
               {getAvailableBundles().length > 0 && (
-                <div className="mt-5">
-                  <p className={`text-xs font-medium mb-2.5 text-center ${darkMode ? 'text-neutral-500' : 'text-gray-400'}`}>
-                    Available Protocol Bundles
+                <div className="mt-6">
+                  <p className={`text-xs font-semibold uppercase tracking-widest mb-3 text-center ${darkMode ? 'text-neutral-400' : 'text-gray-500'}`}>
+                    Protocol Bundles
                   </p>
                   <div className="flex flex-wrap gap-3 justify-center">
                     {getAvailableBundles().map((bundle, index) => {
