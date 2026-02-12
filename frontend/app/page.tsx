@@ -72,15 +72,18 @@ export default function Home() {
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
   const [showBundleSelector, setShowBundleSelector] = useState(false);
 
-  // Search sources: multi-select - "wikem" (EM Universe), "local" (Protocols)
-  const [searchSources, setSearchSources] = useState<Set<string>>(new Set(["wikem", "local"]));
+  // Search sources: "wikem" (EM Universe) - "local" is controlled by ED selection
+  const [searchSources, setSearchSources] = useState<Set<string>>(new Set(["wikem"]));
 
-  // Toggle a search source on/off (must keep at least one)
+  // Toggle wikem source on/off (can be turned off if EDs are selected)
   const toggleSource = (source: string) => {
     setSearchSources(prev => {
       const next = new Set(prev);
       if (next.has(source)) {
-        if (next.size > 1) next.delete(source);
+        // Allow turning off wikem if we have EDs selected (local protocols available)
+        if (source === "wikem" && selectedEds.size > 0) {
+          next.delete(source);
+        }
       } else {
         next.add(source);
       }
@@ -360,7 +363,10 @@ export default function Home() {
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
-          sources: Array.from(searchSources),
+          sources: [
+            ...(selectedEds.size > 0 ? ["local"] : []),
+            ...(searchSources.has("wikem") ? ["wikem"] : [])
+          ],
           enterprise_id: enterprise?.id || undefined
         }),
       });
@@ -850,7 +856,7 @@ export default function Home() {
 
                 {/* Bottom bar inside search box */}
                 <div className={`flex items-center justify-between px-4 pb-3 pt-0`}>
-                  {/* Source toggles - left side */}
+                  {/* Source toggles + ED filters - left side */}
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => toggleSource("wikem")}
@@ -867,21 +873,27 @@ export default function Home() {
                     >
                       <Globe className="w-5 h-5" />
                     </button>
-                    <button
-                      onClick={() => toggleSource("local")}
-                      title="Protocols — Your department's uploaded clinical protocols"
-                      className={`p-2 rounded-xl transition-all duration-200 ${
-                        searchSources.has("local")
-                          ? darkMode
-                            ? 'bg-blue-600/20 text-blue-400'
-                            : 'bg-blue-50 text-blue-600'
-                          : darkMode
-                            ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <FileText className="w-5 h-5" />
-                    </button>
+                    {enterprise?.eds.map((ed) => {
+                      const isSelected = selectedEds.has(ed.id);
+                      return (
+                        <button
+                          key={ed.id}
+                          onClick={() => toggleEdSelection(ed.id)}
+                          title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 ${
+                            isSelected
+                              ? darkMode
+                                ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                                : 'bg-blue-50 text-blue-600 border border-blue-200'
+                              : darkMode
+                                ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 border border-transparent'
+                                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-transparent'
+                          }`}
+                        >
+                          {ed.name}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Right side - mic & submit */}
@@ -1100,7 +1112,7 @@ export default function Home() {
 
             {/* Bottom bar */}
             <div className="flex items-center justify-between px-4 pb-3 pt-0">
-              {/* Source toggles */}
+              {/* Source toggles + ED filters */}
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => toggleSource("wikem")}
@@ -1117,21 +1129,27 @@ export default function Home() {
                 >
                   <Globe className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => toggleSource("local")}
-                  title="Protocols — Your department's uploaded clinical protocols"
-                  className={`p-1.5 rounded-lg transition-all duration-200 ${
-                    searchSources.has("local")
-                      ? darkMode
-                        ? 'bg-blue-600/20 text-blue-400'
-                        : 'bg-blue-50 text-blue-600'
-                      : darkMode
-                        ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
-                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                </button>
+                {enterprise?.eds.map((ed) => {
+                  const isSelected = selectedEds.has(ed.id);
+                  return (
+                    <button
+                      key={ed.id}
+                      onClick={() => toggleEdSelection(ed.id)}
+                      title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
+                        isSelected
+                          ? darkMode
+                            ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                            : 'bg-blue-50 text-blue-600 border border-blue-200'
+                          : darkMode
+                            ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 border border-transparent'
+                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-transparent'
+                      }`}
+                    >
+                      {ed.name}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Right side */}
