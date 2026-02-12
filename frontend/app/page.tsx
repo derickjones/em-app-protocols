@@ -254,6 +254,18 @@ export default function Home() {
         } else {
           setSelectedEds(new Set(data.eds.map(ed => ed.id)));
         }
+
+        // Default all bundles to selected if no saved preference
+        const savedBundles = localStorage.getItem(BUNDLE_KEY);
+        if (!savedBundles) {
+          const allBundleIds = new Set<string>();
+          for (const ed of data.eds) {
+            for (const b of ed.bundles) {
+              allBundleIds.add(b.id);
+            }
+          }
+          setSelectedBundles(allBundleIds);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch enterprise:", err);
@@ -327,40 +339,41 @@ export default function Home() {
 
   // Get icon for bundle based on name or index
   const getBundleIcon = (bundleName: string, index: number, isSelected: boolean) => {
-    const iconClass = `w-4 h-4 ${isSelected ? 'text-white' : ''}`;
+    const iconClass = "w-4 h-4";
+    const off = "text-neutral-500";
     
     // Match bundle names to relevant icons
     const nameLower = bundleName.toLowerCase();
     if (nameLower.includes('cardiac') || nameLower.includes('acls') || nameLower.includes('heart')) {
-      return <Heart className={`${iconClass} ${!isSelected ? 'text-red-500' : ''}`} />;
+      return <Heart className={`${iconClass} ${isSelected ? 'text-red-500' : off}`} />;
     }
     if (nameLower.includes('trauma') || nameLower.includes('injury')) {
-      return <Zap className={`${iconClass} ${!isSelected ? 'text-orange-500' : ''}`} />;
+      return <Zap className={`${iconClass} ${isSelected ? 'text-orange-500' : off}`} />;
     }
     if (nameLower.includes('neuro') || nameLower.includes('stroke') || nameLower.includes('brain')) {
-      return <Brain className={`${iconClass} ${!isSelected ? 'text-purple-500' : ''}`} />;
+      return <Brain className={`${iconClass} ${isSelected ? 'text-purple-500' : off}`} />;
     }
     if (nameLower.includes('ortho') || nameLower.includes('fracture') || nameLower.includes('bone')) {
-      return <Bone className={`${iconClass} ${!isSelected ? 'text-gray-400' : ''}`} />;
+      return <Bone className={`${iconClass} ${isSelected ? 'text-gray-400' : off}`} />;
     }
     if (nameLower.includes('peds') || nameLower.includes('pediatric')) {
-      return <ShieldPlus className={`${iconClass} ${!isSelected ? 'text-pink-500' : ''}`} />;
+      return <ShieldPlus className={`${iconClass} ${isSelected ? 'text-pink-500' : off}`} />;
     }
     if (nameLower.includes('med') || nameLower.includes('pharm') || nameLower.includes('drug')) {
-      return <Pill className={`${iconClass} ${!isSelected ? 'text-green-500' : ''}`} />;
+      return <Pill className={`${iconClass} ${isSelected ? 'text-green-500' : off}`} />;
     }
     if (nameLower.includes('procedure') || nameLower.includes('injection')) {
-      return <Syringe className={`${iconClass} ${!isSelected ? 'text-cyan-500' : ''}`} />;
+      return <Syringe className={`${iconClass} ${isSelected ? 'text-cyan-500' : off}`} />;
     }
     
     // Cycle through icons for generic bundles
     const icons = [
-      <Activity key="activity" className={`${iconClass} ${!isSelected ? 'text-red-500' : ''}`} />,
-      <Stethoscope key="stethoscope" className={`${iconClass} ${!isSelected ? 'text-blue-500' : ''}`} />,
-      <Heart key="heart" className={`${iconClass} ${!isSelected ? 'text-red-500' : ''}`} />,
-      <Cross key="cross" className={`${iconClass} ${!isSelected ? 'text-emerald-500' : ''}`} />,
-      <Zap key="zap" className={`${iconClass} ${!isSelected ? 'text-yellow-500' : ''}`} />,
-      <Brain key="brain" className={`${iconClass} ${!isSelected ? 'text-purple-500' : ''}`} />,
+      <Activity key="activity" className={`${iconClass} ${isSelected ? 'text-red-500' : off}`} />,
+      <Stethoscope key="stethoscope" className={`${iconClass} ${isSelected ? 'text-blue-500' : off}`} />,
+      <Heart key="heart" className={`${iconClass} ${isSelected ? 'text-red-500' : off}`} />,
+      <Cross key="cross" className={`${iconClass} ${isSelected ? 'text-emerald-500' : off}`} />,
+      <Zap key="zap" className={`${iconClass} ${isSelected ? 'text-yellow-500' : off}`} />,
+      <Brain key="brain" className={`${iconClass} ${isSelected ? 'text-purple-500' : off}`} />,
     ];
     return icons[index % icons.length];
   };
