@@ -1134,27 +1134,20 @@ export default function Home() {
                     >
                       <Globe className="w-5 h-5" />
                     </button>
-                    {enterprise?.eds.map((ed) => {
-                      const isSelected = selectedEds.has(ed.id);
-                      return (
+                    {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
                         <button
                           key={ed.id}
                           onClick={() => toggleEdSelection(ed.id)}
                           title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
                           className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 ${
-                            isSelected
-                              ? darkMode
-                                ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                                : 'bg-blue-50 text-blue-600 border border-blue-200'
-                              : darkMode
-                                ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 border border-transparent'
-                                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-transparent'
+                            darkMode
+                              ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                              : 'bg-blue-50 text-blue-600 border border-blue-200'
                           }`}
                         >
                           {ed.name}
                         </button>
-                      );
-                    })}
+                    ))}
                   </div>
 
                   {/* Right side - mic & submit */}
@@ -1400,27 +1393,20 @@ export default function Home() {
                 >
                   <Globe className="w-4 h-4" />
                 </button>
-                {enterprise?.eds.map((ed) => {
-                  const isSelected = selectedEds.has(ed.id);
-                  return (
+                {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
                     <button
                       key={ed.id}
                       onClick={() => toggleEdSelection(ed.id)}
                       title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
                       className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        isSelected
-                          ? darkMode
-                            ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                            : 'bg-blue-50 text-blue-600 border border-blue-200'
-                          : darkMode
-                            ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 border border-transparent'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 border border-transparent'
+                        darkMode
+                          ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                          : 'bg-blue-50 text-blue-600 border border-blue-200'
                       }`}
                     >
                       {ed.name}
                     </button>
-                  );
-                })}
+                ))}
               </div>
 
               {/* Right side */}
