@@ -1384,6 +1384,39 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Images - Horizontal Scrolling Carousel */}
+                {response && response.images.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Related Diagrams
+                    </h3>
+                    {/* Horizontal Scroll Container */}
+                    <div className="relative -mx-4 px-4">
+                      <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
+                        {response.images.map((img, idx) => (
+                          <div 
+                            key={idx} 
+                            className={`flex-shrink-0 w-80 rounded-2xl overflow-hidden border shadow-sm snap-start transition-transform hover:scale-[1.02] ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-gray-200'}`}
+                          >
+                            <img
+                              src={img.url}
+                              alt={`Protocol diagram from ${img.protocol_id}, page ${img.page}`}
+                              className="w-full h-auto object-contain"
+                              loading="lazy"
+                            />
+                            <div className={`px-4 py-3 text-xs border-t ${darkMode ? 'text-gray-400 border-neutral-700' : 'text-gray-500 border-gray-100'}`}>
+                              {img.protocol_id.replace(/_/g, " ")} · Page {img.page}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Citations */}
                 {response && response.citations.length > 0 && (
                   <div className={`rounded-2xl p-5 ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-gray-50 border border-gray-200'}`}>
@@ -1449,39 +1482,6 @@ export default function Home() {
                         LITFL content from <a href="https://litfl.com" target="_blank" rel="noopener noreferrer" className="underline">litfl.com</a> under CC BY-NC-SA 4.0 — FOAMed education resource
                       </p>
                     )}
-                  </div>
-                )}
-
-                {/* Images - Horizontal Scrolling Carousel */}
-                {response && response.images.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      Related Diagrams
-                    </h3>
-                    {/* Horizontal Scroll Container */}
-                    <div className="relative -mx-4 px-4">
-                      <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-                        {response.images.map((img, idx) => (
-                          <div 
-                            key={idx} 
-                            className={`flex-shrink-0 w-80 rounded-2xl overflow-hidden border shadow-sm snap-start transition-transform hover:scale-[1.02] ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-gray-200'}`}
-                          >
-                            <img
-                              src={img.url}
-                              alt={`Protocol diagram from ${img.protocol_id}, page ${img.page}`}
-                              className="w-full h-auto object-contain"
-                              loading="lazy"
-                            />
-                            <div className={`px-4 py-3 text-xs border-t ${darkMode ? 'text-gray-400 border-neutral-700' : 'text-gray-500 border-gray-100'}`}>
-                              {img.protocol_id.replace(/_/g, " ")} · Page {img.page}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
