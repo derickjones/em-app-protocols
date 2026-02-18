@@ -789,7 +789,7 @@ export default function Home() {
                   >
                     {wikemEnabled && <Check className="w-3 h-3 text-white" />}
                   </div>
-                  <Globe className={`w-3.5 h-3.5 flex-shrink-0 ${wikemEnabled ? darkMode ? 'text-blue-400' : 'text-blue-600' : darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                  <img src="/logos/wikem.jpg" alt="WikEM" className={`w-4 h-4 rounded flex-shrink-0 ${wikemEnabled ? 'opacity-100' : 'opacity-40'}`} />
                   <span className={`flex-1 text-left font-medium ${wikemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     WikEM
                   </span>
@@ -805,6 +805,48 @@ export default function Home() {
                     darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     Community-maintained EM knowledge base covering 1,899 clinical topics — diagnoses, procedures, and differentials.
+                  </div>
+                )}
+              </div>
+
+              {/* LITFL Section */}
+              <div>
+                <button
+                  onClick={() => setLitflExpanded(!litflExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLitflEnabled(!litflEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      litflEnabled
+                        ? 'bg-emerald-500 border-emerald-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {litflEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <img src="/logos/litfl-logo.png" alt="LITFL" className={`w-4 h-4 rounded flex-shrink-0 ${litflEnabled ? 'opacity-100' : 'opacity-40'}`} />
+                  <span className={`flex-1 text-left font-medium ${litflEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    LITFL
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>7,902</span>
+                  {litflExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {litflExpanded && (
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
+                  }`}>
+                    Life in the Fast Lane — 7,902 FOAMed articles covering ECG interpretation, critical care, toxicology, pharmacology, clinical cases, and eponymous medical terms. CC BY-NC-SA 4.0.
                   </div>
                 )}
               </div>
@@ -831,7 +873,7 @@ export default function Home() {
                   >
                     {pmcEnabled && <Check className="w-3 h-3 text-white" />}
                   </div>
-                  <BookOpen className={`w-3.5 h-3.5 flex-shrink-0 ${pmcEnabled ? darkMode ? 'text-purple-400' : 'text-purple-600' : darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                  <img src="/logos/pmc_logo.png" alt="PMC" className={`w-4 h-4 rounded flex-shrink-0 ${pmcEnabled ? 'opacity-100' : 'opacity-40'}`} />
                   <span className={`flex-1 text-left font-medium ${pmcEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     PMC Literature
                   </span>
@@ -908,48 +950,6 @@ export default function Home() {
                         );
                       })}
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {/* LITFL Section */}
-              <div>
-                <button
-                  onClick={() => setLitflExpanded(!litflExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLitflEnabled(!litflEnabled);
-                      setUniverseDirty(true);
-                    }}
-                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
-                      litflEnabled
-                        ? 'bg-emerald-500 border-emerald-500'
-                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
-                    }`}
-                  >
-                    {litflEnabled && <Check className="w-3 h-3 text-white" />}
-                  </div>
-                  <Zap className={`w-3.5 h-3.5 flex-shrink-0 ${litflEnabled ? darkMode ? 'text-emerald-400' : 'text-emerald-600' : darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
-                  <span className={`flex-1 text-left font-medium ${litflEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    LITFL
-                  </span>
-                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>7,902</span>
-                  {litflExpanded ? (
-                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                  ) : (
-                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                  )}
-                </button>
-                {litflExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
-                  }`}>
-                    Life in the Fast Lane — 7,902 FOAMed articles covering ECG interpretation, critical care, toxicology, pharmacology, clinical cases, and eponymous medical terms. CC BY-NC-SA 4.0.
                   </div>
                 )}
               </div>
