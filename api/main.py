@@ -124,7 +124,7 @@ class QueryRequest(BaseModel):
     ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
-    sources: List[str] = Field(default=["local", "wikem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature)")
+    sources: List[str] = Field(default=["local", "wikem", "litfl"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature), 'litfl' (LITFL clinical education)")
     pmc_journals: Optional[List[str]] = Field(default=None, description="PMC journal names to include. None = all journals (no filter).")
     enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
 

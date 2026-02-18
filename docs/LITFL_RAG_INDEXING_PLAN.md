@@ -1,0 +1,475 @@
+# LITFL RAG Indexing & Embedding Plan
+
+> **Created:** February 17, 2026  
+> **Status:** Ready to implement  
+> **Based on:** WikEM and PMC corpus architecture
+
+---
+
+## Overview
+
+Index all 7,902 successfully scraped LITFL pages into a dedicated Vertex AI RAG corpus, enabling the EM app to query LITFL's comprehensive FOAMed content alongside WikEM and PMC literature.
+
+---
+
+## Architecture Decision: Separate Corpus ✅
+
+**Yes, LITFL should have its own dedicated RAG corpus**, following the same pattern as WikEM and PMC.
+
+### Why Separate Corpora?
+
+| Aspect | Benefit |
+|--------|---------|
+| **Source Attribution** | Easy to identify which source provided which context |
+| **Content Quality** | Different sources have different reliability/depth profiles |
+| **Update Cadence** | Each corpus can be re-indexed independently |
+| **Relevance Tuning** | Can weight sources differently (e.g., prefer WikEM for quick reference, LITFL for pharmacology) |
+| **Cost Control** | Track embedding/storage costs per source |
+| **Debugging** | Easier to troubleshoot issues with a specific corpus |
+
+### Multi-Corpus Query Strategy
+
+The `RAGService` already supports querying multiple corpora in parallel:
+
+```python
+# Current setup
+self.corpus_name        # Local protocols (Mayo-specific)
+self.wikem_corpus_name  # WikEM general ED content
+self.pmc_corpus_name    # PMC research literature
+self.litfl_corpus_name  # LITFL FOAMed content (NEW)
+```
+
+Query execution:
+1. User asks a clinical question
+2. Backend queries all 4 corpora in parallel (ThreadPoolExecutor)
+3. Contexts are retrieved, tagged by source
+4. Gemini synthesizes answer using all contexts
+5. Citations show source type (Local/WikEM/PMC/LITFL)
+
+---
+
+## Corpus Configuration
+
+### Corpus Details
+
+| Property | Value |
+|----------|-------|
+| **Display Name** | `litfl-foamed` |
+| **Description** | "FOAMed clinical education content from Life in the Fast Lane (litfl.com) - pharmacology, ECG, imaging, critical care" |
+| **Embedding Model** | `text-embedding-005` (same as WikEM/PMC) |
+| **Location** | `us-west4` (same region as other corpora) |
+| **Chunking** | Default (1024 chars, 200 overlap) |
+| **Total Documents** | 7,902 pages |
+| **Total Images** | 10,966 images |
+
+### Storage Buckets
+
+| Bucket | Purpose | Content |
+|--------|---------|---------|
+| `clinical-assistant-457902-litfl` | Raw + processed content | HTML, JSON, MD files, images |
+| Used by RAG | Metadata files for corpus indexing | `metadata/*.json` files |
+
+---
+
+## File Preparation
+
+### Current State ✅
+
+The scraper has already created ideal RAG input files:
+
+```
+scrapers/litfl/output/
+├── raw/               # 7,717 HTML files (backup only)
+├── processed/
+│   ├── *.json         # 7,716 structured JSON files
+│   └── *.md           # 7,716 markdown files (RAG input)
+└── metadata/
+    └── *.json         # Per-page metadata files
+```
+
+### Metadata Structure
+
+Each page has a corresponding `metadata/{slug}.json`:
+
+```json
+{
+  "title": "Etomidate",
+  "slug": "etomidate",
+  "url": "https://litfl.com/etomidate/",
+  "author": "Chris Nickson",
+  "date_modified": "2024-08-15T12:30:00Z",
+  "categories": ["CCC", "Pharmacology"],
+  "tags": ["sedation", "induction", "intubation"],
+  "sections": ["Overview", "Mechanism", "Pharmacokinetics", "Clinical Use"],
+  "images": [
+    {
+      "original_url": "https://litfl.com/wp-content/uploads/etomidate.png",
+      "gcs_uri": "gs://clinical-assistant-457902-litfl/images/etomidate/etomidate.png",
+      "alt": "Etomidate chemical structure",
+      "width": 800,
+      "height": 600
+    }
+  ],
+  "content_length": 4523,
+  "source": "LITFL",
+  "license": "CC BY-NC-SA 4.0",
+  "scraped_at": "2026-02-16T14:15:23Z"
+}
+```
+
+---
+
+## Implementation Steps
+
+### Step 1: Create LITFL Indexer Script
+
+**File:** `scrapers/litfl/litfl_indexer.py`
+
+Based on `wikem_indexer.py` with LITFL-specific adaptations:
+
+```python
+#!/usr/bin/env python3
+"""
+LITFL RAG Indexer
+Creates a separate Vertex AI RAG corpus for LITFL content
+and indexes scraped markdown files into it.
+
+Usage:
+    # Create the LITFL corpus (one-time)
+    python litfl_indexer.py --create-corpus
+
+    # Index all processed markdown files
+    python litfl_indexer.py --index-all
+
+    # Check corpus status
+    python litfl_indexer.py --status
+
+    # List indexed files
+    python litfl_indexer.py --list-files
+"""
+```
+
+**Key functions:**
+- `create_corpus()` - Create the `litfl-foamed` RAG corpus
+- `index_file(md_path)` - Index a single markdown file with metadata
+- `index_all()` - Bulk index all 7,716 processed files
+- `get_corpus_status()` - Check indexing progress
+- `list_rag_files()` - List all indexed files in corpus
+
+### Step 2: Create RAG Config File
+
+**File:** `scrapers/litfl/litfl_rag_config.json`
+
+Auto-generated after corpus creation:
+
+```json
+{
+  "project_id": "clinical-assistant-457902",
+  "project_number": "930035889332",
+  "location": "us-west4",
+  "corpus_id": "<auto-generated-id>",
+  "corpus_name": "projects/930035889332/locations/us-west4/ragCorpora/<id>",
+  "corpus_display_name": "litfl-foamed",
+  "embedding_model": "text-embedding-005",
+  "last_indexed": "2026-02-17T20:30:00Z",
+  "total_files": 7902,
+  "total_images": 10966
+}
+```
+
+### Step 3: Upload to GCS
+
+The scraper already uploaded files during scraping, but verify:
+
+```bash
+# Check what's already in GCS
+gsutil ls -r gs://clinical-assistant-457902-litfl/processed/ | head -20
+gsutil ls -r gs://clinical-assistant-457902-litfl/metadata/ | head -20
+gsutil ls -r gs://clinical-assistant-457902-litfl/images/ | wc -l
+```
+
+If needed, bulk upload:
+
+```bash
+cd scrapers/litfl
+gsutil -m cp -r output/processed/* gs://clinical-assistant-457902-litfl/processed/
+gsutil -m cp -r output/metadata/* gs://clinical-assistant-457902-litfl/metadata/
+```
+
+### Step 4: Create Corpus & Index Files
+
+```bash
+cd scrapers/litfl
+
+# 1. Create the corpus (one-time, ~30 seconds)
+python litfl_indexer.py --create-corpus
+
+# 2. Index all files (bulk operation, ~2-4 hours for 7,902 files)
+python litfl_indexer.py --index-all --workers 10
+
+# 3. Verify indexing
+python litfl_indexer.py --status
+python litfl_indexer.py --list-files | wc -l  # Should show ~7902
+```
+
+### Step 5: Update RAG Service
+
+**File:** `api/rag_service.py`
+
+Update to include LITFL corpus in queries:
+
+```python
+# Load LITFL corpus ID from config
+LITFL_CORPUS_ID = os.environ.get("LITFL_CORPUS_ID", "")
+
+class RAGService:
+    def __init__(self):
+        # ... existing code ...
+        self.litfl_corpus_id = LITFL_CORPUS_ID
+        self.litfl_corpus_name = (
+            f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{LITFL_CORPUS_ID}"
+            if LITFL_CORPUS_ID else None
+        )
+    
+    def query_multi_source(self, query: str, sources: List[str] = None) -> Dict:
+        """
+        Query multiple RAG corpora in parallel
+        
+        Args:
+            query: User's clinical question
+            sources: List of sources to query ['local', 'wikem', 'pmc', 'litfl']
+                    If None, queries all available sources
+        """
+        if sources is None:
+            sources = ['local', 'wikem', 'pmc', 'litfl']
+        
+        # ... parallel retrieval logic ...
+```
+
+### Step 6: Update Environment Variables
+
+**File:** `.env` or deployment config
+
+```bash
+# Add LITFL corpus ID (from litfl_rag_config.json)
+LITFL_CORPUS_ID="<auto-generated-id>"
+LITFL_BUCKET="clinical-assistant-457902-litfl"
+```
+
+### Step 7: Update Frontend Citations
+
+**File:** `frontend/components/PromptInput.tsx` or response display
+
+Add LITFL as a citation source type:
+
+```typescript
+type SourceType = 'local' | 'wikem' | 'pmc' | 'litfl';
+
+const sourceLabels = {
+  local: 'Mayo Protocol',
+  wikem: 'WikEM',
+  pmc: 'Research',
+  litfl: 'LITFL'
+};
+
+const sourceColors = {
+  local: 'blue',
+  wikem: 'green',
+  pmc: 'purple',
+  litfl: 'orange'  // NEW
+};
+```
+
+---
+
+## Expected Performance
+
+### Corpus Stats
+
+| Metric | Value |
+|--------|-------|
+| **Total Documents** | 7,902 |
+| **Avg Document Size** | ~3-5 KB |
+| **Total Corpus Size** | ~35-40 MB text |
+| **Total Images** | 10,966 |
+| **Embedding Time** | ~2-4 hours (parallel indexing) |
+| **Storage Cost** | ~$1/month (Vertex AI RAG) |
+| **Query Latency** | +50-100ms per query |
+
+### Query Enhancement
+
+LITFL adds unique value:
+
+| Query Type | LITFL Contribution |
+|------------|-------------------|
+| **Drug questions** | CCC drug library with full PK/PD |
+| **ECG interpretation** | 100+ ECG cases with detailed analysis |
+| **Evidence/trials** | Trial summaries and critiques |
+| **Critical care** | Full Critical Care Compendium |
+| **Toxicology** | Comprehensive antidote/management |
+| **Radiology** | Top 100 CT/CXR case library |
+| **Eponyms** | 1000+ medical eponyms explained |
+
+---
+
+## Maintenance
+
+### Re-indexing Strategy
+
+When LITFL content is updated:
+
+```bash
+# 1. Re-scrape updated pages
+python litfl_bulk_scrape.py --resume --force
+
+# 2. Re-index changed files only
+python litfl_indexer.py --reindex-updated
+
+# OR full re-index (destructive, 2-4 hours)
+python litfl_indexer.py --rebuild-corpus
+```
+
+### Monitoring
+
+Track corpus health:
+
+```bash
+# Corpus statistics
+python litfl_indexer.py --status
+
+# File count
+python litfl_indexer.py --list-files | wc -l
+
+# Check for missing files
+python litfl_indexer.py --validate
+```
+
+---
+
+## Attribution & License Compliance
+
+### Every RAG Response Must Include
+
+1. **Source tag:** `(LITFL - CC BY-NC-SA 4.0)`
+2. **Author credit:** From metadata (e.g., "Chris Nickson")
+3. **Link back:** Original URL from `metadata.url`
+4. **License notice:** In app footer/about section
+
+### Implementation in Prompt
+
+```python
+# In Gemini prompt construction
+context_text = f"""
+Title: {title}
+Source: LITFL (CC BY-NC-SA 4.0)
+Author: {author}
+URL: {url}
+
+{content}
+"""
+```
+
+### User-Facing Citations
+
+```
+Sources:
+• LITFL: Etomidate (Chris Nickson) [link]
+  Licensed under CC BY-NC-SA 4.0
+```
+
+---
+
+## Next Steps
+
+### Immediate Actions
+
+1. ✅ Create `litfl_indexer.py` script
+2. ✅ Create corpus via API
+3. ✅ Index all 7,902 files
+4. ✅ Update `rag_service.py` to query LITFL corpus
+5. ✅ Update frontend to display LITFL citations
+6. ✅ Test queries that benefit from LITFL content
+
+### Testing Queries
+
+Good test queries that should pull LITFL content:
+
+```
+1. "What's the pharmacokinetics of etomidate?"
+   → Should cite CCC drug library
+
+2. "Show me examples of Wellens syndrome on ECG"
+   → Should cite ECG library with images
+
+3. "What are the evidence-based treatments for sepsis?"
+   → Should cite Critical Care Compendium
+
+4. "How do I interpret this wide complex tachycardia?"
+   → Should cite ECG interpretation guides
+
+5. "What's the management of beta blocker overdose?"
+   → Should cite toxicology library
+```
+
+---
+
+## Cost Estimate
+
+### One-Time Setup
+- Corpus creation: Free
+- Initial indexing: ~$0.50 (embedding API calls)
+
+### Ongoing
+- Storage: ~$1/month (RAG corpus)
+- Query costs: ~$0.002 per query (embedding + retrieval)
+- Re-indexing: ~$0.50/full rebuild (rare)
+
+**Total monthly cost: ~$1-2** (negligible compared to value)
+
+---
+
+## Risk & Mitigation
+
+| Risk | Mitigation |
+|------|-----------|
+| **Indexing fails midway** | Resume support, save progress every 100 files |
+| **Poor retrieval quality** | Test chunking strategies, tune similarity threshold |
+| **License violation** | Automated attribution in every response |
+| **Corpus becomes stale** | Monthly re-scrape + incremental re-index |
+| **High query latency** | Parallel corpus queries, cache common questions |
+
+---
+
+## Success Metrics
+
+### Technical
+- ✅ All 7,902 files successfully indexed
+- ✅ Query latency < 2 seconds (including LITFL)
+- ✅ Zero missing attributions in responses
+
+### Clinical Value
+- ✅ LITFL contexts appear in 40%+ of queries
+- ✅ Users cite LITFL sources as helpful
+- ✅ Pharmacology queries significantly improved
+- ✅ ECG interpretation queries dramatically better
+
+---
+
+## Conclusion
+
+**LITFL should absolutely be its own corpus.** The architecture is proven (WikEM, PMC), the content is scraped and ready, and the indexing process is straightforward. The multi-corpus query strategy allows the app to pull the best context from each source:
+
+- **WikEM:** Quick clinical reference
+- **PMC:** Research evidence
+- **LITFL:** Deep pharmacology, ECG, critical care
+- **Local:** Mayo-specific protocols
+
+This gives your EM app unparalleled clinical breadth and depth.
+
+**Estimated implementation time:** 4-6 hours
+- Script creation: 1-2 hours
+- Corpus setup: 30 minutes
+- Bulk indexing: 2-4 hours (automated)
+- Testing/integration: 1 hour
+
+Ready to proceed! 🚀

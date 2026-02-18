@@ -106,6 +106,57 @@ body {
   margin: 0.75rem 0;
 }
 
+/* Table styling for RAG response tables */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.prose thead {
+  border-bottom: 2px solid #3b82f6;
+}
+
+.prose th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.prose td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.prose tbody tr:hover {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+/* Dark mode table styles */
+.dark .prose th,
+.prose-invert th {
+  color: #ffffff;
+}
+
+.dark .prose td,
+.prose-invert td {
+  border-bottom-color: #374151;
+}
+
+.dark .prose thead,
+.prose-invert thead {
+  border-bottom-color: #3b82f6;
+}
+
+.dark .prose tbody tr:hover,
+.prose-invert tbody tr:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
 .prose strong {
   color: #1f2937;
   font-weight: 600;

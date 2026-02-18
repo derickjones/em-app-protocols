@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, LogOut, ChevronDown, ChevronRight, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
@@ -93,26 +94,30 @@ export default function Home() {
   // ED Universe state
   const [wikemEnabled, setWikemEnabled] = useState(true);
   const [pmcEnabled, setPmcEnabled] = useState(true);
+  const [litflEnabled, setLitflEnabled] = useState(true);
   const [selectedJournals, setSelectedJournals] = useState<Set<string>>(new Set(ALL_PMC_JOURNAL_KEYS));
   const [wikemExpanded, setWikemExpanded] = useState(false);
   const [pmcExpanded, setPmcExpanded] = useState(false);
+  const [litflExpanded, setLitflExpanded] = useState(false);
   const [universeDirty, setUniverseDirty] = useState(false); // track unsaved changes
 
   // Toggle wikem source on/off (can be turned off if EDs are selected)
-  // Globe toggles BOTH wikem and PMC together
+  // Globe toggles ALL external sources together
   const toggleSource = (source: string) => {
     if (source === "wikem") {
-      const isCurrentlyOn = wikemEnabled || pmcEnabled;
+      const isCurrentlyOn = wikemEnabled || pmcEnabled || litflEnabled;
       if (isCurrentlyOn) {
-        // Turn off both — only if we have EDs selected (need at least one source)
+        // Turn off all — only if we have EDs selected (need at least one source)
         if (selectedEds.size > 0) {
           setWikemEnabled(false);
           setPmcEnabled(false);
+          setLitflEnabled(false);
         }
       } else {
-        // Turn both back on
+        // Turn all back on
         setWikemEnabled(true);
         setPmcEnabled(true);
+        setLitflEnabled(true);
       }
     }
   };
@@ -123,6 +128,7 @@ export default function Home() {
     if (selectedEds.size > 0) sources.push("local");
     if (wikemEnabled) sources.push("wikem");
     if (pmcEnabled && selectedJournals.size > 0) sources.push("pmc");
+    if (litflEnabled) sources.push("litfl");
     return sources;
   };
 
@@ -133,8 +139,8 @@ export default function Home() {
     return Array.from(selectedJournals);
   };
 
-  // Is the globe "on"? (either wikem or pmc is active)
-  const globeActive = wikemEnabled || pmcEnabled;
+  // Is the globe "on"? (any external source is active)
+  const globeActive = wikemEnabled || pmcEnabled || litflEnabled;
 
   // Save ED Universe preferences to localStorage
   const saveUniversePreferences = () => {
@@ -142,6 +148,7 @@ export default function Home() {
       localStorage.setItem(UNIVERSE_KEY, JSON.stringify({
         wikemEnabled,
         pmcEnabled,
+        litflEnabled,
         selectedJournals: Array.from(selectedJournals),
       }));
       setUniverseDirty(false);
@@ -185,6 +192,7 @@ export default function Home() {
           const prefs = JSON.parse(savedUniverse);
           if (typeof prefs.wikemEnabled === 'boolean') setWikemEnabled(prefs.wikemEnabled);
           if (typeof prefs.pmcEnabled === 'boolean') setPmcEnabled(prefs.pmcEnabled);
+          if (typeof prefs.litflEnabled === 'boolean') setLitflEnabled(prefs.litflEnabled);
           if (Array.isArray(prefs.selectedJournals)) {
             setSelectedJournals(new Set(prefs.selectedJournals));
           }
@@ -836,6 +844,48 @@ export default function Home() {
                   </div>
                 )}
               </div>
+
+              {/* LITFL Section */}
+              <div>
+                <button
+                  onClick={() => setLitflExpanded(!litflExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLitflEnabled(!litflEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      litflEnabled
+                        ? 'bg-emerald-500 border-emerald-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {litflEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <Zap className={`w-3.5 h-3.5 flex-shrink-0 ${litflEnabled ? darkMode ? 'text-emerald-400' : 'text-emerald-600' : darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                  <span className={`flex-1 text-left font-medium ${litflEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    LITFL
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>7,902</span>
+                  {litflExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {litflExpanded && (
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
+                  }`}>
+                    Life in the Fast Lane — 7,902 FOAMed articles covering ECG interpretation, critical care, toxicology, pharmacology, clinical cases, and eponymous medical terms. CC BY-NC-SA 4.0.
+                  </div>
+                )}
+              </div>
             </div>
 
           </div>
@@ -1261,7 +1311,7 @@ export default function Home() {
                 {/* Answer */}
                 <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-white border border-gray-200'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
-                    <ReactMarkdown>{response.answer}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{response.answer}</ReactMarkdown>
                   </div>
                 </div>
 
@@ -1278,6 +1328,7 @@ export default function Home() {
                       {response.citations.map((cite, idx) => {
                         const isWikEM = cite.source_type === "wikem";
                         const isPMC = cite.source_type === "pmc";
+                        const isLITFL = cite.source_type === "litfl";
                         return (
                           <a
                             key={idx}
@@ -1289,19 +1340,23 @@ export default function Home() {
                             <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${
                               isPMC
                                 ? (darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
-                                : isWikEM 
-                                  ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
-                                  : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
+                                : isLITFL
+                                  ? (darkMode ? 'bg-orange-900/50 text-orange-300' : 'bg-orange-100 text-orange-700')
+                                  : isWikEM 
+                                    ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                                    : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
                             }`}>{idx + 1}</span>
                             <span className="flex-1 truncate">{cite.protocol_id.replace(/_/g, " ")}</span>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${
                               isPMC
                                 ? (darkMode ? 'bg-purple-900/50 text-purple-400' : 'bg-purple-100 text-purple-700')
-                                : isWikEM
-                                  ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
-                                  : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
+                                : isLITFL
+                                  ? (darkMode ? 'bg-orange-900/50 text-orange-400' : 'bg-orange-100 text-orange-700')
+                                  : isWikEM
+                                    ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
+                                    : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
                             }`}>
-                              {isPMC ? '📚 PMC' : isWikEM ? 'WikEM' : 'Local'}
+                              {isPMC ? '📚 PMC' : isLITFL ? '⚡ LITFL' : isWikEM ? 'WikEM' : 'Local'}
                             </span>
                             <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -1318,6 +1373,11 @@ export default function Home() {
                     {response.citations.some(c => c.source_type === "pmc") && (
                       <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                         PMC literature from <a href="https://www.ncbi.nlm.nih.gov/pmc/" target="_blank" rel="noopener noreferrer" className="underline">PubMed Central</a> — peer-reviewed EM research
+                      </p>
+                    )}
+                    {response.citations.some(c => c.source_type === "litfl") && (
+                      <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        LITFL content from <a href="https://litfl.com" target="_blank" rel="noopener noreferrer" className="underline">litfl.com</a> under CC BY-NC-SA 4.0 — FOAMed education resource
                       </p>
                     )}
                   </div>

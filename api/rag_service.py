@@ -18,11 +18,13 @@ PROJECT_ID = os.environ.get("PROJECT_ID", "clinical-assistant-457902")
 PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
 RAG_LOCATION = os.environ.get("RAG_LOCATION", "us-west4")
 CORPUS_ID = os.environ.get("CORPUS_ID", "2305843009213693952")
-WIKEM_CORPUS_ID = os.environ.get("WIKEM_CORPUS_ID", "6917529027641081856")
-PMC_CORPUS_ID = os.environ.get("PMC_CORPUS_ID", "")
+WIKEM_CORPUS_ID = os.environ.get("WIKEM_CORPUS_ID", "3379951520341557248")
+PMC_CORPUS_ID = os.environ.get("PMC_CORPUS_ID", "6838716034162098176")
+LITFL_CORPUS_ID = os.environ.get("LITFL_CORPUS_ID", "7991637538768945152")
 PROCESSED_BUCKET = f"{PROJECT_ID}-protocols-processed"
 WIKEM_BUCKET = f"{PROJECT_ID}-wikem"
 PMC_BUCKET = f"{PROJECT_ID}-pmc"
+LITFL_BUCKET = f"{PROJECT_ID}-litfl"
 
 
 class RAGService:
@@ -35,9 +37,11 @@ class RAGService:
         self.corpus_id = CORPUS_ID
         self.wikem_corpus_id = WIKEM_CORPUS_ID
         self.pmc_corpus_id = PMC_CORPUS_ID
+        self.litfl_corpus_id = LITFL_CORPUS_ID
         self.corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
         self.wikem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{WIKEM_CORPUS_ID}"
         self.pmc_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{PMC_CORPUS_ID}" if PMC_CORPUS_ID else None
+        self.litfl_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{LITFL_CORPUS_ID}" if LITFL_CORPUS_ID else None
         self.storage_client = storage.Client()
         self._metadata_cache = {}
     
@@ -100,6 +104,11 @@ class RAGService:
             parts = source.replace("gs://", "").split("/")
             filename = parts[-1] if parts else "unknown"
             return f"pmc-{filename.replace('.md', '')}"
+        elif source_type == "litfl":
+            # gs://bucket/processed/topic-slug.md → litfl-topic-slug
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            return f"litfl-{filename.replace('.md', '')}"
         else:
             # gs://bucket/enterprise/ed/bundle/protocol_id/extracted_text.txt → protocol_id
             parts = source.replace("gs://", "").split("/")
@@ -131,6 +140,8 @@ class RAGService:
                 source_label = "WikEM"
             elif source_type == "pmc":
                 source_label = "PMC Literature"
+            elif source_type == "litfl":
+                source_label = "LITFL"
             else:
                 source_label = "Local Protocol"
             
@@ -146,19 +157,35 @@ class RAGService:
             "Content-Type": "application/json"
         }
         
-        prompt = f"""You are an emergency medicine clinical assistant for ED physicians.
+        prompt = f"""You are a clinical decision support tool for emergency medicine physicians, designed to give actionable advice at the bedside. You answer questions about both clinical topics AND local institutional protocols.
 
 CRITICAL RULES:
 1. Answer the user's SPECIFIC QUESTION directly. Do NOT summarize the entire document.
 2. ONLY use information from the provided context. Do NOT add outside medical knowledge.
 3. If the context does not contain enough information to answer the question, say so clearly.
-4. Add [1], [2] etc. citation numbers matching the context sources used.
+4. Add [1], [2] etc. citation numbers inline throughout your answer matching the context sources used. Every factual claim should have a citation.
 
-FORMAT:
-- Use markdown: **bold** for headers/drug names, "- " for bullets, blank lines between sections
-- Prefer concise bullet points for quick ED reference
-- Keep answers as short as the question requires — a simple question gets a short answer, a complex question gets a thorough answer
-- Start with a bold header, then 1 sentence summary, then bullets if needed
+RESPONSE FORMAT:
+
+🔴 **BOTTOM LINE:** Start with 1-2 sentences giving the most critical actionable answer. A physician glancing at this line alone should get what they need.
+
+Then use the structure that best fits the question — pick from these as needed:
+
+- **Dosing/Medications** → Use a markdown table: | Drug | Dose | Route | Notes |
+- **Scoring tools / risk stratification** → Use a markdown table for criteria and scoring
+- **Differential diagnosis** → Categorize (e.g., by system, acuity, or likelihood)
+- **Contraindications** → Split into ABSOLUTE vs RELATIVE with bullet lists
+- **Procedures / algorithms** → Numbered step-by-step
+- **Local protocol questions** → Follow the protocol's own structure; quote key decision points and thresholds directly
+- **Simple factual questions** → Answer in 1-3 sentences, no extra structure needed
+
+FORMATTING RULES:
+- Use **bold** for drug names, critical values, and section headers
+- Use ⚠️ **WARNING** before life-threatening pitfalls or critical "do not miss" items
+- Use markdown tables (| col1 | col2 |) for dosing, scoring, and side-by-side comparisons
+- Use bullet lists for criteria, differentials, and contraindications
+- Use blank lines between sections for readability
+- Be concise — only expand when clinical complexity demands it. A simple question gets a short answer.
 
 CONTEXT:
 {context_text}
@@ -171,7 +198,7 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 1000
+                "maxOutputTokens": 2000
             }
         }
         
@@ -284,6 +311,32 @@ ANSWER:"""
         
         return None
 
+    def _get_litfl_metadata(self, source_uri: str) -> Optional[Dict]:
+        """Get metadata for a LITFL page from its source URI"""
+        # Format: gs://clinical-assistant-457902-litfl/processed/topic-slug.md
+        try:
+            if source_uri.startswith("gs://"):
+                parts = source_uri.split("/")
+                filename = parts[-1] if parts else ""
+                slug = filename.replace(".md", "")
+                
+                cache_key = f"litfl/{slug}"
+                if cache_key in self._metadata_cache:
+                    return self._metadata_cache[cache_key]
+                
+                bucket = self.storage_client.bucket(LITFL_BUCKET)
+                blob = bucket.blob(f"metadata/{slug}.json")
+                
+                if blob.exists():
+                    content = blob.download_as_string()
+                    metadata = json.loads(content)
+                    self._metadata_cache[cache_key] = metadata
+                    return metadata
+        except Exception as e:
+            print(f"Error getting LITFL metadata for {source_uri}: {e}")
+        
+        return None
+
     def _get_images_from_contexts(self, contexts: List[Dict]) -> List[Dict]:
         """Extract images from context sources - maintains protocol relevance order"""
         seen_images = set()
@@ -319,6 +372,20 @@ ANSWER:"""
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"PMC: {metadata.get('title', metadata.get('pmcid', 'unknown'))}",
+                                "protocol_rank": ctx_idx
+                            })
+            elif source_type == "litfl":
+                # Get LITFL metadata with image URLs
+                metadata = self._get_litfl_metadata(ctx["source"])
+                if metadata:
+                    for img in metadata.get("images", []):
+                        img_url = img.get("gcs_public_url", img.get("url", ""))
+                        if img_url and img_url not in seen_images:
+                            seen_images.add(img_url)
+                            images.append({
+                                "page": img.get("page", 0),
+                                "url": img_url,
+                                "source": f"LITFL: {metadata.get('title', 'unknown')}",
                                 "protocol_rank": ctx_idx
                             })
             else:
@@ -394,7 +461,19 @@ ANSWER:"""
                 print(f"PMC corpus query failed: {e}")
                 return []
         
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        def fetch_litfl():
+            try:
+                if self.litfl_corpus_name:
+                    contexts = self._retrieve_contexts(query, self.litfl_corpus_name)
+                    for ctx in contexts:
+                        ctx["source_type"] = "litfl"
+                    return contexts
+                return []
+            except Exception as e:
+                print(f"LITFL corpus query failed: {e}")
+                return []
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {}
             if "local" in sources:
                 futures["local"] = executor.submit(fetch_local)
@@ -402,6 +481,8 @@ ANSWER:"""
                 futures["wikem"] = executor.submit(fetch_wikem)
             if "pmc" in sources:
                 futures["pmc"] = executor.submit(fetch_pmc)
+            if "litfl" in sources:
+                futures["litfl"] = executor.submit(fetch_litfl)
             
             for key, future in futures.items():
                 try:
@@ -424,7 +505,7 @@ ANSWER:"""
         Args:
             query: The search query
             include_images: Whether to include protocol images
-            sources: List of sources to query ('local', 'wikem', 'pmc'). Default: ['local', 'wikem'].
+            sources: List of sources to query ('local', 'wikem', 'pmc', 'litfl'). Default: ['local', 'wikem'].
             pmc_journals: Optional list of PMC journal names to keep. None = no filter (all journals).
             enterprise_id: Enterprise ID for path-prefix filtering
             ed_ids: List of ED IDs to filter by
@@ -472,8 +553,8 @@ ANSWER:"""
             
             filtered_contexts = []
             for ctx in contexts:
-                if ctx.get("source_type") in ("wikem", "pmc"):
-                    # Always keep WikEM and PMC results (not filtered by ED path)
+                if ctx.get("source_type") in ("wikem", "pmc", "litfl"):
+                    # Always keep WikEM, PMC, and LITFL results (not filtered by ED path)
                     filtered_contexts.append(ctx)
                 elif any(prefix in ctx.get("source", "") for prefix in prefixes):
                     filtered_contexts.append(ctx)

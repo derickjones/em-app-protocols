@@ -10,3 +10,7 @@ scrapers/wikem/discovery/
 scrapers/PMC/output/
 scrapers/PMC/discovery/
 scrapers/PMC/metadata/
+scrapers/litfl/output/
+scrapers/litfl/discovery/
+scrapers/litfl/indexing.log
+scrapers/litfl/indexing_old.log
