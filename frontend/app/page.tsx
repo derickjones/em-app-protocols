@@ -75,6 +75,8 @@ interface EnterpriseData {
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState<string>("");
+  const [isStreaming, setIsStreaming] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -432,7 +434,7 @@ export default function Home() {
   };
 
   const handleSubmit = async () => {
-    if (!question.trim() || loading) return;
+    if (!question.trim() || loading || isStreaming) return;
     
     // Require login to search
     if (!user) {
@@ -446,6 +448,9 @@ export default function Home() {
     }
     
     setLoading(true);
+    setIsStreaming(false);
+    setStreamingAnswer("");
+    setResponse(null);
     setError(null);
     setHasSearched(true);
 
@@ -479,21 +484,79 @@ export default function Home() {
         if (res.status === 401) {
           throw new Error("Please sign in to search protocols");
         } else if (res.status === 403) {
-          const data = await res.json();
-          throw new Error(data.detail || "Access denied");
+          const errData = await res.json();
+          throw new Error(errData.detail || "Access denied");
         }
         throw new Error(`Error: ${res.status}`);
       }
-      const data: QueryResponse = await res.json();
-      setResponse(data);
+
+      // Read SSE stream
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+      const decoder = new TextDecoder();
+      let fullAnswer = "";
+      let finalData: QueryResponse | null = null;
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE lines
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+            if (event.type === "chunk") {
+              // First chunk: switch from loading dots to streaming text
+              if (!fullAnswer) {
+                setLoading(false);
+                setIsStreaming(true);
+              }
+              fullAnswer += event.text;
+              setStreamingAnswer(fullAnswer);
+            } else if (event.type === "done") {
+              finalData = {
+                answer: fullAnswer,
+                images: event.images || [],
+                citations: event.citations || [],
+                query_time_ms: event.query_time_ms || 0
+              };
+            } else if (event.type === "error") {
+              throw new Error(event.message);
+            }
+          } catch (parseErr) {
+            // Skip malformed JSON lines
+            if (parseErr instanceof SyntaxError) continue;
+            throw parseErr;
+          }
+        }
+      }
+
+      // Stream complete — set final response
+      setIsStreaming(false);
+      if (finalData) {
+        setResponse(finalData);
+      } else {
+        // Fallback if no done event received
+        setResponse({ answer: fullAnswer, images: [], citations: [], query_time_ms: 0 });
+      }
 
       // Save conversation to history
+      const savedResponse = finalData || { answer: fullAnswer, images: [], citations: [], query_time_ms: 0 };
       const newConversation: Conversation = {
         id: conversationId,
         title: question.trim().slice(0, 50) + (question.length > 50 ? "..." : ""),
         timestamp: new Date().toISOString(),
         question: question.trim(),
-        response: data,
+        response: savedResponse,
       };
       
       setConversations(prev => {
@@ -508,14 +571,18 @@ export default function Home() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch response");
       setResponse(null);
+      setStreamingAnswer("");
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
   };
 
   const startNewConversation = () => {
     setQuestion("");
     setResponse(null);
+    setStreamingAnswer("");
+    setIsStreaming(false);
     setError(null);
     setHasSearched(false);
     setCurrentConversationId(null);
@@ -1227,13 +1294,13 @@ export default function Home() {
                     </button>
                     <button
                       onClick={handleSubmit}
-                      disabled={!question.trim() || loading}
+                      disabled={!question.trim() || loading || isStreaming}
                       title="Submit"
                       className={`w-9 h-9 flex-shrink-0 rounded-xl text-white flex items-center justify-center transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 ${
                         darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800'
                       }`}
                     >
-                      {loading ? (
+                      {loading || isStreaming ? (
                         <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       ) : (
                         <ArrowUp className="w-4 h-4" />
@@ -1300,23 +1367,25 @@ export default function Home() {
               <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
                 <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
               </div>
-            ) : response ? (
+            ) : (isStreaming || response) ? (
               <div className="space-y-6">
-                {/* Query Time */}
-                <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                  <Sparkles className="w-3 h-3 text-blue-500" />
-                  <span>{response.query_time_ms}ms</span>
-                </div>
+                {/* Query Time — only after stream finishes */}
+                {response && (
+                  <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <Sparkles className="w-3 h-3 text-blue-500" />
+                    <span>{response.query_time_ms}ms</span>
+                  </div>
+                )}
 
-                {/* Answer */}
+                {/* Answer — streaming or final */}
                 <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-white border border-gray-200'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{response.answer}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
                 </div>
 
                 {/* Citations */}
-                {response.citations.length > 0 && (
+                {response && response.citations.length > 0 && (
                   <div className={`rounded-2xl p-5 ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-gray-50 border border-gray-200'}`}>
                     <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1384,7 +1453,7 @@ export default function Home() {
                 )}
 
                 {/* Images - Horizontal Scrolling Carousel */}
-                {response.images.length > 0 && (
+                {response && response.images.length > 0 && (
                   <div className="space-y-3">
                     <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1496,13 +1565,13 @@ export default function Home() {
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={!question.trim() || loading}
+                  disabled={!question.trim() || loading || isStreaming}
                   title="Submit"
                   className={`w-8 h-8 rounded-lg text-white flex items-center justify-center transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 ${
                     darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800'
                   }`}
                 >
-                  {loading ? (
+                  {loading || isStreaming ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <ArrowUp className="w-4 h-4" />

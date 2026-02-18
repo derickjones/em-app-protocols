@@ -14,3 +14,5 @@ scrapers/litfl/output/
 scrapers/litfl/discovery/
 scrapers/litfl/indexing.log
 scrapers/litfl/indexing_old.log
+api.log
+indexing.log

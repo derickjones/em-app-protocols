@@ -4,8 +4,10 @@ FastAPI backend for querying emergency medicine protocols
 """
 
 import os
+import json
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import time
@@ -124,30 +126,15 @@ class QueryRequest(BaseModel):
     ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
-    sources: List[str] = Field(default=["local", "wikem", "litfl"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature), 'litfl' (LITFL clinical education)")
+    sources: List[str] = Field(default=["local", "wikem", "pmc", "litfl"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature), 'litfl' (LITFL clinical education)")
     pmc_journals: Optional[List[str]] = Field(default=None, description="PMC journal names to include. None = all journals (no filter).")
     enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
 
-class ImageInfo(BaseModel):
-    """Image information in query response"""
-    page: int
-    url: str
-    protocol_id: str
+# SSE stream event shapes (for documentation):
+# {"type": "chunk", "text": "..."}
+# {"type": "done", "citations": [{protocol_id, source_uri, relevance_score, source_type}], "images": [{page, url, protocol_id}], "query_time_ms": N}
+# {"type": "error", "message": "..."}
 
-class Citation(BaseModel):
-    """Citation information"""
-    protocol_id: str
-    source_uri: str
-    relevance_score: float
-    source_type: str = "local"  # "local", "wikem", or "pmc"
-
-class QueryResponse(BaseModel):
-    """Response model for protocol queries"""
-    answer: str
-    images: List[ImageInfo]
-    citations: List[Citation]
-    query_time_ms: int
-    
 class ProtocolInfo(BaseModel):
     """Protocol metadata"""
     protocol_id: str
@@ -312,162 +299,156 @@ async def get_user_enterprise(user: UserProfile = Depends(get_current_user)):
 
 # ----- Query Endpoints -----
 
-@app.post("/query", response_model=QueryResponse)
+def _build_citations(raw_citations: list) -> list:
+    """Build deduplicated citation dicts from raw RAG citations."""
+    seen_protocols = set()
+    citations = []
+    for c in raw_citations:
+        source = c["source"]
+        source_type = c.get("source_type", "local")
+
+        # Handle WikEM citations
+        if source_type == "wikem":
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            topic_id = filename.replace(".md", "")
+            wikem_key = f"wikem-{topic_id}"
+            if wikem_key in seen_protocols:
+                continue
+            seen_protocols.add(wikem_key)
+            citations.append({
+                "protocol_id": topic_id,
+                "source_uri": f"https://wikem.org/wiki/{topic_id}",
+                "relevance_score": c["score"],
+                "source_type": "wikem"
+            })
+            continue
+
+        # Handle PMC citations
+        if source_type == "pmc":
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            pmcid = filename.replace(".md", "")
+            pmc_key = f"pmc-{pmcid}"
+            if pmc_key in seen_protocols:
+                continue
+            seen_protocols.add(pmc_key)
+            pmc_metadata = rag_service._get_pmc_metadata(source)
+            if pmc_metadata:
+                title = pmc_metadata.get("title", pmcid)
+                journal = pmc_metadata.get("journal", "")
+                year = pmc_metadata.get("year", "")
+                display_parts = [title]
+                if journal or year:
+                    detail = ", ".join(filter(None, [journal, str(year) if year else None]))
+                    display_parts.append(f"({detail})")
+                display_name = " ".join(display_parts)
+            else:
+                display_name = pmcid
+            citations.append({
+                "protocol_id": display_name,
+                "source_uri": f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/",
+                "relevance_score": c["score"],
+                "source_type": "pmc"
+            })
+            continue
+
+        # Handle LITFL citations
+        if source_type == "litfl":
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            slug = filename.replace(".md", "")
+            litfl_key = f"litfl-{slug}"
+            if litfl_key in seen_protocols:
+                continue
+            seen_protocols.add(litfl_key)
+            litfl_metadata = rag_service._get_litfl_metadata(source)
+            if litfl_metadata:
+                display_name = litfl_metadata.get("title", slug.replace("-", " ").title())
+            else:
+                display_name = slug.replace("-", " ").title()
+            citations.append({
+                "protocol_id": display_name,
+                "source_uri": f"https://litfl.com/{slug}/",
+                "relevance_score": c["score"],
+                "source_type": "litfl"
+            })
+            continue
+
+        # Handle local protocol citations
+        parts = source.replace("gs://", "").split("/")
+        if "rag-input" in source:
+            continue
+        if len(parts) >= 6:
+            enterprise_id_part = parts[1]
+            ed_id_part = parts[2]
+            bundle_id = parts[3]
+            protocol_id = parts[4]
+        elif len(parts) >= 5:
+            enterprise_id_part = parts[1]
+            ed_id_part = None
+            bundle_id = parts[2]
+            protocol_id = parts[3]
+        else:
+            continue
+        if protocol_id in seen_protocols or protocol_id == "extracted_text":
+            continue
+        seen_protocols.add(protocol_id)
+        if ed_id_part:
+            pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{enterprise_id_part}/{ed_id_part}/{bundle_id}/{protocol_id}.pdf"
+        else:
+            pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{enterprise_id_part}/{bundle_id}/{protocol_id}.pdf"
+        citations.append({
+            "protocol_id": protocol_id,
+            "source_uri": pdf_url,
+            "relevance_score": c["score"],
+            "source_type": "local"
+        })
+    return citations
+
+
+@app.post("/query")
 async def query_protocols(
     request: QueryRequest,
     user: Optional[UserProfile] = Depends(get_verified_user)
 ):
     """
-    Query protocols with AI-powered search
+    Query protocols with AI-powered streaming search.
     
-    Returns an answer with citations and relevant images.
-    Requires authentication AND verified email for org-scoped queries.
+    Returns an SSE stream of events:
+      data: {"type":"chunk","text":"..."}
+      data: {"type":"done","citations":[...],"images":[...],"query_time_ms":N}
     """
-    start_time = time.time()
-    
-    try:
-        # Determine which EDs to search
-        ed_ids = request.ed_ids if request.ed_ids else (user.ed_access if user else [])
-        enterprise_id = user.enterprise_id if user else None
-        
-        # Super admin can override enterprise_id from request body
-        if user and user.role == "super_admin" and not enterprise_id and request.enterprise_id:
-            enterprise_id = request.enterprise_id
-        
-        # Get RAG results with ED/bundle filtering
-        result = rag_service.query(
-            query=request.query,
-            include_images=request.include_images,
-            sources=request.sources,
-            pmc_journals=request.pmc_journals,
-            enterprise_id=enterprise_id,
-            ed_ids=ed_ids,
-            bundle_ids=request.bundle_ids
-        )
-        
-        query_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Build deduplicated citations with PDF URLs
-        seen_protocols = set()
-        citations = []
-        for c in result.get("citations", []):
-            source = c["source"]
-            source_type = c.get("source_type", "local")
-            
-            # Handle WikEM citations
-            if source_type == "wikem":
-                # Source is like: gs://clinical-assistant-457902-wikem/processed/Hyponatremia.md
-                parts = source.replace("gs://", "").split("/")
-                # Get the filename without extension as the topic name
-                filename = parts[-1] if parts else "unknown"
-                topic_id = filename.replace(".md", "")
-                
-                wikem_key = f"wikem-{topic_id}"
-                if wikem_key in seen_protocols:
-                    continue
-                seen_protocols.add(wikem_key)
-                
-                citations.append(Citation(
-                    protocol_id=topic_id,
-                    source_uri=f"https://wikem.org/wiki/{topic_id}",
-                    relevance_score=c["score"],
-                    source_type="wikem"
-                ))
-                continue
-            
-            # Handle PMC citations
-            if source_type == "pmc":
-                # Source is like: gs://clinical-assistant-457902-pmc/processed/PMC8123456.md
-                parts = source.replace("gs://", "").split("/")
-                filename = parts[-1] if parts else "unknown"
-                pmcid = filename.replace(".md", "")
-                
-                pmc_key = f"pmc-{pmcid}"
-                if pmc_key in seen_protocols:
-                    continue
-                seen_protocols.add(pmc_key)
-                
-                # Try to get metadata for richer citation
-                pmc_metadata = rag_service._get_pmc_metadata(source)
-                if pmc_metadata:
-                    title = pmc_metadata.get("title", pmcid)
-                    journal = pmc_metadata.get("journal", "")
-                    year = pmc_metadata.get("year", "")
-                    # Build display name: "Title (Journal, Year)"
-                    display_parts = [title]
-                    if journal or year:
-                        detail = ", ".join(filter(None, [journal, str(year) if year else None]))
-                        display_parts.append(f"({detail})")
-                    display_name = " ".join(display_parts)
-                else:
-                    display_name = pmcid
-                
-                citations.append(Citation(
-                    protocol_id=display_name,
-                    source_uri=f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/",
-                    relevance_score=c["score"],
-                    source_type="pmc"
-                ))
-                continue
-            
-            # Handle local protocol citations
-            # Extract protocol info from path like:
-            # gs://bucket/enterprise_id/ed_id/bundle_id/protocol_id/extracted_text.txt
-            parts = source.replace("gs://", "").split("/")
-            
-            # Skip legacy rag-input files (no longer exist)
-            if "rag-input" in source:
-                continue
-            
-            if len(parts) >= 6:
-                # New format: bucket/enterprise_id/ed_id/bundle_id/protocol_id/extracted_text.txt
-                enterprise_id_part = parts[1]
-                ed_id_part = parts[2]
-                bundle_id = parts[3]
-                protocol_id = parts[4]
-            elif len(parts) >= 5:
-                # Legacy format: bucket/org_id/bundle_id/protocol_id/extracted_text.txt
-                enterprise_id_part = parts[1]
-                ed_id_part = None
-                bundle_id = parts[2]
-                protocol_id = parts[3]
-            else:
-                continue
-            
-            # Skip duplicates and extracted_text entries
-            if protocol_id in seen_protocols or protocol_id == "extracted_text":
-                continue
-            seen_protocols.add(protocol_id)
-            
-            # Build public PDF URL
-            if ed_id_part:
-                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{enterprise_id_part}/{ed_id_part}/{bundle_id}/{protocol_id}.pdf"
-            else:
-                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{enterprise_id_part}/{bundle_id}/{protocol_id}.pdf"
-            
-            citations.append(Citation(
-                protocol_id=protocol_id,
-                source_uri=pdf_url,
-                relevance_score=c["score"],
-                source_type="local"
-            ))
-        
-        return QueryResponse(
-            answer=result["answer"],
-            images=[
-                ImageInfo(
-                    page=img["page"],
-                    url=img["url"],
-                    protocol_id=img["source"]
-                )
-                for img in result.get("images", [])
-            ],
-            citations=citations,
-            query_time_ms=query_time_ms
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Determine which EDs to search
+    ed_ids = request.ed_ids if request.ed_ids else (user.ed_access if user else [])
+    enterprise_id = user.enterprise_id if user else None
+    if user and user.role == "super_admin" and not enterprise_id and request.enterprise_id:
+        enterprise_id = request.enterprise_id
+
+    def event_stream():
+        try:
+            for event in rag_service.query_stream(
+                query=request.query,
+                include_images=request.include_images,
+                sources=request.sources,
+                pmc_journals=request.pmc_journals,
+                enterprise_id=enterprise_id,
+                ed_ids=ed_ids,
+                bundle_ids=request.bundle_ids
+            ):
+                if event["type"] == "chunk":
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
+                elif event["type"] == "done":
+                    citations = _build_citations(event.get("citations", []))
+                    images = [
+                        {"page": img["page"], "url": img["url"], "protocol_id": img["source"]}
+                        for img in event.get("images", [])
+                    ]
+                    yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'images': images, 'query_time_ms': event['query_time_ms']})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get("/protocols", response_model=ProtocolListResponse)

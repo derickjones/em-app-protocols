@@ -118,9 +118,8 @@ class RAGService:
                 return parts[3]  # protocol_id in legacy format
             return source
 
-    def _generate_answer(self, query: str, contexts: List[Dict]) -> str:
-        """Generate answer using Gemini with source-aware context"""
-        # Group contexts by source protocol so citation numbers match displayed sources
+    def _build_prompt_and_context(self, query: str, contexts: List[Dict]) -> tuple[str, str]:
+        """Build the prompt and context text for Gemini. Returns (prompt, context_text)."""
         from collections import OrderedDict
         grouped = OrderedDict()
         for c in contexts[:5]:
@@ -132,7 +131,6 @@ class RAGService:
                 }
             grouped[key]["texts"].append(c["text"][:4000])
         
-        # Build context string with deduplicated source numbers
         context_parts = []
         for i, (key, group) in enumerate(grouped.items()):
             source_type = group["source_type"]
@@ -148,14 +146,6 @@ class RAGService:
             combined_text = "\n".join(group["texts"])
             context_parts.append(f"[{i+1}] ({source_label}) {combined_text}")
         context_text = "\n---\n".join(context_parts)
-        
-        # Gemini endpoint (us-central1 for low latency)
-        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent"
-        
-        headers = {
-            "Authorization": f"Bearer {self._get_access_token()}",
-            "Content-Type": "application/json"
-        }
         
         prompt = f"""You are a clinical decision support tool for emergency medicine physicians, designed to give actionable advice at the bedside. You answer questions about both clinical topics AND local institutional protocols.
 
@@ -181,8 +171,7 @@ Then use the structure that best fits the question — pick from these as needed
 
 FORMATTING RULES:
 - Use **bold** for drug names, critical values, and section headers
-- Use ⚠️ **WARNING** before life-threatening pitfalls or critical "do not miss" items
-- Use markdown tables (| col1 | col2 |) for dosing, scoring, and side-by-side comparisons
+- Use markdown tables (| col1 | col2 |) for dosing, scoring, and side-by-side comparisons — always include a header row and separator row
 - Use bullet lists for criteria, differentials, and contraindications
 - Use blank lines between sections for readability
 - Be concise — only expand when clinical complexity demands it. A simple question gets a short answer.
@@ -193,6 +182,18 @@ CONTEXT:
 QUESTION: {query}
 
 ANSWER:"""
+        return prompt, context_text
+
+    def _generate_answer(self, query: str, contexts: List[Dict]) -> str:
+        """Generate answer using Gemini (non-streaming)."""
+        prompt, _ = self._build_prompt_and_context(query, contexts)
+        
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent"
+        
+        headers = {
+            "Authorization": f"Bearer {self._get_access_token()}",
+            "Content-Type": "application/json"
+        }
 
         payload = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -209,6 +210,48 @@ ANSWER:"""
         
         result = response.json()
         return result["candidates"][0]["content"]["parts"][0]["text"]
+
+    def generate_answer_stream(self, query: str, contexts: List[Dict]):
+        """Generate answer using Gemini with streaming. Yields text chunks."""
+        prompt, _ = self._build_prompt_and_context(query, contexts)
+        
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.0-flash:streamGenerateContent?alt=sse"
+        
+        headers = {
+            "Authorization": f"Bearer {self._get_access_token()}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 2000
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, stream=True)
+        
+        if response.status_code != 200:
+            raise Exception(f"Gemini streaming failed: {response.status_code} - {response.text}")
+        
+        for line in response.iter_lines():
+            if not line:
+                continue
+            line_str = line.decode("utf-8")
+            if line_str.startswith("data: "):
+                json_str = line_str[6:]
+                try:
+                    chunk = json.loads(json_str)
+                    candidates = chunk.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        for part in parts:
+                            text = part.get("text", "")
+                            if text:
+                                yield text
+                except json.JSONDecodeError:
+                    continue
     
     def _get_protocol_metadata(self, source_uri: str) -> Optional[Dict]:
         """Get metadata for a protocol from its source URI"""
@@ -591,3 +634,84 @@ ANSWER:"""
             "images": images,
             "citations": citations
         }
+
+    def query_stream(self, query: str, include_images: bool = True, sources: List[str] = None,
+                     pmc_journals: List[str] = None,
+                     enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None):
+        """
+        Execute a full RAG query with streaming answer generation.
+        
+        Yields dicts:
+          {"type": "chunk", "text": "..."}      — incremental text
+          {"type": "done", "citations": [...], "images": [...], "query_time_ms": N}
+        """
+        import time as _time
+        start = _time.time()
+
+        # Step 1: Retrieve contexts (same as non-streaming)
+        contexts = self._retrieve_multi_source(query, sources)
+
+        if not contexts:
+            yield {"type": "chunk", "text": "No relevant protocols found for this query."}
+            yield {"type": "done", "citations": [], "images": [], "query_time_ms": int((_time.time() - start) * 1000)}
+            return
+
+        # Step 1.5a: Filter PMC by journal
+        if pmc_journals is not None:
+            journal_set = set(pmc_journals)
+            filtered = []
+            for ctx in contexts:
+                if ctx.get("source_type") != "pmc":
+                    filtered.append(ctx)
+                    continue
+                metadata = self._get_pmc_metadata(ctx.get("source", ""))
+                if metadata and metadata.get("journal") in journal_set:
+                    filtered.append(ctx)
+                elif not metadata:
+                    filtered.append(ctx)
+            contexts = filtered
+
+        # Step 1.5b: Filter local by ED/bundle
+        if enterprise_id and ed_ids:
+            prefixes = []
+            for ed_id in ed_ids:
+                if bundle_ids and "all" not in bundle_ids:
+                    for bundle_id in bundle_ids:
+                        prefixes.append(f"{enterprise_id}/{ed_id}/{bundle_id}/")
+                else:
+                    prefixes.append(f"{enterprise_id}/{ed_id}/")
+
+            filtered_contexts = []
+            for ctx in contexts:
+                if ctx.get("source_type") in ("wikem", "pmc", "litfl"):
+                    filtered_contexts.append(ctx)
+                elif any(prefix in ctx.get("source", "") for prefix in prefixes):
+                    filtered_contexts.append(ctx)
+            contexts = filtered_contexts
+
+            if not contexts:
+                yield {"type": "chunk", "text": "No relevant protocols found for the selected EDs and bundles."}
+                yield {"type": "done", "citations": [], "images": [], "query_time_ms": int((_time.time() - start) * 1000)}
+                return
+
+        # Step 2: Stream answer from Gemini
+        for text_chunk in self.generate_answer_stream(query, contexts):
+            yield {"type": "chunk", "text": text_chunk}
+
+        # Step 3: Get images
+        images = []
+        if include_images:
+            images = self._get_images_from_contexts(contexts)
+
+        # Step 4: Build citations
+        citations = [
+            {
+                "source": ctx["source"],
+                "score": ctx["score"],
+                "source_type": ctx.get("source_type", "local")
+            }
+            for ctx in contexts
+        ]
+
+        query_time_ms = int((_time.time() - start) * 1000)
+        yield {"type": "done", "citations": citations, "images": images, "query_time_ms": query_time_ms}
