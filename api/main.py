@@ -444,11 +444,52 @@ async def query_protocols(
                         {"page": img["page"], "url": img["url"], "protocol_id": img["source"]}
                         for img in event.get("images", [])
                     ]
+                    # Rank images by popularity (click count)
+                    if images:
+                        try:
+                            click_counts = {}
+                            for img in images:
+                                doc_key = f"{img['protocol_id']}__page{img['page']}"
+                                doc = db.collection("image_clicks").document(doc_key).get()
+                                if doc.exists:
+                                    click_counts[doc_key] = doc.to_dict().get("click_count", 0)
+                            images.sort(key=lambda i: click_counts.get(f"{i['protocol_id']}__page{i['page']}", 0), reverse=True)
+                        except Exception as rank_err:
+                            print(f"Image ranking error (using original order): {rank_err}")
                     yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'images': images, 'query_time_ms': event['query_time_ms']})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Image click tracking — implicit feedback for popularity ranking
+# ---------------------------------------------------------------------------
+class ImageClickRequest(BaseModel):
+    protocol_id: str
+    page: int
+    url: str
+    query: str = ""
+
+@app.post("/image-click")
+async def track_image_click(req: ImageClickRequest):
+    """Log an image click for popularity ranking. Fire-and-forget from frontend."""
+    try:
+        doc_key = f"{req.protocol_id}__page{req.page}"
+        doc_ref = db.collection("image_clicks").document(doc_key)
+        doc_ref.set({
+            "protocol_id": req.protocol_id,
+            "page": req.page,
+            "url": req.url,
+            "click_count": firestore.Increment(1),
+            "last_clicked": firestore.SERVER_TIMESTAMP,
+        }, merge=True)
+        return {"status": "ok"}
+    except Exception as e:
+        # Don't fail the user experience over analytics
+        print(f"Image click tracking error: {e}")
+        return {"status": "ok"}
 
 
 @app.get("/protocols", response_model=ProtocolListResponse)

@@ -103,6 +103,9 @@ export default function Home() {
   const [litflExpanded, setLitflExpanded] = useState(false);
   const [universeDirty, setUniverseDirty] = useState(false); // track unsaved changes
 
+  // Lightbox state for image enlargement
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; protocol_id: string; page: number } | null>(null);
+
   // Toggle wikem source on/off (can be turned off if EDs are selected)
   // Globe toggles ALL external sources together
   const toggleSource = (source: string) => {
@@ -334,6 +337,21 @@ export default function Home() {
     }
   }, [selectedEds]);
 
+  // Close lightbox on Escape key
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxImage(null);
+    };
+    if (lightboxImage) {
+      document.addEventListener("keydown", handleEsc);
+      document.body.style.overflow = "hidden"; // prevent background scroll
+    }
+    return () => {
+      document.removeEventListener("keydown", handleEsc);
+      document.body.style.overflow = "";
+    };
+  }, [lightboxImage]);
+
   // Toggle hospital expansion in selector
   const toggleHospitalExpand = (hospital: string) => {
     setExpandedHospitals(prev => {
@@ -431,6 +449,22 @@ export default function Home() {
       }
     }
     return bundles;
+  };
+
+  // Open lightbox and log image click for popularity ranking
+  const handleImageClick = (img: { url: string; protocol_id: string; page: number }) => {
+    setLightboxImage(img);
+    // Fire-and-forget click tracking
+    fetch(`${API_URL}/image-click`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        protocol_id: img.protocol_id,
+        page: img.page,
+        url: img.url,
+        query: question,
+      }),
+    }).catch(() => {}); // silently ignore errors
   };
 
   const handleSubmit = async () => {
@@ -1399,7 +1433,8 @@ export default function Home() {
                         {response.images.map((img, idx) => (
                           <div 
                             key={idx} 
-                            className={`flex-shrink-0 w-80 rounded-2xl overflow-hidden border shadow-sm snap-start transition-transform hover:scale-[1.02] ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-gray-200'}`}
+                            onClick={() => handleImageClick(img)}
+                            className={`flex-shrink-0 w-80 rounded-2xl overflow-hidden border shadow-sm snap-start transition-transform hover:scale-[1.02] cursor-pointer ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-gray-200'}`}
                           >
                             <img
                               src={img.url}
@@ -1407,8 +1442,11 @@ export default function Home() {
                               className="w-full h-auto object-contain"
                               loading="lazy"
                             />
-                            <div className={`px-4 py-3 text-xs border-t ${darkMode ? 'text-gray-400 border-neutral-700' : 'text-gray-500 border-gray-100'}`}>
-                              {img.protocol_id.replace(/_/g, " ")} · Page {img.page}
+                            <div className={`px-4 py-3 text-xs border-t flex items-center justify-between ${darkMode ? 'text-gray-400 border-neutral-700' : 'text-gray-500 border-gray-100'}`}>
+                              <span>{img.protocol_id.replace(/_/g, " ")} · Page {img.page}</span>
+                              <svg className="w-3.5 h-3.5 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                              </svg>
                             </div>
                           </div>
                         ))}
@@ -1582,6 +1620,39 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Image Lightbox Modal */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxImage(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setLightboxImage(null); }}
+          tabIndex={0}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            {/* Close button */}
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute -top-3 -right-3 z-10 w-8 h-8 rounded-full bg-neutral-800 text-white flex items-center justify-center hover:bg-neutral-700 shadow-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            {/* Image */}
+            <img
+              src={lightboxImage.url}
+              alt={`Protocol diagram from ${lightboxImage.protocol_id}, page ${lightboxImage.page}`}
+              className="max-w-[90vw] max-h-[85vh] object-contain rounded-xl shadow-2xl"
+            />
+            {/* Caption */}
+            <div className="mt-3 text-center text-sm text-gray-300">
+              {lightboxImage.protocol_id.replace(/_/g, " ")} · Page {lightboxImage.page}
+            </div>
+          </div>
+        </div>
+      )}
+
       </main>
     </div>
   );
