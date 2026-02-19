@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
@@ -1544,32 +1544,71 @@ export default function Home() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       Related Diagrams
+                      <span className={`text-xs font-normal ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {response.images.length} image{response.images.length !== 1 ? 's' : ''}
+                      </span>
                     </h3>
-                    {/* Horizontal Scroll Container — scrollbar on top */}
-                    <div className="relative -mx-4 px-4">
-                      <div className="flex flex-col-reverse">
-                        <div className="flex gap-4 overflow-x-auto pt-2 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 [transform:rotateX(180deg)]">
-                          {response.images.map((img, idx) => (
-                            <div 
-                              key={idx} 
-                              onClick={() => handleImageClick(img)}
-                              className={`flex-shrink-0 w-80 rounded-2xl overflow-hidden border shadow-sm snap-start transition-transform hover:scale-[1.02] cursor-pointer [transform:rotateX(180deg)] ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-gray-200'}`}
-                            >
+                    {/* Carousel with scroll arrows */}
+                    <div className="relative group/carousel">
+                      {/* Left arrow */}
+                      <button
+                        onClick={(e) => {
+                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-carousel]');
+                          if (container) container.scrollBy({ left: -340, behavior: 'smooth' });
+                        }}
+                        className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
+                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      {/* Right arrow */}
+                      <button
+                        onClick={(e) => {
+                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-carousel]');
+                          if (container) container.scrollBy({ left: 340, behavior: 'smooth' });
+                        }}
+                        className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
+                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                      {/* Fade edges */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-r ${darkMode ? 'from-neutral-950' : 'from-gray-50'} to-transparent rounded-l-xl`} />
+                      <div className={`absolute right-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-l ${darkMode ? 'from-neutral-950' : 'from-gray-50'} to-transparent rounded-r-xl`} />
+                      {/* Scroll container */}
+                      <div
+                        data-carousel
+                        className={`flex gap-4 overflow-x-auto px-2 py-3 snap-x snap-mandatory scroll-smooth rounded-xl ${
+                          darkMode ? 'bg-neutral-900/50' : 'bg-gray-100/50'
+                        }`}
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                      >
+                        {response.images.map((img, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => handleImageClick(img)}
+                            className={`flex-shrink-0 w-80 rounded-xl overflow-hidden border-2 snap-start transition-all duration-200 hover:scale-[1.03] hover:shadow-xl cursor-pointer ${
+                              darkMode
+                                ? 'bg-neutral-800 border-neutral-600 hover:border-blue-500/50 shadow-md shadow-black/20'
+                                : 'bg-white border-gray-200 hover:border-blue-400/50 shadow-md shadow-gray-200/50'
+                            }`}
+                          >
                             <img
                               src={img.url}
                               alt={`Protocol diagram from ${img.protocol_id}, page ${img.page}`}
                               className="w-full h-auto object-contain"
                               loading="lazy"
                             />
-                            <div className={`px-4 py-3 text-xs border-t flex items-center justify-between ${darkMode ? 'text-gray-400 border-neutral-700' : 'text-gray-500 border-gray-100'}`}>
-                              <span>{img.protocol_id.replace(/_/g, " ")} · Page {img.page}</span>
-                              <svg className="w-3.5 h-3.5 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className={`px-4 py-3 text-xs border-t flex items-center justify-between ${darkMode ? 'text-gray-300 border-neutral-600 bg-neutral-800' : 'text-gray-600 border-gray-100 bg-gray-50'}`}>
+                              <span className="font-medium">{img.protocol_id.replace(/_/g, " ")} · Page {img.page}</span>
+                              <svg className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
                               </svg>
                             </div>
                           </div>
                         ))}
-                        </div>
                       </div>
                     </div>
                   </div>
