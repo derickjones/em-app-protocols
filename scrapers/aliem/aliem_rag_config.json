@@ -1,0 +1,10 @@
+{
+  "project_id": "clinical-assistant-457902",
+  "project_number": "930035889332",
+  "location": "us-west4",
+  "corpus_id": "4611686018427387904",
+  "corpus_name": "projects/930035889332/locations/us-west4/ragCorpora/4611686018427387904",
+  "corpus_display_name": "aliem-track-a",
+  "embedding_model": "text-embedding-005",
+  "created_at": "2026-02-19T05:36:22.856139+00:00"
+}

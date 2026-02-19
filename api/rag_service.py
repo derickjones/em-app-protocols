@@ -21,10 +21,14 @@ CORPUS_ID = os.environ.get("CORPUS_ID", "2305843009213693952")
 WIKEM_CORPUS_ID = os.environ.get("WIKEM_CORPUS_ID", "3379951520341557248")
 PMC_CORPUS_ID = os.environ.get("PMC_CORPUS_ID", "6838716034162098176")
 LITFL_CORPUS_ID = os.environ.get("LITFL_CORPUS_ID", "7991637538768945152")
+REBELEM_CORPUS_ID = os.environ.get("REBELEM_CORPUS_ID", "1152921504606846976")
+ALIEM_CORPUS_ID = os.environ.get("ALIEM_CORPUS_ID", "4611686018427387904")
 PROCESSED_BUCKET = f"{PROJECT_ID}-protocols-processed"
 WIKEM_BUCKET = f"{PROJECT_ID}-wikem"
 PMC_BUCKET = f"{PROJECT_ID}-pmc"
 LITFL_BUCKET = f"{PROJECT_ID}-litfl"
+REBELEM_BUCKET = f"{PROJECT_ID}-rebelem"
+ALIEM_BUCKET = f"{PROJECT_ID}-aliem"
 
 
 class RAGService:
@@ -38,10 +42,14 @@ class RAGService:
         self.wikem_corpus_id = WIKEM_CORPUS_ID
         self.pmc_corpus_id = PMC_CORPUS_ID
         self.litfl_corpus_id = LITFL_CORPUS_ID
+        self.rebelem_corpus_id = REBELEM_CORPUS_ID
+        self.aliem_corpus_id = ALIEM_CORPUS_ID
         self.corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
         self.wikem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{WIKEM_CORPUS_ID}"
         self.pmc_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{PMC_CORPUS_ID}" if PMC_CORPUS_ID else None
         self.litfl_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{LITFL_CORPUS_ID}" if LITFL_CORPUS_ID else None
+        self.rebelem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{REBELEM_CORPUS_ID}" if REBELEM_CORPUS_ID else None
+        self.aliem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{ALIEM_CORPUS_ID}" if ALIEM_CORPUS_ID else None
         self.storage_client = storage.Client()
         self._metadata_cache = {}
     
@@ -109,6 +117,16 @@ class RAGService:
             parts = source.replace("gs://", "").split("/")
             filename = parts[-1] if parts else "unknown"
             return f"litfl-{filename.replace('.md', '')}"
+        elif source_type == "rebelem":
+            # gs://bucket/processed/topic-slug.md → rebelem-topic-slug
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            return f"rebelem-{filename.replace('.md', '')}"
+        elif source_type == "aliem":
+            # gs://bucket/processed/topic-slug.md → aliem-topic-slug
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            return f"aliem-{filename.replace('.md', '')}"
         else:
             # gs://bucket/enterprise/ed/bundle/protocol_id/extracted_text.txt → protocol_id
             parts = source.replace("gs://", "").split("/")
@@ -140,6 +158,10 @@ class RAGService:
                 source_label = "PMC Literature"
             elif source_type == "litfl":
                 source_label = "LITFL"
+            elif source_type == "rebelem":
+                source_label = "REBEL EM"
+            elif source_type == "aliem":
+                source_label = "ALiEM"
             else:
                 source_label = "Local Protocol"
             
@@ -380,6 +402,58 @@ ANSWER:"""
         
         return None
 
+    def _get_rebelem_metadata(self, source_uri: str) -> Optional[Dict]:
+        """Get metadata for a REBEL EM article from its source URI"""
+        # Format: gs://clinical-assistant-457902-rebelem/processed/topic-slug.md
+        try:
+            if source_uri.startswith("gs://"):
+                parts = source_uri.split("/")
+                filename = parts[-1] if parts else ""
+                slug = filename.replace(".md", "")
+                
+                cache_key = f"rebelem/{slug}"
+                if cache_key in self._metadata_cache:
+                    return self._metadata_cache[cache_key]
+                
+                bucket = self.storage_client.bucket(REBELEM_BUCKET)
+                blob = bucket.blob(f"metadata/{slug}.json")
+                
+                if blob.exists():
+                    content = blob.download_as_string()
+                    metadata = json.loads(content)
+                    self._metadata_cache[cache_key] = metadata
+                    return metadata
+        except Exception as e:
+            print(f"Error getting REBEL EM metadata for {source_uri}: {e}")
+        
+        return None
+
+    def _get_aliem_metadata(self, source_uri: str) -> Optional[Dict]:
+        """Get metadata for an ALiEM article from its source URI"""
+        # Format: gs://clinical-assistant-457902-aliem/processed/topic-slug.md
+        try:
+            if source_uri.startswith("gs://"):
+                parts = source_uri.split("/")
+                filename = parts[-1] if parts else ""
+                slug = filename.replace(".md", "")
+                
+                cache_key = f"aliem/{slug}"
+                if cache_key in self._metadata_cache:
+                    return self._metadata_cache[cache_key]
+                
+                bucket = self.storage_client.bucket(ALIEM_BUCKET)
+                blob = bucket.blob(f"metadata/{slug}.json")
+                
+                if blob.exists():
+                    content = blob.download_as_string()
+                    metadata = json.loads(content)
+                    self._metadata_cache[cache_key] = metadata
+                    return metadata
+        except Exception as e:
+            print(f"Error getting ALiEM metadata for {source_uri}: {e}")
+        
+        return None
+
     def _get_images_from_contexts(self, contexts: List[Dict]) -> List[Dict]:
         """Extract images from context sources - maintains protocol relevance order"""
         seen_images = set()
@@ -429,6 +503,34 @@ ANSWER:"""
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"LITFL: {metadata.get('title', 'unknown')}",
+                                "protocol_rank": ctx_idx
+                            })
+            elif source_type == "rebelem":
+                # Get REBEL EM metadata with image URLs
+                metadata = self._get_rebelem_metadata(ctx["source"])
+                if metadata:
+                    for img in metadata.get("images", []):
+                        img_url = img.get("url", "")
+                        if img_url and img_url not in seen_images:
+                            seen_images.add(img_url)
+                            images.append({
+                                "page": img.get("page", 0),
+                                "url": img_url,
+                                "source": f"REBEL EM: {metadata.get('title', 'unknown')}",
+                                "protocol_rank": ctx_idx
+                            })
+            elif source_type == "aliem":
+                # Get ALiEM metadata with image URLs
+                metadata = self._get_aliem_metadata(ctx["source"])
+                if metadata:
+                    for img in metadata.get("images", []):
+                        img_url = img.get("url", "")
+                        if img_url and img_url not in seen_images:
+                            seen_images.add(img_url)
+                            images.append({
+                                "page": img.get("page", 0),
+                                "url": img_url,
+                                "source": f"ALiEM: {metadata.get('title', 'unknown')}",
                                 "protocol_rank": ctx_idx
                             })
             else:
@@ -516,7 +618,31 @@ ANSWER:"""
                 print(f"LITFL corpus query failed: {e}")
                 return []
         
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        def fetch_rebelem():
+            try:
+                if self.rebelem_corpus_name:
+                    contexts = self._retrieve_contexts(query, self.rebelem_corpus_name)
+                    for ctx in contexts:
+                        ctx["source_type"] = "rebelem"
+                    return contexts
+                return []
+            except Exception as e:
+                print(f"REBEL EM corpus query failed: {e}")
+                return []
+        
+        def fetch_aliem():
+            try:
+                if self.aliem_corpus_name:
+                    contexts = self._retrieve_contexts(query, self.aliem_corpus_name)
+                    for ctx in contexts:
+                        ctx["source_type"] = "aliem"
+                    return contexts
+                return []
+            except Exception as e:
+                print(f"ALiEM corpus query failed: {e}")
+                return []
+        
+        with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {}
             if "local" in sources:
                 futures["local"] = executor.submit(fetch_local)
@@ -526,6 +652,10 @@ ANSWER:"""
                 futures["pmc"] = executor.submit(fetch_pmc)
             if "litfl" in sources:
                 futures["litfl"] = executor.submit(fetch_litfl)
+            if "rebelem" in sources:
+                futures["rebelem"] = executor.submit(fetch_rebelem)
+            if "aliem" in sources:
+                futures["aliem"] = executor.submit(fetch_aliem)
             
             for key, future in futures.items():
                 try:
@@ -596,8 +726,8 @@ ANSWER:"""
             
             filtered_contexts = []
             for ctx in contexts:
-                if ctx.get("source_type") in ("wikem", "pmc", "litfl"):
-                    # Always keep WikEM, PMC, and LITFL results (not filtered by ED path)
+                if ctx.get("source_type") in ("wikem", "pmc", "litfl", "rebelem", "aliem"):
+                    # Always keep external source results (not filtered by ED path)
                     filtered_contexts.append(ctx)
                 elif any(prefix in ctx.get("source", "") for prefix in prefixes):
                     filtered_contexts.append(ctx)
@@ -683,7 +813,7 @@ ANSWER:"""
 
             filtered_contexts = []
             for ctx in contexts:
-                if ctx.get("source_type") in ("wikem", "pmc", "litfl"):
+                if ctx.get("source_type") in ("wikem", "pmc", "litfl", "rebelem", "aliem"):
                     filtered_contexts.append(ctx)
                 elif any(prefix in ctx.get("source", "") for prefix in prefixes):
                     filtered_contexts.append(ctx)

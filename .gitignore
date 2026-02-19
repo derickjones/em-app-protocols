@@ -14,5 +14,15 @@ scrapers/litfl/output/
 scrapers/litfl/discovery/
 scrapers/litfl/indexing.log
 scrapers/litfl/indexing_old.log
+scrapers/rebelem/output/
+scrapers/rebelem/discovery/
+scrapers/rebelem/indexing.log
+scrapers/rebelem/batch_indexing.log
+scrapers/rebelem/bulk_scrape.log
+scrapers/aliem/output/
+scrapers/aliem/discovery/
+scrapers/aliem/indexing.log
+scrapers/aliem/batch_indexing.log
+scrapers/aliem/bulk_scrape.log
 api.log
 indexing.log

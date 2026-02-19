@@ -126,7 +126,7 @@ class QueryRequest(BaseModel):
     ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
-    sources: List[str] = Field(default=["local", "wikem", "pmc", "litfl"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature), 'litfl' (LITFL clinical education)")
+    sources: List[str] = Field(default=["local", "wikem", "pmc", "litfl", "rebelem", "aliem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature), 'litfl' (LITFL clinical education), 'rebelem' (REBEL EM evidence-based reviews), 'aliem' (ALiEM PV Cards & MEdIC Series)")
     pmc_journals: Optional[List[str]] = Field(default=None, description="PMC journal names to include. None = all journals (no filter).")
     enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
 
@@ -372,6 +372,50 @@ def _build_citations(raw_citations: list) -> list:
                 "source_uri": f"https://litfl.com/{slug}/",
                 "relevance_score": c["score"],
                 "source_type": "litfl"
+            })
+            continue
+
+        # Handle REBEL EM citations
+        if source_type == "rebelem":
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            slug = filename.replace(".md", "")
+            rebelem_key = f"rebelem-{slug}"
+            if rebelem_key in seen_protocols:
+                continue
+            seen_protocols.add(rebelem_key)
+            rebelem_metadata = rag_service._get_rebelem_metadata(source)
+            if rebelem_metadata:
+                display_name = rebelem_metadata.get("title", slug.replace("-", " ").title())
+            else:
+                display_name = slug.replace("-", " ").title()
+            citations.append({
+                "protocol_id": display_name,
+                "source_uri": f"https://rebelem.com/{slug}/",
+                "relevance_score": c["score"],
+                "source_type": "rebelem"
+            })
+            continue
+
+        # Handle ALiEM citations
+        if source_type == "aliem":
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            slug = filename.replace(".md", "")
+            aliem_key = f"aliem-{slug}"
+            if aliem_key in seen_protocols:
+                continue
+            seen_protocols.add(aliem_key)
+            aliem_metadata = rag_service._get_aliem_metadata(source)
+            if aliem_metadata:
+                display_name = aliem_metadata.get("title", slug.replace("-", " ").title())
+            else:
+                display_name = slug.replace("-", " ").title()
+            citations.append({
+                "protocol_id": display_name,
+                "source_uri": f"https://www.aliem.com/{slug}/",
+                "relevance_score": c["score"],
+                "source_type": "aliem"
             })
             continue
 

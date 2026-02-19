@@ -97,10 +97,14 @@ export default function Home() {
   const [wikemEnabled, setWikemEnabled] = useState(true);
   const [pmcEnabled, setPmcEnabled] = useState(true);
   const [litflEnabled, setLitflEnabled] = useState(true);
+  const [rebelemEnabled, setRebelemEnabled] = useState(true);
+  const [aliemEnabled, setAliemEnabled] = useState(true);
   const [selectedJournals, setSelectedJournals] = useState<Set<string>>(new Set(ALL_PMC_JOURNAL_KEYS));
   const [wikemExpanded, setWikemExpanded] = useState(false);
   const [pmcExpanded, setPmcExpanded] = useState(false);
   const [litflExpanded, setLitflExpanded] = useState(false);
+  const [rebelemExpanded, setRebelemExpanded] = useState(false);
+  const [aliemExpanded, setAliemExpanded] = useState(false);
   const [universeDirty, setUniverseDirty] = useState(false); // track unsaved changes
 
   // Lightbox state for image enlargement
@@ -110,19 +114,23 @@ export default function Home() {
   // Globe toggles ALL external sources together
   const toggleSource = (source: string) => {
     if (source === "wikem") {
-      const isCurrentlyOn = wikemEnabled || pmcEnabled || litflEnabled;
+      const isCurrentlyOn = wikemEnabled || pmcEnabled || litflEnabled || rebelemEnabled || aliemEnabled;
       if (isCurrentlyOn) {
         // Turn off all — only if we have EDs selected (need at least one source)
         if (selectedEds.size > 0) {
           setWikemEnabled(false);
           setPmcEnabled(false);
           setLitflEnabled(false);
+          setRebelemEnabled(false);
+          setAliemEnabled(false);
         }
       } else {
         // Turn all back on
         setWikemEnabled(true);
         setPmcEnabled(true);
         setLitflEnabled(true);
+        setRebelemEnabled(true);
+        setAliemEnabled(true);
       }
     }
   };
@@ -134,6 +142,8 @@ export default function Home() {
     if (wikemEnabled) sources.push("wikem");
     if (pmcEnabled && selectedJournals.size > 0) sources.push("pmc");
     if (litflEnabled) sources.push("litfl");
+    if (rebelemEnabled) sources.push("rebelem");
+    if (aliemEnabled) sources.push("aliem");
     return sources;
   };
 
@@ -145,7 +155,7 @@ export default function Home() {
   };
 
   // Is the globe "on"? (any external source is active)
-  const globeActive = wikemEnabled || pmcEnabled || litflEnabled;
+  const globeActive = wikemEnabled || pmcEnabled || litflEnabled || rebelemEnabled || aliemEnabled;
 
   // Save ED Universe preferences to localStorage
   const saveUniversePreferences = () => {
@@ -154,6 +164,8 @@ export default function Home() {
         wikemEnabled,
         pmcEnabled,
         litflEnabled,
+        rebelemEnabled,
+        aliemEnabled,
         selectedJournals: Array.from(selectedJournals),
       }));
       setUniverseDirty(false);
@@ -198,6 +210,8 @@ export default function Home() {
           if (typeof prefs.wikemEnabled === 'boolean') setWikemEnabled(prefs.wikemEnabled);
           if (typeof prefs.pmcEnabled === 'boolean') setPmcEnabled(prefs.pmcEnabled);
           if (typeof prefs.litflEnabled === 'boolean') setLitflEnabled(prefs.litflEnabled);
+          if (typeof prefs.rebelemEnabled === 'boolean') setRebelemEnabled(prefs.rebelemEnabled);
+          if (typeof prefs.aliemEnabled === 'boolean') setAliemEnabled(prefs.aliemEnabled);
           if (Array.isArray(prefs.selectedJournals)) {
             setSelectedJournals(new Set(prefs.selectedJournals));
           }
@@ -987,6 +1001,90 @@ export default function Home() {
                   </div>
                 )}
               </div>
+
+              {/* REBEL EM Section */}
+              <div>
+                <button
+                  onClick={() => setRebelemExpanded(!rebelemExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRebelemEnabled(!rebelemEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      rebelemEnabled
+                        ? 'bg-rose-500 border-rose-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {rebelemEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <img src="/logos/rebelem-logo.png" alt="REBEL EM" className={`w-4 h-4 rounded flex-shrink-0 ${rebelemEnabled ? 'opacity-100' : 'opacity-40'}`} />
+                  <span className={`flex-1 text-left font-medium ${rebelemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    REBEL EM
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>1,245</span>
+                  {rebelemExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {rebelemExpanded && (
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
+                  }`}>
+                    REBEL EM — 1,245 evidence-based reviews of recent emergency medicine literature with clinical bottom lines and critical appraisals. CC BY-NC-ND 4.0.
+                  </div>
+                )}
+              </div>
+
+              {/* ALiEM Section */}
+              <div>
+                <button
+                  onClick={() => setAliemExpanded(!aliemExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAliemEnabled(!aliemEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      aliemEnabled
+                        ? 'bg-cyan-500 border-cyan-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {aliemEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <img src="/logos/aliem-logo.png" alt="ALiEM" className={`w-4 h-4 rounded flex-shrink-0 ${aliemEnabled ? 'opacity-100' : 'opacity-40'}`} />
+                  <span className={`flex-1 text-left font-medium ${aliemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    ALiEM
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>258</span>
+                  {aliemExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {aliemExpanded && (
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
+                  }`}>
+                    ALiEM — 258 PV Cards and MEdIC cases covering emergency medicine education, clinical decision-making, and academic development. CC BY-NC-ND 3.0.
+                  </div>
+                )}
+              </div>
             </div>
 
           </div>
@@ -1427,15 +1525,16 @@ export default function Home() {
                       </svg>
                       Related Diagrams
                     </h3>
-                    {/* Horizontal Scroll Container */}
+                    {/* Horizontal Scroll Container — scrollbar on top */}
                     <div className="relative -mx-4 px-4">
-                      <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-                        {response.images.map((img, idx) => (
-                          <div 
-                            key={idx} 
-                            onClick={() => handleImageClick(img)}
-                            className={`flex-shrink-0 w-80 rounded-2xl overflow-hidden border shadow-sm snap-start transition-transform hover:scale-[1.02] cursor-pointer ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-gray-200'}`}
-                          >
+                      <div className="flex flex-col-reverse">
+                        <div className="flex gap-4 overflow-x-auto pt-2 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 [transform:rotateX(180deg)]">
+                          {response.images.map((img, idx) => (
+                            <div 
+                              key={idx} 
+                              onClick={() => handleImageClick(img)}
+                              className={`flex-shrink-0 w-80 rounded-2xl overflow-hidden border shadow-sm snap-start transition-transform hover:scale-[1.02] cursor-pointer [transform:rotateX(180deg)] ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-white border-gray-200'}`}
+                            >
                             <img
                               src={img.url}
                               alt={`Protocol diagram from ${img.protocol_id}, page ${img.page}`}
@@ -1450,6 +1549,7 @@ export default function Home() {
                             </div>
                           </div>
                         ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1469,6 +1569,8 @@ export default function Home() {
                         const isWikEM = cite.source_type === "wikem";
                         const isPMC = cite.source_type === "pmc";
                         const isLITFL = cite.source_type === "litfl";
+                        const isREBELEM = cite.source_type === "rebelem";
+                        const isALiEM = cite.source_type === "aliem";
                         return (
                           <a
                             key={idx}
@@ -1482,9 +1584,13 @@ export default function Home() {
                                 ? (darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
                                 : isLITFL
                                   ? (darkMode ? 'bg-orange-900/50 text-orange-300' : 'bg-orange-100 text-orange-700')
-                                  : isWikEM 
-                                    ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
-                                    : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
+                                  : isREBELEM
+                                    ? (darkMode ? 'bg-rose-900/50 text-rose-300' : 'bg-rose-100 text-rose-700')
+                                    : isALiEM
+                                      ? (darkMode ? 'bg-cyan-900/50 text-cyan-300' : 'bg-cyan-100 text-cyan-700')
+                                      : isWikEM 
+                                        ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                                        : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
                             }`}>{idx + 1}</span>
                             <span className="flex-1 truncate">{cite.protocol_id.replace(/_/g, " ")}</span>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${
@@ -1492,11 +1598,15 @@ export default function Home() {
                                 ? (darkMode ? 'bg-purple-900/50 text-purple-400' : 'bg-purple-100 text-purple-700')
                                 : isLITFL
                                   ? (darkMode ? 'bg-orange-900/50 text-orange-400' : 'bg-orange-100 text-orange-700')
-                                  : isWikEM
-                                    ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
-                                    : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
+                                  : isREBELEM
+                                    ? (darkMode ? 'bg-rose-900/50 text-rose-400' : 'bg-rose-100 text-rose-700')
+                                    : isALiEM
+                                      ? (darkMode ? 'bg-cyan-900/50 text-cyan-400' : 'bg-cyan-100 text-cyan-700')
+                                      : isWikEM
+                                        ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
+                                        : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
                             }`}>
-                              {isPMC ? '📚 PMC' : isLITFL ? '⚡ LITFL' : isWikEM ? 'WikEM' : 'Local'}
+                              {isPMC ? '📚 PMC' : isLITFL ? '⚡ LITFL' : isREBELEM ? '🔥 REBEL' : isALiEM ? '🎓 ALiEM' : isWikEM ? 'WikEM' : 'Local'}
                             </span>
                             <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -1518,6 +1628,16 @@ export default function Home() {
                     {response.citations.some(c => c.source_type === "litfl") && (
                       <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                         LITFL content from <a href="https://litfl.com" target="_blank" rel="noopener noreferrer" className="underline">litfl.com</a> under CC BY-NC-SA 4.0 — FOAMed education resource
+                      </p>
+                    )}
+                    {response.citations.some(c => c.source_type === "rebelem") && (
+                      <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        REBEL EM content from <a href="https://rebelem.com" target="_blank" rel="noopener noreferrer" className="underline">rebelem.com</a> under CC BY-NC-ND 4.0 — evidence-based reviews
+                      </p>
+                    )}
+                    {response.citations.some(c => c.source_type === "aliem") && (
+                      <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        ALiEM content from <a href="https://www.aliem.com" target="_blank" rel="noopener noreferrer" className="underline">aliem.com</a> under CC BY-NC-ND 3.0 — PV Cards &amp; MEdIC Series
                       </p>
                     )}
                   </div>
