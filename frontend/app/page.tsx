@@ -94,6 +94,7 @@ export default function Home() {
   const [showBundleSelector, setShowBundleSelector] = useState(false);
 
   // ED Universe state
+  const [settingsCollapsed, setSettingsCollapsed] = useState(false); // settings panel default open
   const [wikemEnabled, setWikemEnabled] = useState(true);
   const [pmcEnabled, setPmcEnabled] = useState(true);
   const [litflEnabled, setLitflEnabled] = useState(true);
@@ -787,6 +788,23 @@ export default function Home() {
 
         {/* Sidebar Footer */}
         <div className={`p-4 border-t ${darkMode ? 'border-neutral-800' : 'border-gray-200'}`}>
+          {/* Settings collapse toggle */}
+          <button
+            onClick={() => setSettingsCollapsed(!settingsCollapsed)}
+            className={`w-full flex items-center justify-between px-1 mb-3 group`}
+          >
+            <span className={`text-xs font-medium tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Settings
+            </span>
+            {settingsCollapsed ? (
+              <ChevronRight className={`w-3.5 h-3.5 transition-colors ${darkMode ? 'text-gray-600 group-hover:text-gray-400' : 'text-gray-400 group-hover:text-gray-500'}`} />
+            ) : (
+              <ChevronDown className={`w-3.5 h-3.5 transition-colors ${darkMode ? 'text-gray-600 group-hover:text-gray-400' : 'text-gray-400 group-hover:text-gray-500'}`} />
+            )}
+          </button>
+
+          {!settingsCollapsed && (
+          <>
           {/* Dark/Light Mode Toggle */}
           <div className="flex items-center justify-between px-1 mb-4">
             <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Light</span>
@@ -899,6 +917,90 @@ export default function Home() {
                 )}
               </div>
 
+              {/* REBEL EM Section */}
+              <div>
+                <button
+                  onClick={() => setRebelemExpanded(!rebelemExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRebelemEnabled(!rebelemEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      rebelemEnabled
+                        ? 'bg-rose-500 border-rose-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {rebelemEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <img src="/logos/rebelem-logo.png" alt="REBEL EM" className={`w-4 h-4 rounded flex-shrink-0 ${rebelemEnabled ? 'opacity-100' : 'opacity-40'}`} />
+                  <span className={`flex-1 text-left font-medium ${rebelemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    REBEL EM
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>1,245</span>
+                  {rebelemExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {rebelemExpanded && (
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
+                  }`}>
+                    REBEL EM — 1,245 evidence-based reviews of recent emergency medicine literature with clinical bottom lines and critical appraisals. CC BY-NC-ND 4.0.
+                  </div>
+                )}
+              </div>
+
+              {/* ALiEM Section */}
+              <div>
+                <button
+                  onClick={() => setAliemExpanded(!aliemExpanded)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAliemEnabled(!aliemEnabled);
+                      setUniverseDirty(true);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      aliemEnabled
+                        ? 'bg-cyan-500 border-cyan-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {aliemEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <img src="/logos/aliem-logo.png" alt="ALiEM" className={`w-4 h-4 rounded flex-shrink-0 ${aliemEnabled ? 'opacity-100' : 'opacity-40'}`} />
+                  <span className={`flex-1 text-left font-medium ${aliemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    ALiEM
+                  </span>
+                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>258</span>
+                  {aliemExpanded ? (
+                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  ) : (
+                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                  )}
+                </button>
+                {aliemExpanded && (
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
+                  }`}>
+                    ALiEM — 258 PV Cards and MEdIC cases covering emergency medicine education, clinical decision-making, and academic development. CC BY-NC-ND 3.0.
+                  </div>
+                )}
+              </div>
+
               {/* PMC Literature Section */}
               <div>
                 <button
@@ -998,90 +1100,6 @@ export default function Home() {
                         );
                       })}
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {/* REBEL EM Section */}
-              <div>
-                <button
-                  onClick={() => setRebelemExpanded(!rebelemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setRebelemEnabled(!rebelemEnabled);
-                      setUniverseDirty(true);
-                    }}
-                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
-                      rebelemEnabled
-                        ? 'bg-rose-500 border-rose-500'
-                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
-                    }`}
-                  >
-                    {rebelemEnabled && <Check className="w-3 h-3 text-white" />}
-                  </div>
-                  <img src="/logos/rebelem-logo.png" alt="REBEL EM" className={`w-4 h-4 rounded flex-shrink-0 ${rebelemEnabled ? 'opacity-100' : 'opacity-40'}`} />
-                  <span className={`flex-1 text-left font-medium ${rebelemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    REBEL EM
-                  </span>
-                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>1,245</span>
-                  {rebelemExpanded ? (
-                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                  ) : (
-                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                  )}
-                </button>
-                {rebelemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
-                  }`}>
-                    REBEL EM — 1,245 evidence-based reviews of recent emergency medicine literature with clinical bottom lines and critical appraisals. CC BY-NC-ND 4.0.
-                  </div>
-                )}
-              </div>
-
-              {/* ALiEM Section */}
-              <div>
-                <button
-                  onClick={() => setAliemExpanded(!aliemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAliemEnabled(!aliemEnabled);
-                      setUniverseDirty(true);
-                    }}
-                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
-                      aliemEnabled
-                        ? 'bg-cyan-500 border-cyan-500'
-                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
-                    }`}
-                  >
-                    {aliemEnabled && <Check className="w-3 h-3 text-white" />}
-                  </div>
-                  <img src="/logos/aliem-logo.png" alt="ALiEM" className={`w-4 h-4 rounded flex-shrink-0 ${aliemEnabled ? 'opacity-100' : 'opacity-40'}`} />
-                  <span className={`flex-1 text-left font-medium ${aliemEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    ALiEM
-                  </span>
-                  <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>258</span>
-                  {aliemExpanded ? (
-                    <ChevronDown className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                  ) : (
-                    <ChevronRight className={`w-3.5 h-3.5 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                  )}
-                </button>
-                {aliemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-neutral-800/50' : 'text-gray-500 bg-gray-100/50'
-                  }`}>
-                    ALiEM — 258 PV Cards and MEdIC cases covering emergency medicine education, clinical decision-making, and academic development. CC BY-NC-ND 3.0.
                   </div>
                 )}
               </div>
@@ -1186,6 +1204,8 @@ export default function Home() {
                 Save Preferences
               </button>
             </div>
+          )}
+          </>
           )}
 
           {/* User Auth - at bottom */}
