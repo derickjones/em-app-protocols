@@ -795,10 +795,28 @@ def _run_sequential_reindex(task_id: str, corpus_name: str, text_files: list, ba
             }
         }
         
-        import_response = requests.post(import_url, headers=headers, json=payload)
+        # Retry with exponential backoff for rate limiting (429) and concurrency (400)
+        import_response = None
+        max_retries = 5
+        for attempt in range(max_retries):
+            import_response = requests.post(import_url, headers=headers, json=payload)
+            if import_response.status_code == 200:
+                break
+            elif import_response.status_code in (429, 400):
+                wait_time = 30 * (2 ** attempt)  # 30s, 60s, 120s, 240s, 480s
+                print(f"Batch {batch_num} got {import_response.status_code}, retrying in {wait_time}s (attempt {attempt+1}/{max_retries})")
+                task["message"] = f"Batch {batch_num}/{task['total_batches']} — rate limited, retrying in {wait_time}s..."
+                time.sleep(wait_time)
+                # Refresh token after waiting
+                try:
+                    headers = {"Authorization": f"Bearer {get_access_token()}"}
+                except Exception:
+                    pass
+            else:
+                break  # Non-retryable error
         
         if import_response.status_code != 200:
-            print(f"Batch {batch_num} import request failed: {import_response.status_code} - {import_response.text[:500]}")
+            print(f"Batch {batch_num} import request failed after retries: {import_response.status_code} - {import_response.text[:500]}")
             total_failed += len(batch)
             task["failed"] = total_failed
             continue
