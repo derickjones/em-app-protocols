@@ -48,6 +48,7 @@ JOURNALS = [
     "Prehospital Emergency Care",
     "Air Medical Journal",
     "Pediatric Emergency Care",
+
 ]
 
 DATE_FILTER = "2015/01/01:3000/12/31[PDAT]"  # 2015 to present

@@ -789,6 +789,102 @@ async def check_reindex_status(operation: str = Query(..., description="Operatio
         return {"done": False, "status": "error", "message": str(e)}
 
 
+@app.get("/admin/rag-status")
+async def get_rag_file_status(
+    enterprise_id: str = Query(default=None, description="Enterprise ID filter"),
+    ed_id: str = Query(default=None, description="ED ID filter"),
+    bundle_id: str = Query(default=None, description="Bundle ID filter"),
+    user: UserProfile = Depends(require_admin)
+):
+    """
+    Compare GCS extracted_text files against what's actually in the RAG corpus.
+    Returns per-file indexing status: 'indexed' or 'missing'.
+    """
+    try:
+        corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
+        headers = {"Authorization": f"Bearer {get_access_token()}"}
+
+        # Step 1: List all extracted_text.txt files in GCS
+        storage_client = storage.Client()
+        bucket = storage_client.bucket("clinical-assistant-457902-protocols-processed")
+
+        prefix = ""
+        if enterprise_id:
+            prefix = f"{enterprise_id}/"
+            if ed_id:
+                prefix = f"{enterprise_id}/{ed_id}/"
+                if bundle_id:
+                    prefix = f"{enterprise_id}/{ed_id}/{bundle_id}/"
+
+        gcs_files = {}
+        for blob in bucket.list_blobs(prefix=prefix):
+            if blob.name.endswith("extracted_text.txt"):
+                gcs_uri = f"gs://clinical-assistant-457902-protocols-processed/{blob.name}"
+                # Extract protocol_id from path: enterprise/ed/bundle/protocol_id/extracted_text.txt
+                parts = blob.name.split("/")
+                if len(parts) >= 4:
+                    protocol_id = parts[-2]
+                    gcs_files[gcs_uri] = {
+                        "protocol_id": protocol_id,
+                        "gcs_uri": gcs_uri,
+                        "path": blob.name,
+                        "status": "missing"  # default, will flip to indexed if found in RAG
+                    }
+
+        # Step 2: List all files currently in the RAG corpus
+        rag_uris = set()
+        list_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles"
+        next_page_token = None
+
+        while True:
+            params = {"pageSize": 100}
+            if next_page_token:
+                params["pageToken"] = next_page_token
+
+            response = requests.get(list_url, headers=headers, params=params)
+            if response.status_code != 200:
+                break
+
+            data = response.json()
+            for rag_file in data.get("ragFiles", []):
+                # Try gcsSource.uris first
+                uris = rag_file.get("gcsSource", {}).get("uris", [])
+                for uri in uris:
+                    rag_uris.add(uri)
+                # Also check displayName or name for matching
+                display = rag_file.get("displayName", "")
+                if display:
+                    rag_uris.add(display)
+
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        # Step 3: Match — mark files found in RAG as 'indexed'
+        for gcs_uri, info in gcs_files.items():
+            if gcs_uri in rag_uris:
+                info["status"] = "indexed"
+            else:
+                # Also try partial path match (protocol path within any RAG URI)
+                protocol_path = info["path"]  # e.g., "mayo-clinic/rochester/tele/CDH008/extracted_text.txt"
+                if any(protocol_path in rag_uri for rag_uri in rag_uris):
+                    info["status"] = "indexed"
+
+        files_list = list(gcs_files.values())
+        indexed_count = sum(1 for f in files_list if f["status"] == "indexed")
+        missing_count = sum(1 for f in files_list if f["status"] == "missing")
+
+        return {
+            "files": files_list,
+            "total": len(files_list),
+            "indexed": indexed_count,
+            "missing": missing_count
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/protocols/{enterprise_id}/{ed_id}/{bundle_id}/{protocol_id}")
 async def get_protocol(enterprise_id: str, ed_id: str, bundle_id: str, protocol_id: str):
     """

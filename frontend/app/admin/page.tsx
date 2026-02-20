@@ -78,6 +78,7 @@ export default function AdminPage() {
   const [reindexStatus, setReindexStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
   const [urlInput, setUrlInput] = useState("");
   const [urlUploading, setUrlUploading] = useState(false);
+  const [ragStatus, setRagStatus] = useState<Record<string, "indexed" | "missing">>({});
 
   // Derived helpers
   const currentEnterprise = enterprises.find((e) => e.id === selectedEnterprise);
@@ -155,12 +156,38 @@ export default function AdminPage() {
     }
   }, [selectedEnterprise, selectedED, selectedBundle]);
 
+  const fetchRagStatus = useCallback(async () => {
+    if (!user || !selectedEnterprise || !selectedED || !selectedBundle) return;
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams({
+        enterprise_id: selectedEnterprise,
+        ed_id: selectedED,
+        bundle_id: selectedBundle,
+      });
+      const res = await fetch(`${API_URL}/admin/rag-status?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const statusMap: Record<string, "indexed" | "missing"> = {};
+        for (const file of data.files || []) {
+          statusMap[file.protocol_id] = file.status;
+        }
+        setRagStatus(statusMap);
+      }
+    } catch (err) {
+      console.error("Failed to fetch RAG status:", err);
+    }
+  }, [user, selectedEnterprise, selectedED, selectedBundle]);
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchProtocols();
       fetchAllHospitals();
+      fetchRagStatus();
     }
-  }, [isAuthenticated, fetchProtocols, fetchAllHospitals]);
+  }, [isAuthenticated, fetchProtocols, fetchAllHospitals, fetchRagStatus]);
 
   const toggleHospital = (hospital: string) => {
     const newExpanded = new Set(expandedHospitals);
@@ -300,6 +327,7 @@ export default function AdminPage() {
                     type: statusData.status === "completed" ? "success" : "error",
                     message: statusData.message
                   });
+                  fetchRagStatus();
                 } else {
                   setReindexStatus({ type: "success", message: `⏳ ${statusData.message || 'Indexing in progress...'}` });
                 }
@@ -959,6 +987,19 @@ export default function AdminPage() {
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
+                              {ragStatus[protocol.protocol_id] === "indexed" ? (
+                                <span className="flex items-center gap-1 text-xs text-green-400" title="Indexed in RAG">
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  Indexed
+                                </span>
+                              ) : ragStatus[protocol.protocol_id] === "missing" ? (
+                                <span className="flex items-center gap-1 text-xs text-red-400" title="Not found in RAG">
+                                  <AlertCircle className="w-3.5 h-3.5" />
+                                  Not Indexed
+                                </span>
+                              ) : (
+                                <span className="text-xs text-[#5f6368]">—</span>
+                              )}
                               <p className="text-xs text-[#5f6368]">
                                 {new Date(protocol.processed_at).toLocaleDateString()}
                               </p>
