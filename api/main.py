@@ -794,7 +794,7 @@ async def get_rag_file_status(
     enterprise_id: str = Query(default=None, description="Enterprise ID filter"),
     ed_id: str = Query(default=None, description="ED ID filter"),
     bundle_id: str = Query(default=None, description="Bundle ID filter"),
-    user: UserProfile = Depends(require_admin)
+    request: Request = None
 ):
     """
     Compare GCS extracted_text files against what's actually in the RAG corpus.
