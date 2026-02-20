@@ -75,7 +75,14 @@ export default function AdminPage() {
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({ status: "idle", message: "" });
   const [dragActive, setDragActive] = useState(false);
   const [reindexing, setReindexing] = useState(false);
-  const [reindexStatus, setReindexStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
+  const [reindexStatus, setReindexStatus] = useState<{ 
+    type: "success" | "error" | null; 
+    message: string;
+    currentBatch?: number;
+    totalBatches?: number;
+    imported?: number;
+    failed?: number;
+  }>({ type: null, message: "" });
   const [urlInput, setUrlInput] = useState("");
   const [urlUploading, setUrlUploading] = useState(false);
   const [ragStatus, setRagStatus] = useState<Record<string, "indexed" | "missing">>({});
@@ -305,17 +312,27 @@ export default function AdminPage() {
         const initialMsg = data.message || `Cleared ${data.deleted || 0} files, indexing ${data.files_to_index || 0} files`;
         setReindexStatus({ 
           type: "success", 
-          message: initialMsg
+          message: `⏳ ${initialMsg}`,
+          currentBatch: 0,
+          totalBatches: data.batches || 0,
+          imported: 0,
+          failed: 0,
         });
         
-        // Poll for completion if we got an operation name
-        if (data.operation) {
+        // Poll for completion using task_id (new) or operation (legacy)
+        const trackingParam = data.task_id
+          ? `task_id=${encodeURIComponent(data.task_id)}`
+          : data.operation
+            ? `operation=${encodeURIComponent(data.operation)}`
+            : null;
+
+        if (trackingParam) {
           let pollCount = 0;
           const pollInterval = setInterval(async () => {
             try {
               pollCount++;
               const pollToken = await user?.getIdToken();
-              const statusRes = await fetch(`${API_URL}/admin/reindex-rag/status?operation=${encodeURIComponent(data.operation)}`, {
+              const statusRes = await fetch(`${API_URL}/admin/reindex-rag/status?${trackingParam}`, {
                 headers: { Authorization: `Bearer ${pollToken}` },
               });
               if (statusRes.ok) {
@@ -329,7 +346,17 @@ export default function AdminPage() {
                   });
                   fetchRagStatus();
                 } else {
-                  setReindexStatus({ type: "success", message: `⏳ ${statusData.message || 'Indexing in progress...'}` });
+                  // Show batch progress
+                  setReindexStatus({ 
+                    type: "success", 
+                    message: `⏳ ${statusData.message || 'Indexing in progress...'}`,
+                    ...(statusData.total_batches ? { 
+                      currentBatch: statusData.current_batch, 
+                      totalBatches: statusData.total_batches,
+                      imported: statusData.imported || 0,
+                      failed: statusData.failed || 0,
+                    } : {})
+                  });
                 }
               } else {
                 // If status check fails, show error after a few retries
@@ -349,11 +376,11 @@ export default function AdminPage() {
             }
           }, 5000); // Check every 5 seconds
           
-          // Stop polling after 5 minutes max
+          // Stop polling after 10 minutes max (sequential batches take longer)
           setTimeout(() => {
             clearInterval(pollInterval);
             setReindexing(false);
-          }, 300000);
+          }, 600000);
           
           return; // Don't set reindexing to false yet
         }
@@ -804,11 +831,6 @@ export default function AdminPage() {
             
             {/* Re-index RAG Button */}
             <div className="flex items-center gap-3">
-              {reindexStatus.type && (
-                <span className={`text-sm ${reindexStatus.type === "success" ? "text-green-400" : "text-red-400"}`}>
-                  {reindexStatus.message}
-                </span>
-              )}
               <button
                 onClick={handleReindexRAG}
                 disabled={reindexing}
@@ -820,6 +842,35 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+
+        {/* Re-index progress bar */}
+        {reindexStatus.type && (
+          <div className="px-6 pb-2">
+            <div className="max-w-4xl mx-auto">
+              {reindexing && reindexStatus.totalBatches ? (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-[#9aa0a6]">
+                    <span>{reindexStatus.message}</span>
+                    <span>{reindexStatus.imported || 0} indexed{reindexStatus.failed ? `, ${reindexStatus.failed} failed` : ""}</span>
+                  </div>
+                  <div className="w-full bg-[#3c4043] rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-[#8ab4f8] h-2 rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${Math.max(5, ((reindexStatus.currentBatch || 0) / reindexStatus.totalBatches) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-[#9aa0a6] text-center">
+                    Batch {reindexStatus.currentBatch || 0} of {reindexStatus.totalBatches} — please don&apos;t close this page
+                  </div>
+                </div>
+              ) : (
+                <span className={`text-sm ${reindexStatus.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                  {reindexStatus.message}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto p-6">
           <div className="max-w-4xl mx-auto space-y-6">

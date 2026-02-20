@@ -5,11 +5,13 @@ FastAPI backend for querying emergency medicine protocols
 
 import os
 import json
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request, Depends
+import asyncio
+import uuid
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import time
 import requests
 import google.auth
@@ -44,6 +46,9 @@ app.add_middleware(
 # Initialize services
 rag_service = RAGService()
 protocol_service = ProtocolService()
+
+# In-memory store for reindex task progress
+reindex_tasks: Dict[str, Dict[str, Any]] = {}
 
 
 def get_access_token():
@@ -641,22 +646,36 @@ async def delete_protocol(enterprise_id: str, ed_id: str, bundle_id: str, protoc
 
 
 @app.post("/admin/reindex-rag")
-async def reindex_rag_corpus():
+async def reindex_rag_corpus(background_tasks: BackgroundTasks):
     """
     Admin endpoint: Clear and re-index all protocols in the RAG corpus.
-    This finds all extracted_text.txt files in the processed bucket and indexes them.
+    Kicks off a background task that processes batches sequentially
+    (Vertex AI only allows one import operation per corpus at a time).
     """
     try:
+        # Create a task ID for tracking
+        task_id = str(uuid.uuid4())
+        
+        # Step 1: Delete all existing RAG files (with pagination)
         corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
         headers = {"Authorization": f"Bearer {get_access_token()}"}
         
-        # Step 1: Delete all existing RAG files
-        list_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles"
-        response = requests.get(list_url, headers=headers)
-        
         deleted_count = 0
-        if response.status_code == 200:
-            rag_files = response.json().get("ragFiles", [])
+        next_page_token = None
+        while True:
+            list_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles?pageSize=100"
+            if next_page_token:
+                list_url += f"&pageToken={next_page_token}"
+            response = requests.get(list_url, headers=headers)
+            
+            if response.status_code != 200:
+                break
+            
+            data = response.json()
+            rag_files = data.get("ragFiles", [])
+            if not rag_files:
+                break
+            
             for rag_file in rag_files:
                 file_name = rag_file.get("name", "")
                 delete_response = requests.delete(
@@ -665,6 +684,10 @@ async def reindex_rag_corpus():
                 )
                 if delete_response.status_code == 200:
                     deleted_count += 1
+            
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
         
         # Step 2: Find all current extracted_text.txt files
         storage_client = storage.Client()
@@ -678,112 +701,207 @@ async def reindex_rag_corpus():
         if not text_files:
             return {
                 "status": "completed",
+                "task_id": task_id,
                 "deleted": deleted_count,
                 "indexed": 0,
                 "message": "No extracted text files found to index"
             }
         
-        # Step 3: Batch import all files (max 25 per request)
+        # Step 3: Initialize task tracking and start background processing
         BATCH_SIZE = 25
-        operations = []
+        total_batches = (len(text_files) + BATCH_SIZE - 1) // BATCH_SIZE
         
-        for i in range(0, len(text_files), BATCH_SIZE):
-            batch = text_files[i:i + BATCH_SIZE]
-            import_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles:import"
-            payload = {
-                "importRagFilesConfig": {
-                    "gcsSource": {
-                        "uris": batch
-                    },
-                    "ragFileChunkingConfig": {
-                        "chunkSize": 1024,
-                        "chunkOverlap": 200
-                    }
-                }
-            }
-            
-            import_response = requests.post(import_url, headers=headers, json=payload)
-            
-            if import_response.status_code == 200:
-                operation = import_response.json().get("name", "")
-                if operation:
-                    operations.append(operation)
-            else:
-                print(f"Batch import failed for batch {i//BATCH_SIZE + 1}: {import_response.text}")
+        reindex_tasks[task_id] = {
+            "status": "in_progress",
+            "deleted": deleted_count,
+            "total_files": len(text_files),
+            "total_batches": total_batches,
+            "current_batch": 0,
+            "imported": 0,
+            "failed": 0,
+            "skipped": 0,
+            "message": f"Cleared {deleted_count} old files, starting indexing of {len(text_files)} files in {total_batches} batch(es)...",
+            "done": False,
+        }
         
-        if operations:
-            return {
-                "status": "indexing_started",
-                "deleted": deleted_count,
-                "files_to_index": len(text_files),
-                "operation": operations[-1],  # Track last operation for polling
-                "batches": len(operations),
-                "message": f"Cleared {deleted_count} old files, started indexing {len(text_files)} files in {len(operations)} batch(es)"
-            }
-        else:
-            return {
-                "status": "error",
-                "deleted": deleted_count,
-                "files_to_index": len(text_files),
-                "message": "Failed to start indexing — all batches failed"
-            }
+        # Launch background task for sequential batch processing
+        background_tasks.add_task(
+            _run_sequential_reindex, task_id, corpus_name, text_files, BATCH_SIZE
+        )
+        
+        return {
+            "status": "indexing_started",
+            "task_id": task_id,
+            "deleted": deleted_count,
+            "files_to_index": len(text_files),
+            "batches": total_batches,
+            "message": f"Cleared {deleted_count} old files, started indexing {len(text_files)} files in {total_batches} batch(es)"
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _poll_operation(operation_name: str, headers: dict, timeout: int = 300) -> dict:
+    """Poll a Vertex AI long-running operation until completion."""
+    start = time.time()
+    while time.time() - start < timeout:
+        resp = requests.get(
+            f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{operation_name}",
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            return {"error": f"Poll failed with status {resp.status_code}"}
+        data = resp.json()
+        if data.get("done"):
+            return data
+        time.sleep(5)
+    return {"error": "Operation timed out"}
+
+
+def _run_sequential_reindex(task_id: str, corpus_name: str, text_files: list, batch_size: int):
+    """Background task: import files into RAG corpus one batch at a time."""
+    task = reindex_tasks[task_id]
+    total_imported = 0
+    total_failed = 0
+    total_skipped = 0
+    
+    for i in range(0, len(text_files), batch_size):
+        batch_num = i // batch_size + 1
+        batch = text_files[i:i + batch_size]
+        
+        task["current_batch"] = batch_num
+        task["message"] = f"Indexing batch {batch_num}/{task['total_batches']} ({len(batch)} files)..."
+        
+        # Need a fresh token for each batch (tokens expire)
+        try:
+            headers = {"Authorization": f"Bearer {get_access_token()}"}
+        except Exception as e:
+            task["message"] = f"Auth error on batch {batch_num}: {e}"
+            task["status"] = "error"
+            task["done"] = True
+            return
+        
+        import_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{corpus_name}/ragFiles:import"
+        payload = {
+            "importRagFilesConfig": {
+                "gcsSource": {
+                    "uris": batch
+                },
+                "ragFileChunkingConfig": {
+                    "chunkSize": 1024,
+                    "chunkOverlap": 200
+                }
+            }
+        }
+        
+        import_response = requests.post(import_url, headers=headers, json=payload)
+        
+        if import_response.status_code != 200:
+            print(f"Batch {batch_num} import request failed: {import_response.status_code} - {import_response.text[:500]}")
+            total_failed += len(batch)
+            task["failed"] = total_failed
+            continue
+        
+        operation_name = import_response.json().get("name", "")
+        if not operation_name:
+            print(f"Batch {batch_num}: no operation name returned")
+            total_failed += len(batch)
+            task["failed"] = total_failed
+            continue
+        
+        # Wait for this batch to complete before starting the next
+        result = _poll_operation(operation_name, headers, timeout=300)
+        
+        if "error" in result and isinstance(result["error"], str):
+            print(f"Batch {batch_num} poll error: {result['error']}")
+            total_failed += len(batch)
+        elif result.get("error"):
+            err = result["error"]
+            print(f"Batch {batch_num} operation error: {err.get('message', err)}")
+            total_failed += len(batch)
+        else:
+            resp_data = result.get("response", {})
+            total_imported += int(resp_data.get("importedRagFilesCount", 0))
+            total_failed += int(resp_data.get("failedRagFilesCount", 0))
+            total_skipped += int(resp_data.get("skippedRagFilesCount", 0))
+        
+        # Update running totals
+        task["imported"] = total_imported
+        task["failed"] = total_failed
+        task["skipped"] = total_skipped
+    
+    # All batches done
+    task["done"] = True
+    task["status"] = "completed"
+    task["message"] = f"✅ Indexing complete: {total_imported} files indexed, {total_failed} failed, {total_skipped} skipped"
+    print(f"Reindex task {task_id} complete: {total_imported} imported, {total_failed} failed, {total_skipped} skipped")
+
+
 @app.get("/admin/reindex-rag/status")
-async def check_reindex_status(operation: str = Query(..., description="Operation name from reindex response")):
+async def check_reindex_status(
+    task_id: str = Query(default=None, description="Task ID from reindex response"),
+    operation: str = Query(default=None, description="(Legacy) Operation name")
+):
     """
-    Check the status of a RAG reindex operation.
-    Returns whether it's still running, completed, or failed.
+    Check the status of a RAG reindex task.
+    Uses task_id for new multi-batch tracking, falls back to operation for legacy single-operation polling.
     """
     try:
-        headers = {"Authorization": f"Bearer {get_access_token()}"}
+        # New: check task-based tracking
+        if task_id and task_id in reindex_tasks:
+            task = reindex_tasks[task_id]
+            return {
+                "done": task["done"],
+                "status": task["status"],
+                "message": task["message"],
+                "imported": task.get("imported", 0),
+                "failed": task.get("failed", 0),
+                "skipped": task.get("skipped", 0),
+                "current_batch": task.get("current_batch", 0),
+                "total_batches": task.get("total_batches", 0),
+            }
         
-        # Poll the long-running operation
-        status_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{operation}"
-        response = requests.get(status_url, headers=headers)
-        
-        if response.status_code != 200:
-            return {"done": False, "status": "unknown", "message": "Could not check operation status"}
-        
-        data = response.json()
-        done = data.get("done", False)
-        
-        if done:
-            # Check for errors
-            error = data.get("error")
-            if error:
+        # Legacy: poll a single Vertex AI operation directly
+        if operation:
+            headers = {"Authorization": f"Bearer {get_access_token()}"}
+            status_url = f"https://{RAG_LOCATION}-aiplatform.googleapis.com/v1beta1/{operation}"
+            response = requests.get(status_url, headers=headers)
+            
+            if response.status_code != 200:
+                return {"done": False, "status": "unknown", "message": "Could not check operation status"}
+            
+            data = response.json()
+            done = data.get("done", False)
+            
+            if done:
+                error = data.get("error")
+                if error:
+                    return {
+                        "done": True,
+                        "status": "error",
+                        "message": f"Indexing failed: {error.get('message', 'Unknown error')}"
+                    }
+                result = data.get("response", {})
+                imported = result.get("importedRagFilesCount", 0)
+                failed = result.get("failedRagFilesCount", 0)
+                skipped = result.get("skippedRagFilesCount", 0)
                 return {
                     "done": True,
-                    "status": "error",
-                    "message": f"Indexing failed: {error.get('message', 'Unknown error')}"
+                    "status": "completed",
+                    "message": f"Indexing complete: {imported} files indexed, {failed} failed, {skipped} skipped",
+                    "imported": imported,
+                    "failed": failed,
+                    "skipped": skipped
                 }
-            
-            # Success - get result details
-            result = data.get("response", {})
-            imported = result.get("importedRagFilesCount", 0)
-            failed = result.get("failedRagFilesCount", 0)
-            skipped = result.get("skippedRagFilesCount", 0)
-            
-            return {
-                "done": True,
-                "status": "completed",
-                "message": f"Indexing complete: {imported} files indexed, {failed} failed, {skipped} skipped",
-                "imported": imported,
-                "failed": failed,
-                "skipped": skipped
-            }
-        else:
-            # Still in progress
-            metadata = data.get("metadata", {})
-            progress = metadata.get("genericMetadata", {}).get("partialFailures", [])
-            return {
-                "done": False,
-                "status": "in_progress",
-                "message": "Indexing in progress..."
-            }
+            else:
+                return {
+                    "done": False,
+                    "status": "in_progress",
+                    "message": "Indexing in progress..."
+                }
+        
+        return {"done": False, "status": "error", "message": "No task_id or operation provided"}
     
     except Exception as e:
         return {"done": False, "status": "error", "message": str(e)}
