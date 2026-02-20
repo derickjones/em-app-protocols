@@ -49,7 +49,7 @@ export default function PromptInput({
           <div className="px-6 pt-5 pb-3">
             <textarea
               className="w-full bg-transparent text-white placeholder-[#9aa0a6] focus:outline-none text-base resize-none leading-relaxed"
-              placeholder="Ask about emergency protocols..."
+              placeholder="What's the emergency?"
               rows={1}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}

@@ -1380,7 +1380,7 @@ export default function Home() {
                   : 'bg-gray-50 border-gray-300 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100'
               }`}>
                 <textarea
-                  placeholder="Enter a clinical question or use the mic..."
+                  placeholder="What's the emergency?"
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
                   onKeyDown={(e) => {
