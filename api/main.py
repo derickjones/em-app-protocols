@@ -513,6 +513,50 @@ async def query_protocols(
 
 
 # ---------------------------------------------------------------------------
+# Protocol Summary mode — browse matching local protocols with summaries
+# ---------------------------------------------------------------------------
+class ProtocolSummaryRequest(BaseModel):
+    """Request model for protocol summary mode"""
+    query: str = Field(..., description="Clinical question to find relevant protocols", min_length=3, max_length=500)
+    ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
+    bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
+    enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
+
+
+@app.post("/protocol-summary")
+async def protocol_summary(
+    request: ProtocolSummaryRequest,
+    user: Optional[UserProfile] = Depends(get_verified_user)
+):
+    """
+    Protocol Summary mode: find local protocols matching a query and stream
+    back cards with Gemini-generated summaries, images, and PDF links.
+
+    Returns an SSE stream:
+      data: {"type":"protocol_card", "protocol_id":..., "summary":..., "images":[...], "pdf_url":...}
+      data: {"type":"done", "total_protocols": N, "query_time_ms": N}
+    """
+    ed_ids = request.ed_ids if request.ed_ids else (user.ed_access if user else [])
+    enterprise_id = user.enterprise_id if user else None
+    if user and user.role == "super_admin" and not enterprise_id and request.enterprise_id:
+        enterprise_id = request.enterprise_id
+
+    def event_stream():
+        try:
+            for event in rag_service.protocol_summary_stream(
+                query=request.query,
+                enterprise_id=enterprise_id,
+                ed_ids=ed_ids,
+                bundle_ids=request.bundle_ids,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
 # Image click tracking — implicit feedback for popularity ranking
 # ---------------------------------------------------------------------------
 class ImageClickRequest(BaseModel):

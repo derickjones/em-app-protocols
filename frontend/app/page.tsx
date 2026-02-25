@@ -6,6 +6,8 @@ import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic,
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
+import ModeSelector, { AppMode } from "@/components/ModeSelector";
+import ProtocolCard, { ProtocolCardData } from "@/components/ProtocolCard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
@@ -44,6 +46,8 @@ interface Conversation {
   timestamp: string; // Changed to string for JSON serialization
   question: string;
   response: QueryResponse | null;
+  mode?: AppMode;
+  protocolCards?: ProtocolCardData[];
 }
 
 interface BundleData {
@@ -85,6 +89,10 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
+
+  // Mode selector state
+  const [mode, setMode] = useState<AppMode>("qa");
+  const [protocolCards, setProtocolCards] = useState<ProtocolCardData[]>([]);
   
   // Enterprise/ED/Bundle selection state
   const [enterprise, setEnterprise] = useState<EnterpriseData | null>(null);
@@ -500,6 +508,7 @@ export default function Home() {
     setIsStreaming(false);
     setStreamingAnswer("");
     setResponse(null);
+    setProtocolCards([]);
     setError(null);
     setHasSearched(true);
 
@@ -509,6 +518,100 @@ export default function Home() {
       setCurrentConversationId(conversationId);
     }
 
+    // --- Protocol Summary mode ---
+    if (mode === "protocol-summary") {
+      try {
+        const token = await getIdToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        const res = await fetch(`${API_URL}/protocol-summary`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            query: question.trim(),
+            ed_ids: Array.from(selectedEds),
+            bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
+            enterprise_id: enterprise?.id || undefined,
+          }),
+        });
+
+        if (!res.ok) {
+          if (res.status === 401) throw new Error("Please sign in to search protocols");
+          if (res.status === 403) {
+            const errData = await res.json();
+            throw new Error(errData.detail || "Access denied");
+          }
+          throw new Error(`Error: ${res.status}`);
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const cards: ProtocolCardData[] = [];
+        let queryTimeMs = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr) continue;
+            try {
+              const event = JSON.parse(jsonStr);
+              if (event.type === "protocol_card") {
+                // First card: switch from loading to showing cards
+                if (cards.length === 0) setLoading(false);
+                cards.push(event as ProtocolCardData);
+                setProtocolCards([...cards]);
+              } else if (event.type === "done") {
+                queryTimeMs = event.query_time_ms || 0;
+              } else if (event.type === "error") {
+                throw new Error(event.message);
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof SyntaxError) continue;
+              throw parseErr;
+            }
+          }
+        }
+
+        // Save conversation
+        const newConversation: Conversation = {
+          id: conversationId,
+          title: question.trim().slice(0, 50) + (question.length > 50 ? "..." : ""),
+          timestamp: new Date().toISOString(),
+          question: question.trim(),
+          response: { answer: "", images: [], citations: [], query_time_ms: queryTimeMs },
+          mode: "protocol-summary",
+          protocolCards: cards,
+        };
+        setConversations(prev => {
+          const existing = prev.findIndex(c => c.id === conversationId);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = newConversation;
+            return updated;
+          }
+          return [newConversation, ...prev];
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch protocol summaries");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // --- Q&A mode (existing logic) ---
     try {
       const token = await getIdToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -606,6 +709,7 @@ export default function Home() {
         timestamp: new Date().toISOString(),
         question: question.trim(),
         response: savedResponse,
+        mode: "qa",
       };
       
       setConversations(prev => {
@@ -635,12 +739,16 @@ export default function Home() {
     setError(null);
     setHasSearched(false);
     setCurrentConversationId(null);
+    setProtocolCards([]);
+    setMode("qa");
     setSidebarOpen(false);
   };
 
   const loadConversation = (conversation: Conversation) => {
     setQuestion(conversation.question);
     setResponse(conversation.response);
+    setMode(conversation.mode || "qa");
+    setProtocolCards(conversation.protocolCards || []);
     setHasSearched(true);
     setCurrentConversationId(conversation.id);
     setError(null);
@@ -670,9 +778,23 @@ export default function Home() {
   const resetSearch = () => {
     setQuestion("");
     setResponse(null);
+    setProtocolCards([]);
     setError(null);
     setHasSearched(false);
     setCurrentConversationId(null);
+  };
+
+  const handleModeChange = (newMode: AppMode) => {
+    if (newMode === mode) return;
+    // Clear current conversation and start fresh in new mode
+    setQuestion("");
+    setResponse(null);
+    setStreamingAnswer("");
+    setProtocolCards([]);
+    setError(null);
+    setHasSearched(false);
+    setCurrentConversationId(null);
+    setMode(newMode);
   };
 
   const handleSignOut = async () => {
@@ -1432,8 +1554,9 @@ export default function Home() {
                     ))}
                   </div>
 
-                  {/* Right side - mic & submit */}
+                  {/* Right side - mode selector, mic & submit */}
                   <div className="flex items-center gap-2">
+                    <ModeSelector mode={mode} onChange={handleModeChange} darkMode={darkMode} />
                     <button
                       title="Voice input"
                       className={`w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all duration-200 ${
@@ -1513,11 +1636,23 @@ export default function Home() {
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
-                <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Searching protocols...</span>
+                <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {mode === "protocol-summary" ? "Finding matching protocols..." : "Searching protocols..."}
+                </span>
               </div>
             ) : error ? (
               <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
                 <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
+              </div>
+            ) : protocolCards.length > 0 ? (
+              /* Protocol Summary Results */
+              <div className="space-y-4">
+                <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {protocolCards.length} matching protocol{protocolCards.length !== 1 ? 's' : ''}
+                </p>
+                {protocolCards.map((card, idx) => (
+                  <ProtocolCard key={`${card.protocol_id}-${idx}`} card={card} darkMode={darkMode} />
+                ))}
               </div>
             ) : (isStreaming || response) ? (
               <div className="space-y-6">
@@ -1770,6 +1905,7 @@ export default function Home() {
 
               {/* Right side */}
               <div className="flex items-center gap-2">
+                <ModeSelector mode={mode} onChange={handleModeChange} darkMode={darkMode} />
                 <button
                   title="Voice input"
                   className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${

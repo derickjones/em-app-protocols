@@ -845,3 +845,165 @@ ANSWER:"""
 
         query_time_ms = int((_time.time() - start) * 1000)
         yield {"type": "done", "citations": citations, "images": images, "query_time_ms": query_time_ms}
+
+    def protocol_summary_stream(self, query: str, enterprise_id: str,
+                                 ed_ids: List[str] = None, bundle_ids: List[str] = None,
+                                 top_k: int = 5):
+        """
+        Protocol Summary mode: retrieve matching local protocol chunks,
+        group by protocol, generate a Gemini summary per protocol, and
+        stream results card-by-card via SSE events.
+
+        Yields dicts:
+          {"type": "protocol_card", ...}   — one per matched protocol
+          {"type": "done", "total_protocols": N, "query_time_ms": N}
+          {"type": "error", "message": "..."}
+        """
+        import time as _time
+        from collections import defaultdict
+        start = _time.time()
+
+        # Step 1: Retrieve from local corpus only
+        try:
+            contexts = self._retrieve_contexts(query, self.corpus_name)
+            for ctx in contexts:
+                ctx["source_type"] = "local"
+        except Exception as e:
+            yield {"type": "error", "message": f"RAG retrieval failed: {str(e)}"}
+            return
+
+        # Step 2: Filter by enterprise/ED/bundle path prefixes
+        if enterprise_id and ed_ids:
+            prefixes = []
+            for ed_id in ed_ids:
+                if bundle_ids and "all" not in bundle_ids:
+                    for bundle_id in bundle_ids:
+                        prefixes.append(f"{enterprise_id}/{ed_id}/{bundle_id}/")
+                else:
+                    prefixes.append(f"{enterprise_id}/{ed_id}/")
+            contexts = [ctx for ctx in contexts if any(p in ctx.get("source", "") for p in prefixes)]
+        elif enterprise_id:
+            contexts = [ctx for ctx in contexts if enterprise_id in ctx.get("source", "")]
+
+        if not contexts:
+            yield {"type": "error", "message": "No matching local protocols found for your query and selected EDs."}
+            return
+
+        # Step 3: Group chunks by protocol_id
+        protocol_chunks = defaultdict(lambda: {"chunks": [], "max_score": 0.0, "source": ""})
+
+        for ctx in contexts:
+            source = ctx.get("source", "")
+            parts = source.replace("gs://", "").split("/")
+
+            # Parse: bucket/enterprise/ed/bundle/protocol_id/extracted_text.txt
+            if len(parts) >= 6:
+                ent_id, ed_id_part, bundle_id_part, protocol_id = parts[1], parts[2], parts[3], parts[4]
+            elif len(parts) >= 5:
+                ent_id, ed_id_part, bundle_id_part, protocol_id = parts[1], None, parts[2], parts[3]
+            else:
+                continue
+
+            if protocol_id == "extracted_text":
+                continue
+
+            key = f"{ent_id}/{ed_id_part or 'default'}/{bundle_id_part}/{protocol_id}"
+            entry = protocol_chunks[key]
+            entry["chunks"].append({"text": ctx.get("text", ""), "score": ctx.get("score", 1.0)})
+            if ctx.get("score", 1.0) < entry["max_score"] or entry["max_score"] == 0.0:
+                entry["max_score"] = ctx.get("score", 1.0)
+            entry["source"] = source
+            entry["enterprise_id"] = ent_id
+            entry["ed_id"] = ed_id_part
+            entry["bundle_id"] = bundle_id_part
+            entry["protocol_id"] = protocol_id
+
+        if not protocol_chunks:
+            yield {"type": "error", "message": "No matching local protocols found."}
+            return
+
+        # Step 4: Rank by best score (lower = more relevant in Vertex AI RAG) and take top_k
+        ranked = sorted(protocol_chunks.values(), key=lambda p: p["max_score"])[:top_k]
+
+        # Step 5: Generate a contextual summary per protocol with Gemini and stream cards
+        for proto in ranked:
+            chunk_texts = "\n\n---\n\n".join([c["text"][:3000] for c in proto["chunks"][:5]])
+            protocol_id = proto["protocol_id"]
+
+            summary_prompt = f"""You are an emergency medicine protocol assistant. A clinician asked: "{query}"
+
+The following excerpts are from a local ED protocol called "{protocol_id}":
+
+{chunk_texts}
+
+Write a concise 2-3 sentence summary of what this protocol covers and how it relates to the clinician's question. Encourage them to review the full protocol for specific clinical guidance. Do not fabricate clinical recommendations beyond what the excerpts contain."""
+
+            try:
+                summary = self._generate_summary(summary_prompt)
+            except Exception:
+                summary = "Protocol relevant to your query. Review the full document for details."
+
+            # Build PDF URL
+            ent_id = proto["enterprise_id"]
+            ed_id_part = proto.get("ed_id")
+            bundle_id_part = proto["bundle_id"]
+            if ed_id_part:
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{ent_id}/{ed_id_part}/{bundle_id_part}/{protocol_id}.pdf"
+            else:
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{ent_id}/{bundle_id_part}/{protocol_id}.pdf"
+
+            # Get images from protocol metadata
+            images = []
+            try:
+                metadata = self._get_protocol_metadata(proto["source"])
+                if metadata:
+                    for img in metadata.get("images", []):
+                        gcs_uri = img.get("gcs_uri", "")
+                        if gcs_uri:
+                            images.append({
+                                "page": img.get("page", 0),
+                                "url": gcs_uri.replace("gs://", "https://storage.googleapis.com/")
+                            })
+                    images.sort(key=lambda x: x["page"])
+            except Exception:
+                pass
+
+            yield {
+                "type": "protocol_card",
+                "protocol_id": protocol_id,
+                "enterprise_id": ent_id,
+                "ed_id": ed_id_part,
+                "bundle_id": bundle_id_part,
+                "summary": summary,
+                "pdf_url": pdf_url,
+                "images": images,
+                "relevance_score": round(proto["max_score"], 4),
+            }
+
+        elapsed = int((_time.time() - start) * 1000)
+        yield {"type": "done", "total_protocols": len(ranked), "query_time_ms": elapsed}
+
+    def _generate_summary(self, prompt: str) -> str:
+        """Generate a short summary with Gemini (non-streaming, low token count)."""
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent"
+
+        headers = {
+            "Authorization": f"Bearer {self._get_access_token()}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 300
+            }
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+
+        if response.status_code != 200:
+            raise Exception(f"Gemini summary generation failed: {response.status_code}")
+
+        result = response.json()
+        return result["candidates"][0]["content"]["parts"][0]["text"].strip()
