@@ -1968,6 +1968,15 @@ export default function Home() {
         </div>
       )}
 
+      {/* Footer */}
+      <footer className={`w-full py-3 text-center text-xs border-t ${
+        darkMode ? 'border-neutral-800 text-gray-500' : 'border-gray-200 text-gray-400'
+      }`}>
+        <a href="/legal" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>Legal</a>
+        <span className="mx-2">·</span>
+        <a href="/about" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>About</a>
+      </footer>
+
       </main>
     </div>
   );
