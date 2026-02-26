@@ -1969,9 +1969,10 @@ export default function Home() {
       )}
 
       {/* Footer */}
-      <footer className={`w-full py-3 text-center text-xs border-t ${
-        darkMode ? 'border-neutral-800 text-gray-500' : 'border-gray-200 text-gray-400'
+      <footer className={`mt-auto w-full py-2 text-center text-xs ${
+        darkMode ? 'text-gray-600' : 'text-gray-400'
       }`}>
+        <p className="mb-1">AI-generated content may contain errors — always verify with primary sources and clinical judgment.</p>
         <a href="/legal" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>Legal</a>
         <span className="mx-2">·</span>
         <a href="/about" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>About</a>
