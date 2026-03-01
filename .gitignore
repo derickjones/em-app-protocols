@@ -26,3 +26,5 @@ scrapers/aliem/batch_indexing.log
 scrapers/aliem/bulk_scrape.log
 api.log
 indexing.log
+.env
+.vscode/mcp.json
