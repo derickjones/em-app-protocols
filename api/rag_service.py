@@ -136,11 +136,47 @@ class RAGService:
                 return parts[3]  # protocol_id in legacy format
             return source
 
+    def _filter_by_relevance(self, contexts: List[Dict], min_results: int = 5,
+                              max_results: int = 10, score_multiplier: float = 4.0) -> List[Dict]:
+        """
+        Filter contexts using an adaptive relevance threshold.
+        
+        Uses the best score as an anchor and keeps contexts within
+        score_multiplier × best_score. Deduplicates by source key.
+        Returns between min_results and max_results unique sources.
+        
+        Contexts must already be sorted by score ascending (lower = better).
+        """
+        if not contexts:
+            return []
+
+        from collections import OrderedDict
+        best_score = contexts[0].get("score", 0)
+        # Guard against near-zero scores — use a floor so the cutoff isn't too tight
+        cutoff = max(best_score * score_multiplier, 0.05)
+
+        seen_keys = OrderedDict()
+        for ctx in contexts:
+            key = self._get_source_key(ctx)
+            if key in seen_keys:
+                continue  # already have this source (better-scored chunk)
+            # Always include up to min_results unique sources
+            if len(seen_keys) < min_results:
+                seen_keys[key] = ctx
+            # Beyond min, only include if within the relevance cutoff and under max
+            elif ctx.get("score", 1) <= cutoff and len(seen_keys) < max_results:
+                seen_keys[key] = ctx
+            # Stop once we hit max
+            if len(seen_keys) >= max_results:
+                break
+
+        return list(seen_keys.values())
+
     def _build_prompt_and_context(self, query: str, contexts: List[Dict]) -> tuple[str, str]:
         """Build the prompt and context text for Gemini. Returns (prompt, context_text)."""
         from collections import OrderedDict
         grouped = OrderedDict()
-        for c in contexts[:5]:
+        for c in contexts:
             key = self._get_source_key(c)
             if key not in grouped:
                 grouped[key] = {
@@ -741,6 +777,9 @@ ANSWER:"""
                     "citations": []
                 }
         
+        # Step 1.6: Apply adaptive relevance filter (min 5, max 10 unique sources)
+        contexts = self._filter_by_relevance(contexts)
+
         # Step 2: Generate answer with Gemini (fast, no grounding overhead)
         answer = self._generate_answer(query, contexts)
         
@@ -749,7 +788,7 @@ ANSWER:"""
         if include_images:
             images = self._get_images_from_contexts(contexts)
         
-        # Step 4: Build citations
+        # Step 4: Build citations (contexts already filtered + deduplicated)
         citations = [
             {
                 "source": ctx["source"],
@@ -824,6 +863,9 @@ ANSWER:"""
                 yield {"type": "done", "citations": [], "images": [], "query_time_ms": int((_time.time() - start) * 1000)}
                 return
 
+        # Step 1.6: Apply adaptive relevance filter (min 5, max 10 unique sources)
+        contexts = self._filter_by_relevance(contexts)
+
         # Step 2: Stream answer from Gemini
         for text_chunk in self.generate_answer_stream(query, contexts):
             yield {"type": "chunk", "text": text_chunk}
@@ -833,7 +875,7 @@ ANSWER:"""
         if include_images:
             images = self._get_images_from_contexts(contexts)
 
-        # Step 4: Build citations
+        # Step 4: Build citations (contexts already filtered + deduplicated)
         citations = [
             {
                 "source": ctx["source"],
@@ -924,6 +966,16 @@ ANSWER:"""
 
         # Step 4: Rank by best score (lower = more relevant in Vertex AI RAG) and take top_k
         ranked = sorted(protocol_chunks.values(), key=lambda p: p["max_score"])[:top_k]
+
+        # Step 4.5: Apply adaptive relevance threshold to drop low-relevance cards
+        if ranked:
+            best_score = ranked[0]["max_score"]
+            cutoff = max(best_score * 4.0, 0.05)
+            ranked = [p for p in ranked if p["max_score"] <= cutoff]
+
+        if not ranked:
+            yield {"type": "error", "message": "No sufficiently relevant protocols found for your query."}
+            return
 
         # Step 5: Generate a contextual summary per protocol with Gemini and stream cards
         for proto in ranked:
