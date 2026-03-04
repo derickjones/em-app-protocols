@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
 import ModeSelector, { AppMode } from "@/components/ModeSelector";
@@ -862,6 +862,95 @@ export default function Home() {
     }
   };
 
+  // ───── Citation-aware Markdown components ─────
+  // Converts inline [N] references into superscript links that scroll to the
+  // matching citation and show a tooltip on hover with the source name.
+  const citationComponents: Components = {
+    p: ({ children, ...props }) => {
+      const citations = response?.citations ?? [];
+      const processNode = (node: React.ReactNode): React.ReactNode => {
+        if (typeof node !== "string") return node;
+        // Split on [N] patterns, keeping the match
+        const parts = node.split(/(\[\d+\])/g);
+        if (parts.length === 1) return node;
+        return parts.map((part, i) => {
+          const m = part.match(/^\[(\d+)\]$/);
+          if (!m) return part;
+          const num = parseInt(m[1], 10);
+          const cite = citations[num - 1];
+          const label = cite ? cite.protocol_id.replace(/_/g, " ") : `Source ${num}`;
+          return (
+            <span key={i} className="cite-ref-wrapper">
+              <a
+                href={cite?.source_uri || `#cite-${num}`}
+                target={cite?.source_uri ? "_blank" : undefined}
+                rel={cite?.source_uri ? "noopener noreferrer" : undefined}
+                onClick={(e) => {
+                  if (!cite?.source_uri) {
+                    e.preventDefault();
+                    document.getElementById(`cite-${num}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }
+                }}
+                className={`cite-ref ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}
+              >
+                <sup>{num}</sup>
+              </a>
+              <span className={`cite-tooltip ${darkMode ? 'bg-neutral-800 text-gray-200 border-neutral-700' : 'bg-white text-gray-800 border-gray-200'}`}>
+                {label}
+              </span>
+            </span>
+          );
+        });
+      };
+      return (
+        <p {...props}>
+          {Array.isArray(children) ? children.map((child, i) => <React.Fragment key={i}>{processNode(child)}</React.Fragment>) : processNode(children)}
+        </p>
+      );
+    },
+    li: ({ children, ...props }) => {
+      const citations = response?.citations ?? [];
+      const processNode = (node: React.ReactNode): React.ReactNode => {
+        if (typeof node !== "string") return node;
+        const parts = node.split(/(\[\d+\])/g);
+        if (parts.length === 1) return node;
+        return parts.map((part, i) => {
+          const m = part.match(/^\[(\d+)\]$/);
+          if (!m) return part;
+          const num = parseInt(m[1], 10);
+          const cite = citations[num - 1];
+          const label = cite ? cite.protocol_id.replace(/_/g, " ") : `Source ${num}`;
+          return (
+            <span key={i} className="cite-ref-wrapper">
+              <a
+                href={cite?.source_uri || `#cite-${num}`}
+                target={cite?.source_uri ? "_blank" : undefined}
+                rel={cite?.source_uri ? "noopener noreferrer" : undefined}
+                onClick={(e) => {
+                  if (!cite?.source_uri) {
+                    e.preventDefault();
+                    document.getElementById(`cite-${num}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }
+                }}
+                className={`cite-ref ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-500'}`}
+              >
+                <sup>{num}</sup>
+              </a>
+              <span className={`cite-tooltip ${darkMode ? 'bg-neutral-800 text-gray-200 border-neutral-700' : 'bg-white text-gray-800 border-gray-200'}`}>
+                {label}
+              </span>
+            </span>
+          );
+        });
+      };
+      return (
+        <li {...props}>
+          {Array.isArray(children) ? children.map((child, i) => <React.Fragment key={i}>{processNode(child)}</React.Fragment>) : processNode(children)}
+        </li>
+      );
+    },
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -1717,7 +1806,7 @@ export default function Home() {
                 {/* Answer — streaming or final */}
                 <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-white border border-gray-200'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
                 </div>
 
@@ -1877,6 +1966,7 @@ export default function Home() {
                         return (
                           <a
                             key={idx}
+                            id={`cite-${idx + 1}`}
                             href={cite.source_uri}
                             target="_blank"
                             rel="noopener noreferrer"
