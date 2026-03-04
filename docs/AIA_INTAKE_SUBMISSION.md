@@ -5,6 +5,7 @@
 **Department:** Emergency Medicine — Rochester, MN
 **Product Name:** EM Protocols (emergencymedicine.app)
 **Funding:** PSIF — Presidential Strategic Initiative Fund (Mayo Clinic Platform Deploy)
+**Development Partner:** Cardamom Health (CAR-340074, SOW 3.1)
 **Clinical Champions:** Derick Jones, MD, MBA, MHI & Jake Morey, MD, MBA
 **Department Chair Support:** Jim Colletti, MD
 
@@ -65,6 +66,7 @@ EM Protocols is intended for use as a **clinical decision support tool** by lice
 |-------|--------|
 | **Funding Source** | PSIF — Presidential Strategic Initiative Fund |
 | **Deployment Program** | Mayo Clinic Platform (MCP) Deploy |
+| **Development Partner** | Cardamom Health (SOW 3.1, CAR-340074) |
 | **Home Department** | Emergency Department, Rochester, MN |
 | **Department Chair** | Jim Colletti, MD |
 | **Clinical Champions** | Derick Jones, MD, MBA, MHI & Jake Morey, MD, MBA |
@@ -87,8 +89,11 @@ Domain expert user sessions are **scheduled and ongoing** to validate clinical a
 |-----------|------|
 | Functional prototype | February 2026 |
 | **Live pilot use** | **Now (March 2026)** |
+| SOW 3.1 M1 — Project kickoff & scope confirmation | January 5, 2026 |
+| SOW 3.1 M2 — CAF migration with new LLM architecture | March 13, 2026 |
 | Domain expert validation sessions | Ongoing |
-| Epic EHR integration | 2026 |
+| SOW 3.1 M3 — Production go-live, training & project closure | April 30, 2026 |
+| Epic EHR integration (Plummer Chart via MCP iFrame) | 2026 |
 | MCP Deploy (external version) | 2026 |
 
 ### Access Model
@@ -380,8 +385,11 @@ Validate that RAG-based clinical search outperforms standalone Gemini for bedsid
 ### EHR Integration Points
 
 - **Current:** Standalone web application, no EHR integration
-- **Future Consideration:** SMART on FHIR launch context for embedded EHR access
-- **Note:** The app does not access, store, or transmit any patient data or EHR records
+- **Planned (SOW 3.1 M3):** Embed chatbot within Epic (Plummer Chart) via MCP iFrame to support Emergency Department clinical workflows
+- **Integration Method:** SMART on FHIR launch context; FHIR keys for production and test environments required
+- **Epic Build:** Cardamom performs build in Epic MDEV environment; Mayo ERIS team responsible for migration across other environments
+- **Patient Context:** Future capability to leverage patient-specific context where appropriate to support clinical use
+- **Note:** The current app does not access, store, or transmit any patient data or EHR records
 
 ### Tech Stack Summary
 
@@ -519,6 +527,106 @@ All external content sources operate under Creative Commons licenses with docume
 
 ---
 
+## 9. STATEMENT OF WORK: Cardamom Health (SOW 3.1)
+
+### Engagement Overview
+
+| Field | Detail |
+|-------|--------|
+| **SOW** | 3.1 — Emergency Medicine LLM Chatbot Integration |
+| **Master Agreement** | Professional Consulting Services Agreement, CAR-340074 (effective January 14, 2025) |
+| **Consultant** | Cardamom Health ("Cardamom") — EHR consulting services firm providing data, analytics, and application experts |
+| **Relationship** | Extension of SOW A-3.0 "Emergency Medicine LLM Chatbot Integration" |
+| **Contract Period** | January 1, 2026 – March 31, 2026 |
+| **Total Fixed Fee** | $51,000 |
+
+### Objectives
+
+1. **CAF Migration & Model Framework Implementation** — Migrate the existing solution into the CAF environment and implement the updated model framework with a new LLM optimized for Emergency Medicine workflows
+2. **Production Go-Live** — Deploy the Emergency Medicine LLM chatbot into Mayo production workflows as a production-ready application for Mayo end users
+
+### Scope
+
+#### In Scope
+
+- Finalize and deploy the LLM-powered chatbot with MCP-aligned UI/UX in a production-ready state
+- Formally migrate solution to the CAF environment with updated architecture using LLMs specifically for the chatbot
+- Embed the chatbot within Epic (Plummer Chart) via MCP iFrame to support Emergency Department clinical workflows
+- Enable the chatbot to leverage patient-specific context where appropriate to support clinical use
+- Coordinate production deployment activities, including planning, status reporting, and cross-team change management
+
+#### Out of Scope
+
+- Training the LLM on new data sources, including Mayo-specific data sources
+- Modifications to the RAG system or intake and processing of source material
+- Long-term maintenance & support post-implementation (requires separate agreement)
+- Change management and training (beyond SOW deliverables)
+
+### Milestones & Payment
+
+| Milestone | Description | Due Date | Fee | Acceptance Criteria |
+|-----------|-------------|----------|-----|---------------------|
+| **M1** — Project Kickoff & Scope Confirmation | Transition active workstreams into 2026 delivery year | Jan 5, 2026 | $17,000 | Scope alignment with MCP |
+| **M2** — Migrate EM Chatbot to CAF | Migrate solution to CAF with new LLM architecture | Mar 13, 2026 | $7,000 | Fully deployed in MCP/Deploy |
+| **M3** — Go-Live, Training & Project Closure | Deploy solution into production and formally close project | Apr 30, 2026 | $27,000 | All deliverables accepted, transition complete |
+| | | **Total** | **$51,000** | |
+
+### Deliverables
+
+**M1 — Project Initiation and Kickoff:**
+- Transition active workstreams into the 2026 delivery year
+- Align teams on priorities and next steps
+
+**M2 — Replatform the Solution:**
+- Migrate the LLM chatbot solution to the CAF environment using the updated LLM architecture
+- Evaluate and validate LLM model performance to determine optimal configuration for EM workflows
+- Complete and deliver updated solution and architecture documentation
+
+**M3 — Production Deployment:**
+- Application deployed in GCP and Epic Production
+- Delivered GitHub Repository with application code
+- GitHub Repository with Terraform code for infrastructure deployment in GCP
+- Documentation of overall architecture
+
+### Roles & Responsibilities
+
+| Responsibility | Mayo Clinic | Cardamom | Shared |
+|---------------|:-----------:|:--------:|:------:|
+| Provide access to existing EM application model & data | ✅ | | |
+| Define clinical objectives & success criteria | | | ✅ |
+| Enhanced UI/UX | | ✅ | |
+| Chatbot deployment within MCP environment | | ✅ | |
+| Design & execute workflow integration in Epic | | ✅ | |
+| Project management & coordination | | ✅ | |
+| User training & adoption support | | | ✅ |
+| Knowledge transfer & transition | | | ✅ |
+| Ongoing maintenance and support | ✅ | | |
+
+### Dependencies
+
+| Dependency | Owner | Required By |
+|-----------|-------|-------------|
+| MDEV functional with FHIR keys | Mayo IT | Jan 1, 2026 |
+| CAF enabled for Vertex AI | Mayo IT | Jan 15, 2026 |
+| ERIS resources assigned for build and testing | Mayo IT | Jan 31, 2026 |
+| Production and Test environment FHIR keys available | Mayo IT | Jan 31, 2026 |
+| Cardamom access to Epic Test environment | Mayo IT | Jan 31, 2026 |
+| Mayo data scientists for model optimization/validation | Mayo | Ongoing |
+| Clinical SMEs for validation and success metrics | Mayo EM | Ongoing |
+| Epic analysts/Access staff for workflow integration | Mayo IT | Ongoing |
+| Stakeholder review/sign-off on model updates & designs | Mayo EM | Ongoing |
+| MCP Tech team guidance on data availability & limitations | MCP Deploy | Ongoing |
+| Governance/change control approvals aligned with go-live | Mayo IT | Ongoing |
+
+### Compliance Requirements (SOW)
+
+Consultant must comply with:
+- Mayo Clinic's data security and privacy policies
+- HIPAA, FDA, and relevant healthcare regulations
+- Any applicable Business Associate Agreement (BAA)
+
+---
+
 ## Contact
 
 | Role | Name | Email |
@@ -526,6 +634,7 @@ All external content sources operate under Creative Commons licenses with docume
 | **Co-Founder & Technical Lead** | Derick Jones, MD, MBA, MHI | jones.derick@mayo.edu |
 | **Co-Founder & Clinical Champion** | Jake Morey, MD, MBA | — |
 | **Department Chair (Sponsor)** | Jim Colletti, MD | — |
+| **Development Partner** | Cardamom Health (SOW 3.1) | — |
 | **Department** | Emergency Medicine, Rochester, MN | — |
 | **Application URL** | https://emergencymedicine.app | — |
 | **Funding** | PSIF — Mayo Clinic Platform Deploy | — |
