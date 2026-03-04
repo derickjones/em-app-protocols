@@ -17,9 +17,10 @@ export interface ProtocolCardData {
 interface ProtocolCardProps {
   card: ProtocolCardData;
   darkMode: boolean;
+  compact?: boolean; // compact mode for carousel embedding
 }
 
-export default function ProtocolCard({ card, darkMode }: ProtocolCardProps) {
+export default function ProtocolCard({ card, darkMode, compact = false }: ProtocolCardProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const images = card.images || [];
 
@@ -39,7 +40,7 @@ export default function ProtocolCard({ card, darkMode }: ProtocolCardProps) {
       {/* Image Carousel */}
       {images.length > 0 && (
         <div className="relative bg-black/5">
-          <div className="flex items-center justify-center h-72 overflow-hidden">
+          <div className={`flex items-center justify-center ${compact ? 'h-48' : 'h-72'} overflow-hidden`}>
             <img
               src={images[currentPage]?.url}
               alt={`${displayName} — Page ${images[currentPage]?.page}`}
@@ -50,16 +51,14 @@ export default function ProtocolCard({ card, darkMode }: ProtocolCardProps) {
           {images.length > 1 && (
             <>
               <button
-                onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                onClick={(e) => { e.stopPropagation(); setCurrentPage((p) => Math.max(0, p - 1)); }}
                 disabled={currentPage === 0}
                 className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 disabled:opacity-30 text-white rounded-full w-8 h-8 flex items-center justify-center transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(images.length - 1, p + 1))
-                }
+                onClick={(e) => { e.stopPropagation(); setCurrentPage((p) => Math.min(images.length - 1, p + 1)); }}
                 disabled={currentPage === images.length - 1}
                 className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 disabled:opacity-30 text-white rounded-full w-8 h-8 flex items-center justify-center transition-colors"
               >
@@ -74,11 +73,11 @@ export default function ProtocolCard({ card, darkMode }: ProtocolCardProps) {
       )}
 
       {/* Card Body */}
-      <div className="p-5">
+      <div className={compact ? "p-4" : "p-5"}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h3
-              className={`font-semibold text-base ${
+              className={`font-semibold ${compact ? 'text-sm' : 'text-base'} ${
                 darkMode ? "text-white" : "text-gray-900"
               }`}
             >
@@ -95,7 +94,7 @@ export default function ProtocolCard({ card, darkMode }: ProtocolCardProps) {
         </div>
 
         <p
-          className={`text-sm mt-3 leading-relaxed ${
+          className={`text-sm mt-3 leading-relaxed ${compact ? 'line-clamp-3' : ''} ${
             darkMode ? "text-gray-300" : "text-gray-600"
           }`}
         >

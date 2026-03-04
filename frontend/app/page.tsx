@@ -1721,7 +1721,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Local Protocol Cards — fusion from /protocol-summary (Q&A mode only) */}
+                {/* Local Protocol Cards — horizontal carousel (Q&A fusion mode) */}
                 {mode === "qa" && protocolCards.length > 0 && (
                   <div className="space-y-3">
                     <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
@@ -1733,10 +1733,49 @@ export default function Home() {
                         {protocolCards.length} protocol{protocolCards.length !== 1 ? 's' : ''}
                       </span>
                     </h3>
-                    <div className="space-y-3">
-                      {protocolCards.map((card, idx) => (
-                        <ProtocolCard key={`qa-${card.protocol_id}-${idx}`} card={card} darkMode={darkMode} />
-                      ))}
+                    {/* Carousel with scroll arrows */}
+                    <div className="relative group/protocols">
+                      {/* Left arrow */}
+                      <button
+                        onClick={(e) => {
+                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-protocol-carousel]');
+                          if (container) container.scrollBy({ left: -340, behavior: 'smooth' });
+                        }}
+                        className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/protocols:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
+                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      {/* Right arrow */}
+                      <button
+                        onClick={(e) => {
+                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-protocol-carousel]');
+                          if (container) container.scrollBy({ left: 340, behavior: 'smooth' });
+                        }}
+                        className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/protocols:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
+                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                      {/* Fade edges */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-r ${darkMode ? 'from-neutral-950' : 'from-gray-50'} to-transparent rounded-l-xl`} />
+                      <div className={`absolute right-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-l ${darkMode ? 'from-neutral-950' : 'from-gray-50'} to-transparent rounded-r-xl`} />
+                      {/* Scroll container */}
+                      <div
+                        data-protocol-carousel
+                        className={`flex gap-4 overflow-x-auto px-2 py-3 snap-x snap-mandatory scroll-smooth rounded-xl ${
+                          darkMode ? 'bg-neutral-900/50' : 'bg-gray-100/50'
+                        }`}
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                      >
+                        {protocolCards.map((card, idx) => (
+                          <div key={`qa-${card.protocol_id}-${idx}`} className="flex-shrink-0 w-80 snap-start">
+                            <ProtocolCard card={card} darkMode={darkMode} compact />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
