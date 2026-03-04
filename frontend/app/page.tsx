@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
@@ -118,6 +118,13 @@ export default function Home() {
 
   // Lightbox state for image enlargement
   const [lightboxImage, setLightboxImage] = useState<{ url: string; protocol_id: string; page: number } | null>(null);
+
+  // Feedback state
+  const [feedbackRating, setFeedbackRating] = useState<"up" | "down" | null>(null);
+  const [feedbackReasons, setFeedbackReasons] = useState<Set<string>>(new Set());
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   // Toggle wikem source on/off (can be turned off if EDs are selected)
   // Globe toggles ALL external sources together
@@ -511,6 +518,10 @@ export default function Home() {
     setProtocolCards([]);
     setError(null);
     setHasSearched(true);
+    setFeedbackRating(null);
+    setFeedbackReasons(new Set());
+    setFeedbackComment("");
+    setFeedbackSubmitted(false);
 
     // Create a new conversation if we don't have one
     const conversationId = currentConversationId || `conv-${Date.now()}`;
@@ -860,6 +871,49 @@ export default function Home() {
     } catch {
       // Error handled in auth context
     }
+  };
+
+  // ───── Feedback submission ─────
+  const FEEDBACK_REASONS = [
+    "Incorrect information",
+    "Incomplete response",
+    "Poor structure",
+    "Irrelevant citations",
+    "Not clinically useful",
+    "Other",
+  ];
+
+  const handleFeedbackSubmit = async (ratingOverride?: "up" | "down") => {
+    const rating = ratingOverride || feedbackRating;
+    if (!rating) return;
+    setFeedbackSubmitting(true);
+    try {
+      await fetch(`${API_URL}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: question || "",
+          rating,
+          reasons: Array.from(feedbackReasons),
+          comment: feedbackComment,
+          user_email: user?.email || "anonymous",
+        }),
+      });
+      setFeedbackSubmitted(true);
+    } catch {
+      // Silently fail — feedback is non-critical
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  const toggleFeedbackReason = (reason: string) => {
+    setFeedbackReasons(prev => {
+      const next = new Set(prev);
+      if (next.has(reason)) next.delete(reason);
+      else next.add(reason);
+      return next;
+    });
   };
 
   // ───── Citation-aware Markdown components ─────
@@ -1808,6 +1862,103 @@ export default function Home() {
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
+
+                  {/* Feedback thumbs — bottom-right of answer card */}
+                  {response && !isStreaming && (
+                    <div className="mt-4 flex flex-col items-end gap-3">
+                      {feedbackSubmitted ? (
+                        <span className={`text-xs flex items-center gap-1.5 ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                          <Check className="w-3.5 h-3.5" /> Thanks for your feedback
+                        </span>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setFeedbackRating(feedbackRating === "up" ? null : "up");
+                                if (feedbackRating !== "up") {
+                                  // Auto-submit thumbs up
+                                  setFeedbackRating("up");
+                                  setFeedbackReasons(new Set());
+                                  setFeedbackComment("");
+                                  handleFeedbackSubmit("up");
+                                }
+                              }}
+                              className={`p-1.5 rounded-lg transition-all ${
+                                feedbackRating === "up"
+                                  ? (darkMode ? 'bg-green-900/50 text-green-400' : 'bg-green-100 text-green-600')
+                                  : (darkMode ? 'text-gray-500 hover:text-gray-300 hover:bg-neutral-800' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100')
+                              }`}
+                              title="Helpful"
+                            >
+                              <ThumbsUp className="w-4 h-4" fill={feedbackRating === "up" ? "currentColor" : "none"} />
+                            </button>
+                            <button
+                              onClick={() => setFeedbackRating(feedbackRating === "down" ? null : "down")}
+                              className={`p-1.5 rounded-lg transition-all ${
+                                feedbackRating === "down"
+                                  ? (darkMode ? 'bg-red-900/50 text-red-400' : 'bg-red-100 text-red-600')
+                                  : (darkMode ? 'text-gray-500 hover:text-gray-300 hover:bg-neutral-800' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100')
+                              }`}
+                              title="Not helpful"
+                            >
+                              <ThumbsDown className="w-4 h-4" fill={feedbackRating === "down" ? "currentColor" : "none"} />
+                            </button>
+                          </div>
+
+                          {/* Feedback panel — shown when thumbs down */}
+                          {feedbackRating === "down" && (
+                            <div className={`w-full rounded-xl p-4 space-y-3 border transition-all ${
+                              darkMode ? 'bg-neutral-800 border-neutral-700' : 'bg-gray-50 border-gray-200'
+                            }`}>
+                              <p className={`text-xs font-medium ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                                What went wrong?
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {FEEDBACK_REASONS.map((reason) => (
+                                  <button
+                                    key={reason}
+                                    onClick={() => toggleFeedbackReason(reason)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                                      feedbackReasons.has(reason)
+                                        ? (darkMode ? 'bg-red-900/50 text-red-300 border-red-800' : 'bg-red-100 text-red-700 border-red-200')
+                                        : (darkMode ? 'bg-neutral-700 text-gray-300 border-neutral-600 hover:border-neutral-500' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300')
+                                    }`}
+                                  >
+                                    {reason}
+                                  </button>
+                                ))}
+                              </div>
+                              <textarea
+                                value={feedbackComment}
+                                onChange={(e) => setFeedbackComment(e.target.value)}
+                                placeholder="Additional details (optional)"
+                                rows={2}
+                                className={`w-full rounded-lg px-3 py-2 text-sm resize-none border transition-all ${
+                                  darkMode
+                                    ? 'bg-neutral-900 border-neutral-700 text-gray-200 placeholder-gray-500 focus:border-blue-500'
+                                    : 'bg-white border-gray-200 text-gray-800 placeholder-gray-400 focus:border-blue-400'
+                                }`}
+                              />
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={() => handleFeedbackSubmit()}
+                                  disabled={feedbackSubmitting || feedbackReasons.size === 0}
+                                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                    feedbackSubmitting || feedbackReasons.size === 0
+                                      ? (darkMode ? 'bg-neutral-700 text-gray-500 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed')
+                                      : (darkMode ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-blue-500 text-white hover:bg-blue-600')
+                                  }`}
+                                >
+                                  {feedbackSubmitting ? "Submitting..." : "Submit feedback"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Local Protocol Cards — horizontal carousel (Q&A fusion mode) */}

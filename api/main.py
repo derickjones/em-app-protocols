@@ -1795,6 +1795,36 @@ async def delete_enterprise(
         raise HTTPException(status_code=500, detail=f"Failed to delete enterprise: {str(e)}")
 
 
+# ============================================================================
+# PILOT FEEDBACK ENDPOINT
+# ============================================================================
+
+class FeedbackRequest(BaseModel):
+    """Pilot feedback from users"""
+    query: str = ""
+    rating: str  # "up" or "down"
+    reasons: List[str] = []
+    comment: str = ""
+    user_email: str = "anonymous"
+
+@app.post("/feedback")
+async def submit_feedback(req: FeedbackRequest):
+    """Store pilot feedback in Firestore for AIA reporting."""
+    try:
+        doc_ref = db.collection("feedback").document()
+        doc_ref.set({
+            "query": req.query,
+            "rating": req.rating,
+            "reasons": req.reasons,
+            "comment": req.comment,
+            "user_email": req.user_email,
+            "timestamp": firestore.SERVER_TIMESTAMP,
+        })
+        return {"status": "ok", "id": doc_ref.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to store feedback: {str(e)}")
+
+
 # Run with: uvicorn main:app --reload
 if __name__ == "__main__":
     import uvicorn
