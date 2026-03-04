@@ -619,7 +619,8 @@ export default function Home() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const res = await fetch(`${API_URL}/query`, {
+      // Fire /query and /protocol-summary in parallel (fusion mode)
+      const queryFetch = fetch(`${API_URL}/query`, {
         method: "POST",
         headers,
         body: JSON.stringify({ 
@@ -632,6 +633,54 @@ export default function Home() {
           enterprise_id: enterprise?.id || undefined
         }),
       });
+
+      // Only fetch protocol cards if local protocols are enabled (EDs selected)
+      const hasLocalSource = selectedEds.size > 0;
+      const protocolFetch = hasLocalSource
+        ? fetch(`${API_URL}/protocol-summary`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              query: question.trim(),
+              ed_ids: Array.from(selectedEds),
+              bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
+              enterprise_id: enterprise?.id || undefined,
+            }),
+          })
+        : null;
+
+      // Process protocol-summary stream in the background (non-blocking)
+      const cards: ProtocolCardData[] = [];
+      if (protocolFetch) {
+        protocolFetch.then(async (protoRes) => {
+          if (!protoRes.ok) return; // silently skip on error
+          const protoReader = protoRes.body?.getReader();
+          if (!protoReader) return;
+          const protoDecoder = new TextDecoder();
+          let protoBuf = "";
+          while (true) {
+            const { done, value } = await protoReader.read();
+            if (done) break;
+            protoBuf += protoDecoder.decode(value, { stream: true });
+            const protoLines = protoBuf.split("\n");
+            protoBuf = protoLines.pop() || "";
+            for (const line of protoLines) {
+              if (!line.startsWith("data: ")) continue;
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr) continue;
+              try {
+                const event = JSON.parse(jsonStr);
+                if (event.type === "protocol_card") {
+                  cards.push(event as ProtocolCardData);
+                  setProtocolCards([...cards]);
+                }
+              } catch { /* skip parse errors */ }
+            }
+          }
+        }).catch(() => {}); // silently ignore protocol-summary errors
+      }
+
+      const res = await queryFetch;
       if (!res.ok) {
         if (res.status === 401) {
           throw new Error("Please sign in to search protocols");
@@ -701,7 +750,7 @@ export default function Home() {
         setResponse({ answer: fullAnswer, images: [], citations: [], query_time_ms: 0 });
       }
 
-      // Save conversation to history
+      // Save conversation to history (include protocol cards from fusion)
       const savedResponse = finalData || { answer: fullAnswer, images: [], citations: [], query_time_ms: 0 };
       const newConversation: Conversation = {
         id: conversationId,
@@ -710,6 +759,7 @@ export default function Home() {
         question: question.trim(),
         response: savedResponse,
         mode: "qa",
+        protocolCards: cards.length > 0 ? cards : undefined,
       };
       
       setConversations(prev => {
@@ -1644,8 +1694,8 @@ export default function Home() {
               <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
                 <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
               </div>
-            ) : protocolCards.length > 0 ? (
-              /* Protocol Summary Results */
+            ) : mode === "protocol-summary" && protocolCards.length > 0 ? (
+              /* Protocol Summary mode — cards only (standalone) */
               <div className="space-y-4">
                 <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   {protocolCards.length} matching protocol{protocolCards.length !== 1 ? 's' : ''}
@@ -1670,6 +1720,26 @@ export default function Home() {
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
                 </div>
+
+                {/* Local Protocol Cards — fusion from /protocol-summary (Q&A mode only) */}
+                {mode === "qa" && protocolCards.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Related Local Protocols
+                      <span className={`text-xs font-normal ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {protocolCards.length} protocol{protocolCards.length !== 1 ? 's' : ''}
+                      </span>
+                    </h3>
+                    <div className="space-y-3">
+                      {protocolCards.map((card, idx) => (
+                        <ProtocolCard key={`qa-${card.protocol_id}-${idx}`} card={card} darkMode={darkMode} />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Images - Horizontal Scrolling Carousel */}
                 {response && response.images.length > 0 && (
