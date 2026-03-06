@@ -58,24 +58,24 @@ def seed_enterprises():
         enterprise_id = enterprise.pop("id")
         eds_data = enterprise.pop("eds")
         
-        # Create enterprise doc
+        # Create enterprise doc (merge to avoid overwriting existing fields)
         doc_ref = db.collection("enterprises").document(enterprise_id)
-        doc_ref.set(enterprise)
-        print(f"✅ Created enterprise: {enterprise['name']} ({enterprise_id})")
+        doc_ref.set(enterprise, merge=True)
+        print(f"✅ Ensured enterprise: {enterprise['name']} ({enterprise_id})")
         
-        # Create EDs and bundles
+        # Create EDs and bundles (merge to avoid overwriting existing)
         for ed in eds_data:
             ed_id = ed.pop("id")
             bundles_data = ed.pop("bundles")
             
             ed_ref = doc_ref.collection("eds").document(ed_id)
-            ed_ref.set(ed)
-            print(f"  🏥 Created ED: {ed['name']} ({ed_id})")
+            ed_ref.set(ed, merge=True)
+            print(f"  🏥 Ensured ED: {ed['name']} ({ed_id})")
             
             for bundle in bundles_data:
                 bundle_id = bundle.pop("id")
-                ed_ref.collection("bundles").document(bundle_id).set(bundle)
-                print(f"    📦 Created bundle: {bundle['name']} ({bundle_id})")
+                ed_ref.collection("bundles").document(bundle_id).set(bundle, merge=True)
+                print(f"    📦 Ensured bundle: {bundle['name']} ({bundle_id})")
 
 
 def create_super_admin(email: str, uid: str):
