@@ -167,6 +167,32 @@ class PersonalService:
             return parts[0].get("text", "") if parts else ""
         return ""
 
+    def _render_pdf_page_images(self, uid: str, file_id: str, file_bytes: bytes) -> list:
+        """Render each PDF page as a PNG and upload to GCS. Returns list of image dicts."""
+        import fitz  # PyMuPDF
+
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        page_images = []
+
+        for i, page in enumerate(doc):
+            try:
+                pix = page.get_pixmap(dpi=150)
+                png_bytes = pix.tobytes("png")
+
+                blob_path = f"{uid}/{file_id}/page_{i + 1}.png"
+                blob = self.bucket.blob(blob_path)
+                blob.upload_from_string(png_bytes, content_type="image/png")
+
+                page_images.append({
+                    "page": i + 1,
+                    "gcs_uri": f"gs://{PERSONAL_BUCKET}/{blob_path}",
+                })
+            except Exception as e:
+                print(f"Failed to render page {i + 1} for {file_id}: {e}")
+
+        doc.close()
+        return page_images
+
     # ─── Upload + Process ─────────────────────────────────────────────────
 
     def upload_and_process(self, uid: str, filename: str, content_type: str, file_bytes: bytes) -> Dict:
@@ -220,10 +246,21 @@ class PersonalService:
             original_blob.upload_from_string(file_bytes, content_type=content_type)
 
             # 2. Extract text
+            page_images = []  # Will be populated for PDFs
             if content_type == "application/pdf":
                 extracted_text = self._extract_text_from_pdf(file_bytes)
+                # Render page images for the carousel
+                page_images = self._render_pdf_page_images(uid, file_id, file_bytes)
             elif content_type.startswith("image/"):
                 extracted_text = self._extract_text_from_image(file_bytes, content_type)
+                # Store the original image as page 1 for the carousel
+                img_blob = self.bucket.blob(f"{uid}/{file_id}/page_1.png")
+                if content_type == "image/png":
+                    img_blob.upload_from_string(file_bytes, content_type="image/png")
+                else:
+                    # Convert JPEG to PNG for consistency
+                    img_blob.upload_from_string(file_bytes, content_type=content_type)
+                page_images = [{"page": 1, "gcs_uri": f"gs://{PERSONAL_BUCKET}/{uid}/{file_id}/page_1.png"}]
             else:
                 # Plain text or markdown
                 extracted_text = file_bytes.decode("utf-8", errors="replace")
@@ -249,6 +286,8 @@ class PersonalService:
                 "indexed_at": firestore.SERVER_TIMESTAMP,
                 "gcs_text": text_uri,
                 "gcs_original": f"gs://{PERSONAL_BUCKET}/{uid}/{file_id}.original",
+                "images": page_images,
+                "page_count": len(page_images),
             })
 
             return {
@@ -365,6 +404,16 @@ class PersonalService:
             except Exception:
                 pass  # OK if already gone
 
+        # 2b. Delete page images
+        for img in data.get("images", []):
+            try:
+                gcs_uri = img.get("gcs_uri", "")
+                if gcs_uri:
+                    blob_path = gcs_uri.replace(f"gs://{PERSONAL_BUCKET}/", "")
+                    self.bucket.blob(blob_path).delete()
+            except Exception:
+                pass
+
         # 3. Delete Firestore doc
         doc_ref.delete()
         return True
@@ -391,6 +440,32 @@ class PersonalService:
                 if del_resp.status_code == 200:
                     print(f"Deleted RAG file: {file_name}")
                 return
+
+    # ─── Signed URL ──────────────────────────────────────────────────────
+
+    def get_signed_url(self, uid: str, file_id: str, expiration_minutes: int = 60) -> str:
+        """Generate a signed URL for the original uploaded file."""
+        import datetime
+        doc = self.db.collection("users").document(uid).collection("personal_files").document(file_id).get()
+        if not doc.exists:
+            raise FileNotFoundError(f"File {file_id} not found")
+
+        data = doc.to_dict()
+        content_type = data.get("content_type", "application/octet-stream")
+        filename = data.get("filename", file_id)
+
+        blob = self.bucket.blob(f"{uid}/{file_id}.original")
+        if not blob.exists():
+            raise FileNotFoundError(f"Original file not found in GCS")
+
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(minutes=expiration_minutes),
+            method="GET",
+            response_type=content_type,
+            response_disposition=f'inline; filename="{filename}"',
+        )
+        return url
 
     # ─── Delete All User Files ────────────────────────────────────────────
 

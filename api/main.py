@@ -710,9 +710,10 @@ def _build_citations(raw_citations: list) -> list:
                 pass
             citations.append({
                 "protocol_id": display_name,
-                "source_uri": "",  # No external link for personal files
+                "source_uri": f"/personal/files/{file_id}/download",
                 "relevance_score": c["score"],
-                "source_type": "personal"
+                "source_type": "personal",
+                "file_id": file_id,
             })
             continue
 
@@ -2190,6 +2191,18 @@ async def personal_delete_all(user: UserProfile = Depends(get_verified_user)):
     try:
         count = personal_service.delete_all_files(user.uid)
         return {"status": "deleted", "count": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/personal/files/{file_id}/download")
+async def personal_download(file_id: str, user: UserProfile = Depends(get_verified_user)):
+    """Get a signed download URL for a personal file."""
+    try:
+        url = personal_service.get_signed_url(user.uid, file_id)
+        return {"url": url}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

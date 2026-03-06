@@ -501,6 +501,56 @@ ANSWER:"""
         
         return None
 
+    def _get_personal_images(self, source_uri: str) -> List[Dict]:
+        """Get page images for a personal file from Firestore metadata.
+        source_uri format: gs://clinical-assistant-457902-personal/{uid}/{file_id}.txt
+        Returns images with signed URLs (valid for 1 hour).
+        """
+        try:
+            parts = source_uri.replace("gs://", "").split("/")
+            if len(parts) < 3:
+                return []
+            uid = parts[1]
+            file_id = parts[2].replace(".txt", "")
+
+            cache_key = f"personal/{uid}/{file_id}"
+            if cache_key in self._metadata_cache:
+                return self._metadata_cache[cache_key]
+
+            from google.cloud import firestore as _fs
+            import datetime
+            db = _fs.Client()
+            doc = db.collection("users").document(uid).collection("personal_files").document(file_id).get()
+            if not doc.exists:
+                return []
+            data = doc.to_dict()
+            filename = data.get("filename", file_id)
+            raw_images = data.get("images", [])
+
+            bucket = self.storage_client.bucket(PERSONAL_BUCKET)
+            result = []
+            for img in raw_images:
+                gcs_uri = img.get("gcs_uri", "")
+                if gcs_uri:
+                    blob_path = gcs_uri.replace(f"gs://{PERSONAL_BUCKET}/", "")
+                    blob = bucket.blob(blob_path)
+                    signed_url = blob.generate_signed_url(
+                        version="v4",
+                        expiration=datetime.timedelta(hours=1),
+                        method="GET",
+                    )
+                    result.append({
+                        "page": img.get("page", 0),
+                        "url": signed_url,
+                        "source": f"📁 {filename}",
+                    })
+
+            self._metadata_cache[cache_key] = result
+            return result
+        except Exception as e:
+            print(f"Error getting personal images for {source_uri}: {e}")
+            return []
+
     def _get_images_from_contexts(self, contexts: List[Dict]) -> List[Dict]:
         """Extract images from context sources - maintains protocol relevance order"""
         seen_images = set()
@@ -580,6 +630,19 @@ ANSWER:"""
                                 "source": f"ALiEM: {metadata.get('title', 'unknown')}",
                                 "protocol_rank": ctx_idx
                             })
+            elif source_type == "personal":
+                # Get personal file images from Firestore
+                personal_images = self._get_personal_images(ctx["source"])
+                for img in personal_images:
+                    img_url = img.get("url", "")
+                    if img_url and img_url not in seen_images:
+                        seen_images.add(img_url)
+                        images.append({
+                            "page": img.get("page", 0),
+                            "url": img_url,
+                            "source": img.get("source", "My File"),
+                            "protocol_rank": ctx_idx
+                        })
             else:
                 # Local protocol metadata
                 metadata = self._get_protocol_metadata(ctx["source"])
