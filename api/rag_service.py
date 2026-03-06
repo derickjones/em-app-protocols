@@ -501,45 +501,10 @@ ANSWER:"""
         
         return None
 
-    def _get_signing_credentials(self):
-        """Get credentials that can sign URLs on Cloud Run (via IAM signBlob)."""
-        if hasattr(self, "_signing_creds"):
-            return self._signing_creds
-
-        import google.auth
-        from google.auth import iam
-        from google.auth.transport import requests as google_auth_requests
-        import google.oauth2.service_account
-
-        credentials, _ = google.auth.default()
-        sa_email = getattr(credentials, "service_account_email", None)
-        if not sa_email:
-            try:
-                import requests as _req
-                resp = _req.get(
-                    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
-                    headers={"Metadata-Flavor": "Google"}, timeout=2
-                )
-                sa_email = resp.text
-            except Exception:
-                sa_email = f"{PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-
-        signer = iam.Signer(
-            request=google_auth_requests.Request(),
-            credentials=credentials,
-            service_account_email=sa_email,
-        )
-        self._signing_creds = google.oauth2.service_account.Credentials(
-            signer=signer,
-            service_account_email=sa_email,
-            token_uri="https://oauth2.googleapis.com/token",
-        )
-        return self._signing_creds
-
     def _get_personal_images(self, source_uri: str) -> List[Dict]:
         """Get page images for a personal file from Firestore metadata.
         source_uri format: gs://clinical-assistant-457902-personal/{uid}/{file_id}.txt
-        Returns images with signed URLs (valid for 1 hour).
+        Returns images as base64 data URIs (no signing needed).
         """
         try:
             parts = source_uri.replace("gs://", "").split("/")
@@ -553,7 +518,7 @@ ANSWER:"""
                 return self._metadata_cache[cache_key]
 
             from google.cloud import firestore as _fs
-            import datetime
+            import base64
             db = _fs.Client()
             doc = db.collection("users").document(uid).collection("personal_files").document(file_id).get()
             if not doc.exists:
@@ -563,24 +528,20 @@ ANSWER:"""
             raw_images = data.get("images", [])
 
             bucket = self.storage_client.bucket(PERSONAL_BUCKET)
-            signing_creds = self._get_signing_credentials()
             result = []
-            for img in raw_images:
+            for img in raw_images[:5]:  # Limit to first 5 pages for performance
                 gcs_uri = img.get("gcs_uri", "")
                 if gcs_uri:
                     blob_path = gcs_uri.replace(f"gs://{PERSONAL_BUCKET}/", "")
                     blob = bucket.blob(blob_path)
-                    signed_url = blob.generate_signed_url(
-                        version="v4",
-                        expiration=datetime.timedelta(hours=1),
-                        method="GET",
-                        credentials=signing_creds,
-                    )
-                    result.append({
-                        "page": img.get("page", 0),
-                        "url": signed_url,
-                        "source": f"📁 {filename}",
-                    })
+                    if blob.exists():
+                        img_bytes = blob.download_as_bytes()
+                        b64 = base64.b64encode(img_bytes).decode("utf-8")
+                        result.append({
+                            "page": img.get("page", 0),
+                            "url": f"data:image/png;base64,{b64}",
+                            "source": f"📁 {filename}",
+                        })
 
             self._metadata_cache[cache_key] = result
             return result

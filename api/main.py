@@ -9,7 +9,7 @@ import asyncio
 import uuid
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import time
@@ -2197,10 +2197,17 @@ async def personal_delete_all(user: UserProfile = Depends(get_verified_user)):
 
 @app.get("/personal/files/{file_id}/download")
 async def personal_download(file_id: str, user: UserProfile = Depends(get_verified_user)):
-    """Get a signed download URL for a personal file."""
+    """Proxy-download a personal file from GCS."""
     try:
-        url = personal_service.get_signed_url(user.uid, file_id)
-        return {"url": url}
+        file_bytes, content_type, filename = personal_service.get_file_data(user.uid, file_id)
+        return Response(
+            content=file_bytes,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"',
+                "Cache-Control": "private, max-age=300",
+            },
+        )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
