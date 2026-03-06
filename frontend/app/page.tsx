@@ -1415,8 +1415,139 @@ export default function Home() {
 
           </div>
 
+          {/* Mayo Protocols — Request Access (sidebar) */}
+          {user && !hasAccess && (
+            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
+              <div className="p-3">
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                  <span className={`text-xs font-medium tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Mayo Clinic Protocols
+                  </span>
+                </div>
+
+                {userProfile?.accessStatus === "pending" ? (
+                  <div className="px-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                      <p className={`text-xs font-medium ${darkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                        Pending
+                      </p>
+                    </div>
+                    <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      Please allow 3-5 business days.
+                    </p>
+                  </div>
+                ) : userProfile?.accessStatus === "denied" ? (
+                  <div className="px-1">
+                    <p className={`text-xs ${darkMode ? 'text-red-400' : 'text-red-600'}`}>
+                      Access denied. Contact an administrator.
+                    </p>
+                  </div>
+                ) : !showRequestForm ? (
+                  <div className="px-1">
+                    <p className={`text-xs mb-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      Department-specific protocol bundles
+                    </p>
+                    <button
+                      onClick={() => setShowRequestForm(true)}
+                      className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        darkMode
+                          ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
+                          : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
+                      }`}
+                    >
+                      Request Access
+                    </button>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setRequestError(null);
+                      if (!requestEmail.toLowerCase().trim().endsWith("@mayo.edu")) {
+                        setRequestError("Must be a @mayo.edu email");
+                        return;
+                      }
+                      if (!requestName.trim()) {
+                        setRequestError("Please enter your name");
+                        return;
+                      }
+                      setRequestLoading(true);
+                      try {
+                        const result = await submitAccessRequest(requestName.trim(), requestEmail.trim());
+                        setRequestSuccess(result.message || "Submitted! Please allow 3-5 business days.");
+                        setShowRequestForm(false);
+                        setRequestName("");
+                        setRequestEmail("");
+                        await refreshProfile();
+                      } catch (err) {
+                        setRequestError(err instanceof Error ? err.message : "Failed to submit");
+                      } finally {
+                        setRequestLoading(false);
+                      }
+                    }}
+                    className="px-1 space-y-2"
+                  >
+                    {requestError && (
+                      <p className="text-xs text-red-400">{requestError}</p>
+                    )}
+                    <input
+                      type="text"
+                      value={requestName}
+                      onChange={(e) => setRequestName(e.target.value)}
+                      placeholder="Full Name"
+                      required
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${
+                        darkMode
+                          ? 'bg-neutral-800 border border-neutral-600 text-white placeholder-neutral-500'
+                          : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
+                      } focus:outline-none focus:border-blue-500`}
+                    />
+                    <input
+                      type="email"
+                      value={requestEmail}
+                      onChange={(e) => setRequestEmail(e.target.value)}
+                      placeholder="your.name@mayo.edu"
+                      required
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${
+                        darkMode
+                          ? 'bg-neutral-800 border border-neutral-600 text-white placeholder-neutral-500'
+                          : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
+                      } focus:outline-none focus:border-blue-500`}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={requestLoading}
+                        className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        {requestLoading ? "Submitting..." : "Submit"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowRequestForm(false); setRequestError(null); }}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                          darkMode ? 'text-neutral-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {requestSuccess && (
+                  <p className={`text-xs mt-2 px-1 ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                    {requestSuccess}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Enterprise + ED Selector */}
-          {user && enterprise && (
+          {user && hasAccess && enterprise && (
             <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
               {/* Enterprise selector (super_admin) or name (regular user) */}
@@ -1780,127 +1911,7 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Mayo Protocol Access — Request Access for non-approved users */}
-              {user && !hasAccess && (
-                <div className="mt-6">
-                  <div className={`rounded-2xl border p-5 ${darkMode ? 'bg-neutral-900 border-neutral-700' : 'bg-gray-50 border-gray-200'}`}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${darkMode ? 'bg-blue-500/20' : 'bg-blue-100'}`}>
-                        <Building2 className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                      </div>
-                      <div>
-                        <h3 className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Mayo Clinic Protocols</h3>
-                        <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-gray-500'}`}>Department-specific protocol bundles</p>
-                      </div>
-                    </div>
 
-                    {userProfile?.accessStatus === "pending" ? (
-                      <div className="flex items-center gap-2 mt-3">
-                        <div className={`w-2 h-2 rounded-full bg-yellow-400 animate-pulse`} />
-                        <p className={`text-sm ${darkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                          Access request pending — please allow 3-5 business days.
-                        </p>
-                      </div>
-                    ) : userProfile?.accessStatus === "denied" ? (
-                      <p className={`text-sm mt-3 ${darkMode ? 'text-red-400' : 'text-red-600'}`}>
-                        Access request was denied. Contact an administrator if you believe this is an error.
-                      </p>
-                    ) : !showRequestForm ? (
-                      <button
-                        onClick={() => setShowRequestForm(true)}
-                        className={`mt-3 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                          darkMode
-                            ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30 hover:bg-blue-600/30'
-                            : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100'
-                        }`}
-                      >
-                        Request Access
-                      </button>
-                    ) : (
-                      <form
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          setRequestError(null);
-                          if (!requestEmail.toLowerCase().trim().endsWith("@mayo.edu")) {
-                            setRequestError("Must be a @mayo.edu email");
-                            return;
-                          }
-                          if (!requestName.trim()) {
-                            setRequestError("Please enter your name");
-                            return;
-                          }
-                          setRequestLoading(true);
-                          try {
-                            const result = await submitAccessRequest(requestName.trim(), requestEmail.trim());
-                            setRequestSuccess(result.message || "Submitted! Please allow 3-5 business days.");
-                            setShowRequestForm(false);
-                            setRequestName("");
-                            setRequestEmail("");
-                            await refreshProfile();
-                          } catch (err) {
-                            setRequestError(err instanceof Error ? err.message : "Failed to submit");
-                          } finally {
-                            setRequestLoading(false);
-                          }
-                        }}
-                        className="mt-3 space-y-3"
-                      >
-                        {requestError && (
-                          <p className="text-xs text-red-400">{requestError}</p>
-                        )}
-                        <input
-                          type="text"
-                          value={requestName}
-                          onChange={(e) => setRequestName(e.target.value)}
-                          placeholder="Full Name"
-                          required
-                          className={`w-full px-3 py-2 rounded-lg text-sm ${
-                            darkMode
-                              ? 'bg-neutral-800 border border-neutral-600 text-white placeholder-neutral-500'
-                              : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
-                          } focus:outline-none focus:border-blue-500`}
-                        />
-                        <input
-                          type="email"
-                          value={requestEmail}
-                          onChange={(e) => setRequestEmail(e.target.value)}
-                          placeholder="your.name@mayo.edu"
-                          required
-                          className={`w-full px-3 py-2 rounded-lg text-sm ${
-                            darkMode
-                              ? 'bg-neutral-800 border border-neutral-600 text-white placeholder-neutral-500'
-                              : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
-                          } focus:outline-none focus:border-blue-500`}
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            type="submit"
-                            disabled={requestLoading}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-sm font-medium rounded-lg transition-colors"
-                          >
-                            {requestLoading ? "Submitting..." : "Submit"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setShowRequestForm(false); setRequestError(null); }}
-                            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                              darkMode ? 'text-neutral-400 hover:text-white' : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                    {requestSuccess && (
-                      <p className={`text-sm mt-3 ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
-                        {requestSuccess}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         ) : (
