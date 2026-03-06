@@ -2267,8 +2267,9 @@ export default function Home() {
                         const isALiEM = cite.source_type === "aliem";
                         const isPersonal = cite.source_type === "personal";
 
-                        const handlePersonalClick = async () => {
+                        const handlePersonalClick = async (e: React.MouseEvent) => {
                           if (!isPersonal || !cite.source_uri) return;
+                          e.preventDefault();
                           try {
                             const token = await user?.getIdToken();
                             const res = await fetch(`${API_URL}${cite.source_uri}`, {
@@ -2283,15 +2284,15 @@ export default function Home() {
                           }
                         };
 
-                        const Wrapper = isPersonal ? "button" as const : "a" as const;
-                        const linkProps = isPersonal
-                          ? { onClick: handlePersonalClick, type: "button" as const }
-                          : { href: cite.source_uri, target: "_blank" as const, rel: "noopener noreferrer" };
                         return (
-                          <Wrapper
+                          <a
                             key={idx}
                             id={`cite-${idx + 1}`}
-                            {...(linkProps as any)}
+                            href={isPersonal ? "#" : cite.source_uri}
+                            target={isPersonal ? undefined : "_blank"}
+                            rel={isPersonal ? undefined : "noopener noreferrer"}
+                            onClick={isPersonal ? handlePersonalClick : undefined}
+                            style={isPersonal ? { cursor: "pointer" } : undefined}
                             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm w-full text-left ${isPersonal ? `cursor-pointer hover:opacity-80 ${darkMode ? 'text-violet-400 bg-neutral-800/50 hover:bg-neutral-700/50' : 'text-violet-600 bg-violet-50/50 hover:bg-violet-100/50'}` : (darkMode ? 'text-blue-400 hover:bg-neutral-800' : 'text-blue-600 hover:bg-white hover:shadow-sm')}`}
                           >
                             <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${
@@ -2336,7 +2337,7 @@ export default function Home() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                               </svg>
                             )}
-                          </Wrapper>
+                          </a>
                         );
                       })}
                     </div>
