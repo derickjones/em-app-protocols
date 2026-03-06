@@ -3,21 +3,24 @@
 /**
  * Auth Context Provider
  * Manages Firebase authentication state across the app
+ * 
+ * Auth flow:
+ * - @mayo.edu Google sign-in → auto-approved, full access
+ * - Non-mayo Google sign-in → authenticated but no app access
+ *   → can submit access request (name + @mayo.edu email)
+ *   → owner approves at /owner → user gets access
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import {
   User,
   onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
-  sendEmailVerification,
 } from "firebase/auth";
-import { auth, googleProvider, microsoftProvider } from "./firebase";
+import { auth, googleProvider } from "./firebase";
 
 interface UserProfile {
   uid: string;
@@ -26,6 +29,7 @@ interface UserProfile {
   enterpriseName: string | null;
   role: "user" | "admin" | "super_admin";
   edAccess: string[];
+  accessStatus: "approved" | "pending" | "denied" | "no_access";
 }
 
 interface AuthContextType {
@@ -33,17 +37,18 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   error: string | null;
-  emailVerified: boolean;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  isMayoUser: boolean;
+  hasAccess: boolean;
   signInWithGoogle: () => Promise<void>;
-  signInWithMicrosoft: () => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
-  resendVerificationEmail: () => Promise<void>;
+  submitAccessRequest: (name: string, mayoEmail: string) => Promise<{ status: string; message: string }>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -55,7 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUserProfile = async (firebaseUser: User): Promise<UserProfile | null> => {
     try {
       const token = await firebaseUser.getIdToken();
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
       
       const response = await fetch(`${API_URL}/auth/me`, {
         headers: {
@@ -66,13 +70,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         return await response.json();
       } else if (response.status === 404) {
-        // User not registered in our system yet - will be created on first valid domain login
         return null;
       }
       return null;
     } catch (err) {
       console.error("Failed to fetch user profile:", err);
       return null;
+    }
+  };
+
+  const refreshProfile = async () => {
+    if (user) {
+      const profile = await fetchUserProfile(user);
+      setUserProfile(profile);
     }
   };
 
@@ -106,35 +116,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signInWithEmail = async (email: string, password: string) => {
-    setError(null);
-    try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      const profile = await fetchUserProfile(result.user);
-      setUserProfile(profile);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Sign in failed";
-      setError(message);
-      throw err;
-    }
-  };
-
-  const signUpWithEmail = async (email: string, password: string) => {
-    setError(null);
-    try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      // Send verification email
-      await sendEmailVerification(result.user);
-      // Profile will be created by backend based on domain validation
-      const profile = await fetchUserProfile(result.user);
-      setUserProfile(profile);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Sign up failed";
-      setError(message);
-      throw err;
-    }
-  };
-
   const signInWithGoogle = async () => {
     setError(null);
     try {
@@ -154,25 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signInWithMicrosoft = async () => {
-    setError(null);
-    try {
-      const result = await signInWithPopup(auth, microsoftProvider);
-      const profile = await fetchUserProfile(result.user);
-      setUserProfile(profile);
-    } catch (err: unknown) {
-      // If popup is blocked or closed by corporate policy, fall back to redirect
-      const code = (err as { code?: string })?.code;
-      if (code === "auth/popup-closed-by-user" || code === "auth/popup-blocked") {
-        await signInWithRedirect(auth, microsoftProvider);
-        return;
-      }
-      const message = err instanceof Error ? err.message : "Microsoft sign in failed";
-      setError(message);
-      throw err;
-    }
-  };
-
   const signOut = async () => {
     await firebaseSignOut(auth);
     setUserProfile(null);
@@ -183,19 +145,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user.getIdToken();
   };
 
-  const resendVerificationEmail = async () => {
-    if (!user) return;
-    try {
-      await sendEmailVerification(user);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to send verification email";
-      setError(message);
-      throw err;
+  const submitAccessRequest = async (name: string, mayoEmail: string): Promise<{ status: string; message: string }> => {
+    if (!user) throw new Error("Must be signed in to submit access request");
+    
+    const token = await user.getIdToken();
+    const response = await fetch(`${API_URL}/access-requests`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name, mayo_email: mayoEmail }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.detail || "Failed to submit access request");
     }
+    
+    // Refresh profile to get updated access_status
+    const profile = await fetchUserProfile(user);
+    setUserProfile(profile);
+    
+    return data;
   };
 
-  // Check if email is verified (Google sign-in is always verified)
-  const emailVerified = user?.emailVerified ?? false;
+  // Derived state
+  const isMayoUser = user?.email?.endsWith("@mayo.edu") ?? false;
+  const hasAccess = userProfile?.accessStatus === "approved" || false;
 
   return (
     <AuthContext.Provider
@@ -204,14 +182,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userProfile,
         loading,
         error,
-        emailVerified,
-        signInWithEmail,
-        signUpWithEmail,
+        isMayoUser,
+        hasAccess,
         signInWithGoogle,
-        signInWithMicrosoft,
         signOut,
         getIdToken,
-        resendVerificationEmail,
+        submitAccessRequest,
+        refreshProfile,
       }}
     >
       {children}

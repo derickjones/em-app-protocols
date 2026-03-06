@@ -202,9 +202,8 @@ export default function Home() {
     setUniverseDirty(true);
   };
 
-  const { user, userProfile, loading: authLoading, emailVerified, signOut, getIdToken, resendVerificationEmail } = useAuth();
+  const { user, userProfile, loading: authLoading, hasAccess, signOut, getIdToken } = useAuth();
   const router = useRouter();
-  const [verificationSent, setVerificationSent] = useState(false);
 
   // Load theme from localStorage on mount
   useEffect(() => {
@@ -333,10 +332,10 @@ export default function Home() {
 
   // Load enterprise when user is available
   useEffect(() => {
-    if (user && emailVerified) {
+    if (user && hasAccess) {
       fetchEnterprise();
     }
-  }, [user, emailVerified, fetchEnterprise]);
+  }, [user, hasAccess, fetchEnterprise]);
 
   // Load selected bundles from localStorage
   useEffect(() => {
@@ -506,8 +505,8 @@ export default function Home() {
       return;
     }
     
-    if (user && !emailVerified) {
-      setError("Please verify your email before searching. Check your inbox for a verification link.");
+    if (user && !hasAccess) {
+      setError("Your account does not have access yet. Please request access from the login page.");
       return;
     }
     
@@ -861,16 +860,6 @@ export default function Home() {
   const handleSignOut = async () => {
     await signOut();
     setShowUserMenu(false);
-  };
-
-  const handleResendVerification = async () => {
-    try {
-      await resendVerificationEmail();
-      setVerificationSent(true);
-      setTimeout(() => setVerificationSent(false), 5000);
-    } catch {
-      // Error handled in auth context
-    }
   };
 
   // ───── Feedback submission ─────
@@ -1659,8 +1648,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Email Verification Banner */}
-      {user && !emailVerified && (
+      {/* Access Pending Banner */}
+      {user && !hasAccess && (
         <div className="bg-yellow-50 border-b border-yellow-100 px-4 py-3">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1668,15 +1657,16 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <span className="text-yellow-800 text-sm">
-                Please verify your email to search protocols.
+                {userProfile?.accessStatus === "pending"
+                  ? "Your access request is pending review. Please allow 3-5 business days."
+                  : "You need access to use this app."}
               </span>
             </div>
             <button
-              onClick={handleResendVerification}
-              disabled={verificationSent}
-              className="text-sm text-yellow-700 hover:text-yellow-900 font-medium disabled:text-yellow-500"
+              onClick={() => router.push("/login")}
+              className="text-sm text-yellow-700 hover:text-yellow-900 font-medium"
             >
-              {verificationSent ? "Email sent!" : "Resend email"}
+              {userProfile?.accessStatus === "pending" ? "View status" : "Request access"}
             </button>
           </div>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Building2, FolderOpen, FileText, Shield, Crown, Mail, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Check, X, Database, MapPin, Palette } from "lucide-react";
+import { Users, Building2, FolderOpen, FileText, Shield, Crown, Mail, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Check, X, Database, MapPin, Palette, Clock, Bell, UserCheck, UserX } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,28 @@ interface Admin {
   edAccess: string[];
   enterpriseId: string;
   createdAt: string;
+}
+
+interface AccessRequest {
+  id: string;
+  google_email: string;
+  google_uid: string;
+  mayo_email: string;
+  name: string;
+  status: "pending" | "approved" | "denied";
+  requested_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
+
+interface NotificationData {
+  id: string;
+  type: string;
+  message: string;
+  target_role: string;
+  read: boolean;
+  created_at: string;
+  reference_id: string;
 }
 
 interface BundleData {
@@ -46,7 +68,7 @@ export default function OwnerDashboard() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
   
-  const [view, setView] = useState<"admins" | "hierarchy">("hierarchy");
+  const [view, setView] = useState<"admins" | "hierarchy" | "requests">("hierarchy");
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseData[]>([]);
   const [expandedEnterprises, setExpandedEnterprises] = useState<Set<string>>(new Set());
@@ -61,6 +83,16 @@ export default function OwnerDashboard() {
   const [allUsers, setAllUsers] = useState<Admin[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  // Access requests state
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [requestsFilter, setRequestsFilter] = useState<"pending" | "approved" | "denied" | "all">("pending");
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<NotificationData[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Create modals
   const [showCreateEnterprise, setShowCreateEnterprise] = useState(false);
@@ -139,6 +171,8 @@ export default function OwnerDashboard() {
       fetchAdmins();
       fetchEnterprises();
       fetchAllUsers();
+      fetchAccessRequests();
+      fetchNotifications();
     }
   }, [userProfile]);
 
@@ -157,6 +191,75 @@ export default function OwnerDashboard() {
       console.error("Failed to fetch all users:", err);
     }
   };
+
+  // Fetch access requests
+  const fetchAccessRequests = async (statusFilter?: string) => {
+    setRequestsLoading(true);
+    try {
+      const token = await user?.getIdToken();
+      const filterParam = statusFilter && statusFilter !== "all" ? `?status=${statusFilter}` : "";
+      const res = await fetch(`${API_URL}/access-requests${filterParam}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAccessRequests(data.requests || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch access requests:", err);
+    } finally {
+      setRequestsLoading(false);
+    }
+  };
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unread_count || 0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    }
+  };
+
+  // Handle approve/deny access request
+  const handleAccessRequestAction = async (requestId: string, action: "approve" | "deny") => {
+    setProcessingRequest(requestId);
+    try {
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/access-requests/${requestId}?action=${action}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        // Refresh requests and notifications
+        await fetchAccessRequests(requestsFilter === "all" ? undefined : requestsFilter);
+        await fetchNotifications();
+      } else {
+        const err = await res.json();
+        alert(err.detail || `Failed to ${action} request`);
+      }
+    } catch (err) {
+      console.error(`Failed to ${action} request:`, err);
+      alert(`Failed to ${action} request`);
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  // When filter changes, refetch
+  useEffect(() => {
+    if (userProfile?.role === "super_admin") {
+      fetchAccessRequests(requestsFilter === "all" ? undefined : requestsFilter);
+    }
+  }, [requestsFilter]);
 
   const handleAddAdmin = async () => {
     if (!newAdminEmail.trim()) return;
@@ -457,6 +560,22 @@ export default function OwnerDashboard() {
             >
               <Building2 className="w-4 h-4" />
               Enterprises & EDs
+            </button>
+            <button
+              onClick={() => setView("requests")}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 relative ${
+                view === "requests"
+                  ? "bg-[#8ab4f8] text-[#131314]"
+                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <UserCheck className="w-4 h-4" />
+              Access Requests
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {unreadCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setView("admins")}
@@ -866,6 +985,138 @@ export default function OwnerDashboard() {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* ===== Access Requests View ===== */}
+            {view === "requests" && (
+              <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">
+                <div className="flex items-center justify-between p-5 border-b border-[#3c4043]">
+                  <h2 className="text-lg font-medium text-white flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-[#8ab4f8]" />
+                    Access Requests
+                    {unreadCount > 0 && (
+                      <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
+                        {unreadCount} new
+                      </span>
+                    )}
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => { fetchAccessRequests(requestsFilter === "all" ? undefined : requestsFilter); fetchNotifications(); }}
+                      disabled={requestsLoading}
+                      className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${requestsLoading ? "animate-spin" : ""}`} />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="px-5 pt-4 flex gap-2">
+                  {(["pending", "approved", "denied", "all"] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setRequestsFilter(filter)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors capitalize ${
+                        requestsFilter === filter
+                          ? filter === "pending" ? "bg-yellow-500/20 text-yellow-400"
+                            : filter === "approved" ? "bg-green-500/20 text-green-400"
+                            : filter === "denied" ? "bg-red-500/20 text-red-400"
+                            : "bg-[#8ab4f8]/20 text-[#8ab4f8]"
+                          : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Requests List */}
+                {requestsLoading ? (
+                  <div className="p-8 text-center">
+                    <RefreshCw className="w-8 h-8 mx-auto text-[#5f6368] animate-spin mb-3" />
+                    <p className="text-[#9aa0a6]">Loading requests...</p>
+                  </div>
+                ) : accessRequests.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <UserCheck className="w-12 h-12 mx-auto text-[#5f6368] mb-3" />
+                    <p className="text-[#9aa0a6]">No {requestsFilter !== "all" ? requestsFilter : ""} access requests</p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-[#3c4043]">
+                    {accessRequests.map((req) => (
+                      <li key={req.id} className="p-5 hover:bg-[#2c2d2e] transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-4 flex-1 min-w-0">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              req.status === "pending" ? "bg-yellow-500/20" :
+                              req.status === "approved" ? "bg-green-500/20" : "bg-red-500/20"
+                            }`}>
+                              {req.status === "pending" ? <Clock className="w-5 h-5 text-yellow-400" /> :
+                               req.status === "approved" ? <Check className="w-5 h-5 text-green-400" /> :
+                               <X className="w-5 h-5 text-red-400" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-white">{req.name}</h3>
+                              <div className="mt-1 space-y-1">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <span className="text-[#9aa0a6]">Google:</span>
+                                  <span className="text-[#e8eaed]">{req.google_email}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <span className="text-[#9aa0a6]">Mayo:</span>
+                                  <span className="text-[#8ab4f8]">{req.mayo_email}</span>
+                                </div>
+                                <div className="text-xs text-[#5f6368]">
+                                  Requested: {req.requested_at ? new Date(req.requested_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Unknown"}
+                                </div>
+                                {req.reviewed_at && (
+                                  <div className="text-xs text-[#5f6368]">
+                                    Reviewed: {new Date(req.reviewed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {req.status === "pending" ? (
+                              <>
+                                <button
+                                  onClick={() => handleAccessRequestAction(req.id, "approve")}
+                                  disabled={processingRequest === req.id}
+                                  className="flex items-center gap-1.5 px-3 py-2 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-full text-sm font-medium transition-colors disabled:opacity-50"
+                                >
+                                  <Check className="w-4 h-4" />
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleAccessRequestAction(req.id, "deny")}
+                                  disabled={processingRequest === req.id}
+                                  className="flex items-center gap-1.5 px-3 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-full text-sm font-medium transition-colors disabled:opacity-50"
+                                >
+                                  <X className="w-4 h-4" />
+                                  Deny
+                                </button>
+                              </>
+                            ) : (
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                req.status === "approved"
+                                  ? "bg-green-500/20 text-green-400"
+                                  : "bg-red-500/20 text-red-400"
+                              }`}>
+                                {req.status}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
