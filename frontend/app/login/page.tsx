@@ -90,8 +90,8 @@ export default function LoginPage() {
           </button>
 
           {/* Info */}
-          <p className="mt-4 text-center text-gray-500 text-xs">
-            Sign in with your @mayo.edu account for instant access to department protocols.
+          <p className="mt-4 text-center text-gray-400 text-sm">
+            Sign in with your <span className="font-semibold text-blue-400">@mayo.edu</span> account for instant access to department protocols.
           </p>
         </div>
       </div>
