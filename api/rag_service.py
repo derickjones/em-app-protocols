@@ -23,12 +23,14 @@ PMC_CORPUS_ID = os.environ.get("PMC_CORPUS_ID", "6838716034162098176")
 LITFL_CORPUS_ID = os.environ.get("LITFL_CORPUS_ID", "7991637538768945152")
 REBELEM_CORPUS_ID = os.environ.get("REBELEM_CORPUS_ID", "1152921504606846976")
 ALIEM_CORPUS_ID = os.environ.get("ALIEM_CORPUS_ID", "4611686018427387904")
+PERSONAL_CORPUS_ID = os.environ.get("PERSONAL_CORPUS_ID", "2842897264777625600")
 PROCESSED_BUCKET = f"{PROJECT_ID}-protocols-processed"
 WIKEM_BUCKET = f"{PROJECT_ID}-wikem"
 PMC_BUCKET = f"{PROJECT_ID}-pmc"
 LITFL_BUCKET = f"{PROJECT_ID}-litfl"
 REBELEM_BUCKET = f"{PROJECT_ID}-rebelem"
 ALIEM_BUCKET = f"{PROJECT_ID}-aliem"
+PERSONAL_BUCKET = os.environ.get("PERSONAL_BUCKET", f"{PROJECT_ID}-personal")
 
 
 class RAGService:
@@ -44,12 +46,14 @@ class RAGService:
         self.litfl_corpus_id = LITFL_CORPUS_ID
         self.rebelem_corpus_id = REBELEM_CORPUS_ID
         self.aliem_corpus_id = ALIEM_CORPUS_ID
+        self.personal_corpus_id = PERSONAL_CORPUS_ID
         self.corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{CORPUS_ID}"
         self.wikem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{WIKEM_CORPUS_ID}"
         self.pmc_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{PMC_CORPUS_ID}" if PMC_CORPUS_ID else None
         self.litfl_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{LITFL_CORPUS_ID}" if LITFL_CORPUS_ID else None
         self.rebelem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{REBELEM_CORPUS_ID}" if REBELEM_CORPUS_ID else None
         self.aliem_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{ALIEM_CORPUS_ID}" if ALIEM_CORPUS_ID else None
+        self.personal_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{PERSONAL_CORPUS_ID}" if PERSONAL_CORPUS_ID else None
         self.storage_client = storage.Client()
         self._metadata_cache = {}
     
@@ -127,6 +131,11 @@ class RAGService:
             parts = source.replace("gs://", "").split("/")
             filename = parts[-1] if parts else "unknown"
             return f"aliem-{filename.replace('.md', '')}"
+        elif source_type == "personal":
+            # gs://bucket/{uid}/{file_id}.txt → personal-{file_id}
+            parts = source.replace("gs://", "").split("/")
+            filename = parts[-1] if parts else "unknown"
+            return f"personal-{filename.replace('.txt', '')}"
         else:
             # gs://bucket/enterprise/ed/bundle/protocol_id/extracted_text.txt → protocol_id
             parts = source.replace("gs://", "").split("/")
@@ -599,10 +608,10 @@ ANSWER:"""
         
         return images
     
-    def _retrieve_multi_source(self, query: str, sources: List[str] = None) -> List[Dict]:
+    def _retrieve_multi_source(self, query: str, sources: List[str] = None, personal_user_id: str = None) -> List[Dict]:
         """
         Retrieve contexts from multiple corpora in parallel.
-        Each context is tagged with source_type ('local', 'wikem', or 'pmc').
+        Each context is tagged with source_type ('local', 'wikem', 'pmc', 'personal', etc.).
         Results are merged and sorted by relevance score.
         """
         if sources is None:
@@ -678,7 +687,22 @@ ANSWER:"""
                 print(f"ALiEM corpus query failed: {e}")
                 return []
         
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        def fetch_personal():
+            try:
+                if self.personal_corpus_name and personal_user_id:
+                    contexts = self._retrieve_contexts(query, self.personal_corpus_name, top_k=15)
+                    # Filter to only this user's files
+                    user_prefix = f"gs://{PERSONAL_BUCKET}/{personal_user_id}/"
+                    user_contexts = [c for c in contexts if c.get("source", "").startswith(user_prefix)]
+                    for ctx in user_contexts:
+                        ctx["source_type"] = "personal"
+                    return user_contexts[:5]
+                return []
+            except Exception as e:
+                print(f"Personal corpus query failed: {e}")
+                return []
+        
+        with ThreadPoolExecutor(max_workers=7) as executor:
             futures = {}
             if "local" in sources:
                 futures["local"] = executor.submit(fetch_local)
@@ -692,6 +716,8 @@ ANSWER:"""
                 futures["rebelem"] = executor.submit(fetch_rebelem)
             if "aliem" in sources:
                 futures["aliem"] = executor.submit(fetch_aliem)
+            if "personal" in sources and personal_user_id:
+                futures["personal"] = executor.submit(fetch_personal)
             
             for key, future in futures.items():
                 try:
@@ -707,7 +733,8 @@ ANSWER:"""
 
     def query(self, query: str, include_images: bool = True, sources: List[str] = None,
               pmc_journals: List[str] = None,
-              enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None) -> Dict:
+              enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None,
+              personal_user_id: str = None) -> Dict:
         """
         Execute a full RAG query with multi-source retrieval
         
@@ -724,7 +751,7 @@ ANSWER:"""
             dict with answer, images, citations
         """
         # Step 1: Retrieve contexts from all corpora in parallel
-        contexts = self._retrieve_multi_source(query, sources)
+        contexts = self._retrieve_multi_source(query, sources, personal_user_id=personal_user_id)
         
         if not contexts:
             return {
@@ -806,7 +833,8 @@ ANSWER:"""
 
     def query_stream(self, query: str, include_images: bool = True, sources: List[str] = None,
                      pmc_journals: List[str] = None,
-                     enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None):
+                     enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None,
+                     personal_user_id: str = None):
         """
         Execute a full RAG query with streaming answer generation.
         
@@ -818,7 +846,7 @@ ANSWER:"""
         start = _time.time()
 
         # Step 1: Retrieve contexts (same as non-streaming)
-        contexts = self._retrieve_multi_source(query, sources)
+        contexts = self._retrieve_multi_source(query, sources, personal_user_id=personal_user_id)
 
         if not contexts:
             yield {"type": "chunk", "text": "No relevant protocols found for this query."}

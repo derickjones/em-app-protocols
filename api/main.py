@@ -21,6 +21,7 @@ from google.cloud import storage
 from rag_service import RAGService
 from protocol_service import ProtocolService
 from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_ed_access, require_admin, verify_firebase_token, check_email_verified
+from personal_service import PersonalService
 
 # RAG Configuration
 PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
@@ -46,6 +47,7 @@ app.add_middleware(
 # Initialize services
 rag_service = RAGService()
 protocol_service = ProtocolService()
+personal_service = PersonalService()
 
 # In-memory store for reindex task progress
 reindex_tasks: Dict[str, Dict[str, Any]] = {}
@@ -131,7 +133,7 @@ class QueryRequest(BaseModel):
     ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
-    sources: List[str] = Field(default=["local", "wikem", "pmc", "litfl", "rebelem", "aliem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature), 'litfl' (LITFL clinical education), 'rebelem' (REBEL EM evidence-based reviews), 'aliem' (ALiEM PV Cards & MEdIC Series)")
+    sources: List[str] = Field(default=["local", "wikem", "pmc", "litfl", "rebelem", "aliem"], description="Sources to search: 'local' (department protocols), 'wikem' (general ED reference), 'pmc' (peer-reviewed EM literature), 'litfl' (LITFL clinical education), 'rebelem' (REBEL EM evidence-based reviews), 'aliem' (ALiEM PV Cards & MEdIC Series), 'personal' (user-uploaded files)")
     pmc_journals: Optional[List[str]] = Field(default=None, description="PMC journal names to include. None = all journals (no filter).")
     enterprise_id: Optional[str] = Field(default=None, description="Enterprise ID override (super_admin only)")
 
@@ -687,6 +689,33 @@ def _build_citations(raw_citations: list) -> list:
             })
             continue
 
+        # Handle personal file citations
+        if source_type == "personal":
+            parts = source.replace("gs://", "").split("/")
+            # path: clinical-assistant-457902-personal/{uid}/{file_id}.txt
+            file_id = parts[-1].replace(".txt", "") if parts else "unknown"
+            personal_key = f"personal-{file_id}"
+            if personal_key in seen_protocols:
+                continue
+            seen_protocols.add(personal_key)
+            # Look up original filename from Firestore
+            display_name = file_id
+            try:
+                uid = parts[1] if len(parts) > 1 else ""
+                if uid:
+                    doc = db.collection("users").document(uid).collection("personal_files").document(file_id).get()
+                    if doc.exists:
+                        display_name = doc.to_dict().get("filename", file_id)
+            except Exception:
+                pass
+            citations.append({
+                "protocol_id": display_name,
+                "source_uri": "",  # No external link for personal files
+                "relevance_score": c["score"],
+                "source_type": "personal"
+            })
+            continue
+
         # Handle local protocol citations
         parts = source.replace("gs://", "").split("/")
         if "rag-input" in source:
@@ -737,6 +766,8 @@ async def query_protocols(
     if user and user.role == "super_admin" and not enterprise_id and request.enterprise_id:
         enterprise_id = request.enterprise_id
 
+    personal_user_id = user.uid if user and "personal" in request.sources else None
+
     def event_stream():
         try:
             for event in rag_service.query_stream(
@@ -746,7 +777,8 @@ async def query_protocols(
                 pmc_journals=request.pmc_journals,
                 enterprise_id=enterprise_id,
                 ed_ids=ed_ids,
-                bundle_ids=request.bundle_ids
+                bundle_ids=request.bundle_ids,
+                personal_user_id=personal_user_id,
             ):
                 if event["type"] == "chunk":
                     yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
@@ -2086,6 +2118,80 @@ async def submit_feedback(req: FeedbackRequest):
         return {"status": "ok", "id": doc_ref.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to store feedback: {str(e)}")
+
+
+# ============================================================================
+# PERSONAL RAG ENDPOINTS
+# ============================================================================
+
+@app.get("/personal/quota")
+async def personal_quota(user: UserProfile = Depends(get_verified_user)):
+    """Get the user's personal file quota usage."""
+    try:
+        quota = personal_service.get_quota(user.uid)
+        return quota
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/personal/files")
+async def personal_files(user: UserProfile = Depends(get_verified_user)):
+    """List the user's personal uploaded files."""
+    try:
+        files = personal_service.list_files(user.uid)
+        return {"files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/personal/upload")
+async def personal_upload(
+    file: UploadFile = File(...),
+    user: UserProfile = Depends(get_verified_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """
+    Upload a personal file for RAG indexing.
+
+    Accepts PDF, PNG, JPG, TXT, MD files up to 20 MB.
+    Text extraction and indexing happen in the background.
+    Returns immediately with file metadata and status='processing'.
+    """
+    try:
+        file_bytes = await file.read()
+        result = personal_service.upload_and_process(
+            uid=user.uid,
+            filename=file.filename or "unknown",
+            content_type=file.content_type or "application/octet-stream",
+            file_bytes=file_bytes,
+        )
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/personal/files/{file_id}")
+async def personal_delete(file_id: str, user: UserProfile = Depends(get_verified_user)):
+    """Delete a single personal file and remove it from the RAG corpus."""
+    try:
+        personal_service.delete_file(user.uid, file_id)
+        return {"status": "deleted", "file_id": file_id}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/personal/files")
+async def personal_delete_all(user: UserProfile = Depends(get_verified_user)):
+    """Delete ALL personal files for the current user."""
+    try:
+        count = personal_service.delete_all_files(user.uid)
+        return {"status": "deleted", "count": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Run with: uvicorn main:app --reload

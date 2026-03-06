@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
@@ -108,6 +108,7 @@ export default function Home() {
   const [litflEnabled, setLitflEnabled] = useState(true);
   const [rebelemEnabled, setRebelemEnabled] = useState(true);
   const [aliemEnabled, setAliemEnabled] = useState(true);
+  const [personalEnabled, setPersonalEnabled] = useState(false);
   const [selectedJournals, setSelectedJournals] = useState<Set<string>>(new Set(ALL_PMC_JOURNAL_KEYS));
   const [wikemExpanded, setWikemExpanded] = useState(false);
   const [pmcExpanded, setPmcExpanded] = useState(false);
@@ -161,6 +162,7 @@ export default function Home() {
     if (litflEnabled) sources.push("litfl");
     if (rebelemEnabled) sources.push("rebelem");
     if (aliemEnabled) sources.push("aliem");
+    if (personalEnabled && user) sources.push("personal");
     return sources;
   };
 
@@ -1415,6 +1417,52 @@ export default function Home() {
 
           </div>
 
+          {/* My Files — Personal RAG toggle */}
+          {user && (
+            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
+              <div className="p-3">
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <FolderOpen className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-violet-400' : 'text-violet-600'}`} />
+                  <span className={`text-xs font-medium tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    My Files
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setPersonalEnabled(!personalEnabled)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                    darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                      personalEnabled
+                        ? 'bg-violet-500 border-violet-500'
+                        : darkMode ? 'border-neutral-600' : 'border-gray-300'
+                    }`}
+                  >
+                    {personalEnabled && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <span className={`flex-1 text-left font-medium ${personalEnabled ? darkMode ? 'text-gray-200' : 'text-gray-700' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    Include in search
+                  </span>
+                </button>
+
+                <a
+                  href="/personal"
+                  className={`mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    darkMode
+                      ? 'bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 border border-violet-600/30'
+                      : 'bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Manage Files
+                </a>
+              </div>
+            </div>
+          )}
+
           {/* Mayo Protocols — Request Access (sidebar) */}
           {user && !hasAccess && (
             <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
@@ -2217,17 +2265,20 @@ export default function Home() {
                         const isLITFL = cite.source_type === "litfl";
                         const isREBELEM = cite.source_type === "rebelem";
                         const isALiEM = cite.source_type === "aliem";
+                        const isPersonal = cite.source_type === "personal";
+                        const Wrapper = isPersonal ? "div" as const : "a" as const;
+                        const linkProps = isPersonal ? {} : { href: cite.source_uri, target: "_blank", rel: "noopener noreferrer" };
                         return (
-                          <a
+                          <Wrapper
                             key={idx}
                             id={`cite-${idx + 1}`}
-                            href={cite.source_uri}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${darkMode ? 'text-blue-400 hover:bg-neutral-800' : 'text-blue-600 hover:bg-white hover:shadow-sm'}`}
+                            {...linkProps}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${isPersonal ? (darkMode ? 'text-violet-400 bg-neutral-800/50' : 'text-violet-600 bg-violet-50/50') : (darkMode ? 'text-blue-400 hover:bg-neutral-800' : 'text-blue-600 hover:bg-white hover:shadow-sm')}`}
                           >
                             <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${
-                              isPMC
+                              isPersonal
+                                ? (darkMode ? 'bg-violet-900/50 text-violet-300' : 'bg-violet-100 text-violet-700')
+                                : isPMC
                                 ? (darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
                                 : isLITFL
                                   ? (darkMode ? 'bg-orange-900/50 text-orange-300' : 'bg-orange-100 text-orange-700')
@@ -2241,7 +2292,9 @@ export default function Home() {
                             }`}>{idx + 1}</span>
                             <span className="flex-1 truncate">{cite.protocol_id.replace(/_/g, " ")}</span>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${
-                              isPMC
+                              isPersonal
+                                ? (darkMode ? 'bg-violet-900/50 text-violet-400' : 'bg-violet-100 text-violet-700')
+                                : isPMC
                                 ? (darkMode ? 'bg-purple-900/50 text-purple-400' : 'bg-purple-100 text-purple-700')
                                 : isLITFL
                                   ? (darkMode ? 'bg-orange-900/50 text-orange-400' : 'bg-orange-100 text-orange-700')
@@ -2253,12 +2306,14 @@ export default function Home() {
                                         ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
                                         : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
                             }`}>
-                              {isPMC ? '📚 PMC' : isLITFL ? '⚡ LITFL' : isREBELEM ? '🔥 REBEL' : isALiEM ? '🎓 ALiEM' : isWikEM ? 'WikEM' : 'Local'}
+                              {isPersonal ? '📁 My File' : isPMC ? '📚 PMC' : isLITFL ? '⚡ LITFL' : isREBELEM ? '🔥 REBEL' : isALiEM ? '🎓 ALiEM' : isWikEM ? 'WikEM' : 'Local'}
                             </span>
-                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
+                            {!isPersonal && (
+                              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            )}
+                          </Wrapper>
                         );
                       })}
                     </div>
