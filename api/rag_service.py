@@ -207,6 +207,8 @@ class RAGService:
                 source_label = "REBEL EM"
             elif source_type == "aliem":
                 source_label = "ALiEM"
+            elif source_type == "personal":
+                source_label = "User Upload"
             else:
                 source_label = "Local Protocol"
             
@@ -789,8 +791,8 @@ ANSWER:"""
             
             filtered_contexts = []
             for ctx in contexts:
-                if ctx.get("source_type") in ("wikem", "pmc", "litfl", "rebelem", "aliem"):
-                    # Always keep external source results (not filtered by ED path)
+                if ctx.get("source_type") in ("wikem", "pmc", "litfl", "rebelem", "aliem", "personal"):
+                    # Always keep external/personal source results (not filtered by ED path)
                     filtered_contexts.append(ctx)
                 elif any(prefix in ctx.get("source", "") for prefix in prefixes):
                     filtered_contexts.append(ctx)
@@ -880,7 +882,7 @@ ANSWER:"""
 
             filtered_contexts = []
             for ctx in contexts:
-                if ctx.get("source_type") in ("wikem", "pmc", "litfl", "rebelem", "aliem"):
+                if ctx.get("source_type") in ("wikem", "pmc", "litfl", "rebelem", "aliem", "personal"):
                     filtered_contexts.append(ctx)
                 elif any(prefix in ctx.get("source", "") for prefix in prefixes):
                     filtered_contexts.append(ctx)
