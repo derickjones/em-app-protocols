@@ -185,6 +185,7 @@ export default function Home() {
         litflEnabled,
         rebelemEnabled,
         aliemEnabled,
+        personalEnabled,
         selectedJournals: Array.from(selectedJournals),
       }));
       setUniverseDirty(false);
@@ -238,6 +239,7 @@ export default function Home() {
           if (typeof prefs.litflEnabled === 'boolean') setLitflEnabled(prefs.litflEnabled);
           if (typeof prefs.rebelemEnabled === 'boolean') setRebelemEnabled(prefs.rebelemEnabled);
           if (typeof prefs.aliemEnabled === 'boolean') setAliemEnabled(prefs.aliemEnabled);
+          if (typeof prefs.personalEnabled === 'boolean') setPersonalEnabled(prefs.personalEnabled);
           if (Array.isArray(prefs.selectedJournals)) {
             setSelectedJournals(new Set(prefs.selectedJournals));
           }
@@ -1454,7 +1456,7 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => setPersonalEnabled(!personalEnabled)}
+                  onClick={() => { setPersonalEnabled(!personalEnabled); setUniverseDirty(true); }}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                     darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
                   }`}
