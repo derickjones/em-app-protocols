@@ -444,8 +444,14 @@ class PersonalService:
     # ─── Signed URL ──────────────────────────────────────────────────────
 
     def get_signed_url(self, uid: str, file_id: str, expiration_minutes: int = 60) -> str:
-        """Generate a signed URL for the original uploaded file."""
+        """Generate a signed URL for the original uploaded file.
+        Uses the IAM signBlob API which works with Cloud Run's default SA."""
         import datetime
+        import google.auth
+        from google.auth import iam
+        from google.auth.transport import requests as google_auth_requests
+        import google.oauth2.service_account
+
         doc = self.db.collection("users").document(uid).collection("personal_files").document(file_id).get()
         if not doc.exists:
             raise FileNotFoundError(f"File {file_id} not found")
@@ -458,12 +464,38 @@ class PersonalService:
         if not blob.exists():
             raise FileNotFoundError(f"Original file not found in GCS")
 
+        # On Cloud Run, default credentials can't sign directly.
+        # Use IAM signBlob via service_account_email.
+        credentials, _ = google.auth.default()
+        sa_email = getattr(credentials, "service_account_email", None)
+        if not sa_email:
+            try:
+                resp = requests.get(
+                    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
+                    headers={"Metadata-Flavor": "Google"}, timeout=2
+                )
+                sa_email = resp.text
+            except Exception:
+                sa_email = f"{PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+        signer = iam.Signer(
+            request=google_auth_requests.Request(),
+            credentials=credentials,
+            service_account_email=sa_email,
+        )
+        signing_creds = google.oauth2.service_account.Credentials(
+            signer=signer,
+            service_account_email=sa_email,
+            token_uri="https://oauth2.googleapis.com/token",
+        )
+
         url = blob.generate_signed_url(
             version="v4",
             expiration=datetime.timedelta(minutes=expiration_minutes),
             method="GET",
             response_type=content_type,
             response_disposition=f'inline; filename="{filename}"',
+            credentials=signing_creds,
         )
         return url
 
