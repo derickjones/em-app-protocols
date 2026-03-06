@@ -169,6 +169,13 @@ class UserProfileResponse(BaseModel):
     enterpriseName: Optional[str]
     role: str
     edAccess: List[str]
+    accessStatus: str = "approved"
+
+
+class AccessRequestCreate(BaseModel):
+    """Request to submit an access request"""
+    name: str = Field(..., description="Full name", min_length=1)
+    mayo_email: str = Field(..., description="Mayo email address (must end in @mayo.edu)")
 
 
 # ----- Endpoints -----
@@ -202,6 +209,262 @@ async def get_current_user_profile(user: UserProfile = Depends(get_current_user)
     Creates user if first login with valid domain
     """
     return UserProfileResponse(**user.to_dict())
+
+
+# ----- Access Request Endpoints -----
+
+@app.post("/access-requests")
+async def create_access_request(
+    data: AccessRequestCreate,
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    Submit an access request. User must be signed in with Google.
+    The mayo_email must end in @mayo.edu.
+    """
+    # Validate mayo email
+    if not data.mayo_email.lower().strip().endswith("@mayo.edu"):
+        raise HTTPException(
+            status_code=400,
+            detail="Mayo email must end in @mayo.edu"
+        )
+    
+    mayo_email = data.mayo_email.lower().strip()
+    name = data.name.strip()
+    
+    # Check for existing pending request from this user
+    existing_query = db.collection("access_requests").where(
+        "google_uid", "==", user.uid
+    ).where("status", "==", "pending")
+    existing = list(existing_query.stream())
+    
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have a pending access request. Please allow 3-5 business days for review."
+        )
+    
+    # Create the access request
+    request_ref = db.collection("access_requests").document()
+    request_data = {
+        "google_email": user.email,
+        "google_uid": user.uid,
+        "mayo_email": mayo_email,
+        "name": name,
+        "status": "pending",
+        "requested_at": firestore.SERVER_TIMESTAMP,
+        "reviewed_by": None,
+        "reviewed_at": None,
+    }
+    request_ref.set(request_data)
+    
+    # Update user's access status to pending
+    user_ref = db.collection("users").document(user.uid)
+    user_ref.update({"access_status": "pending"})
+    
+    # Create in-app notification for owners
+    notification_ref = db.collection("notifications").document()
+    notification_ref.set({
+        "type": "access_request",
+        "message": f"New access request from {name} ({user.email})",
+        "target_role": "owner",
+        "read_by": [],
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "reference_id": request_ref.id,
+    })
+    
+    return {
+        "status": "submitted",
+        "id": request_ref.id,
+        "message": "Your request has been submitted. Please allow 3-5 business days for review."
+    }
+
+
+@app.get("/access-requests")
+async def list_access_requests(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    List access requests. Super admins see all.
+    """
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Only owners can view access requests")
+    
+    try:
+        requests_ref = db.collection("access_requests")
+        
+        if status_filter:
+            query = requests_ref.where("status", "==", status_filter)
+        else:
+            query = requests_ref
+        
+        # Order by requested_at desc
+        query = query.order_by("requested_at", direction=firestore.Query.DESCENDING)
+        
+        results = []
+        for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+            # Convert timestamps to strings
+            if data.get("requested_at"):
+                data["requested_at"] = data["requested_at"].isoformat() if hasattr(data["requested_at"], "isoformat") else str(data["requested_at"])
+            if data.get("reviewed_at"):
+                data["reviewed_at"] = data["reviewed_at"].isoformat() if hasattr(data["reviewed_at"], "isoformat") else str(data["reviewed_at"])
+            results.append(data)
+        
+        return {"requests": results}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list access requests: {str(e)}")
+
+
+@app.patch("/access-requests/{request_id}")
+async def update_access_request(
+    request_id: str,
+    action: str = Query(..., description="Action: 'approve' or 'deny'"),
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    Approve or deny an access request. Super admins only.
+    On approve: updates the user's access_status and links to Mayo enterprise.
+    """
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Only owners can manage access requests")
+    
+    if action not in ["approve", "deny"]:
+        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'deny'")
+    
+    try:
+        request_ref = db.collection("access_requests").document(request_id)
+        request_doc = request_ref.get()
+        
+        if not request_doc.exists:
+            raise HTTPException(status_code=404, detail="Access request not found")
+        
+        request_data = request_doc.to_dict()
+        
+        if request_data.get("status") != "pending":
+            raise HTTPException(status_code=400, detail="This request has already been processed")
+        
+        # Update the request
+        request_ref.update({
+            "status": "approved" if action == "approve" else "denied",
+            "reviewed_by": user.uid,
+            "reviewed_at": firestore.SERVER_TIMESTAMP,
+        })
+        
+        # Update the user document
+        google_uid = request_data.get("google_uid")
+        if google_uid:
+            user_ref = db.collection("users").document(google_uid)
+            user_doc = user_ref.get()
+            
+            if action == "approve":
+                # Look up Mayo enterprise
+                from auth_service import get_enterprise_by_domain, MAYO_DOMAIN
+                enterprise = get_enterprise_by_domain(MAYO_DOMAIN)
+                
+                update_data = {
+                    "access_status": "approved",
+                    "name": request_data.get("name", ""),
+                    "mayo_email": request_data.get("mayo_email", ""),
+                }
+                
+                if enterprise:
+                    eds_ref = db.collection("enterprises").document(enterprise["id"]).collection("eds")
+                    all_eds = [doc.id for doc in eds_ref.stream()]
+                    update_data["enterprise_id"] = enterprise["id"]
+                    update_data["enterprise_name"] = enterprise.get("name", "")
+                    update_data["ed_access"] = all_eds
+                
+                if user_doc.exists:
+                    user_ref.update(update_data)
+                else:
+                    update_data["email"] = request_data.get("google_email", "")
+                    update_data["role"] = "user"
+                    update_data["created_at"] = firestore.SERVER_TIMESTAMP
+                    user_ref.set(update_data)
+            else:
+                # Denied
+                if user_doc.exists:
+                    user_ref.update({"access_status": "denied"})
+        
+        return {
+            "status": "approved" if action == "approve" else "denied",
+            "request_id": request_id,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update access request: {str(e)}")
+
+
+# ----- Notification Endpoints -----
+
+@app.get("/notifications")
+async def list_notifications(
+    user: UserProfile = Depends(get_current_user)
+):
+    """
+    Get notifications for the current user based on their role.
+    """
+    if user.role not in ["super_admin", "admin"]:
+        raise HTTPException(status_code=403, detail="No notifications for this role")
+    
+    try:
+        target_role = "owner" if user.role == "super_admin" else "admin"
+        
+        notifications_ref = db.collection("notifications").where(
+            "target_role", "==", target_role
+        ).order_by("created_at", direction=firestore.Query.DESCENDING).limit(50)
+        
+        results = []
+        unread_count = 0
+        for doc in notifications_ref.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+            is_read = user.uid in data.get("read_by", [])
+            data["read"] = is_read
+            if not is_read:
+                unread_count += 1
+            if data.get("created_at"):
+                data["created_at"] = data["created_at"].isoformat() if hasattr(data["created_at"], "isoformat") else str(data["created_at"])
+            # Remove read_by array from response (internal detail)
+            data.pop("read_by", None)
+            results.append(data)
+        
+        return {"notifications": results, "unread_count": unread_count}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list notifications: {str(e)}")
+
+
+@app.patch("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    user: UserProfile = Depends(get_current_user)
+):
+    """Mark a notification as read for the current user."""
+    try:
+        notif_ref = db.collection("notifications").document(notification_id)
+        notif_doc = notif_ref.get()
+        
+        if not notif_doc.exists:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        
+        # Add user's UID to read_by array
+        notif_ref.update({
+            "read_by": firestore.ArrayUnion([user.uid])
+        })
+        
+        return {"status": "read"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to mark notification: {str(e)}")
 
 
 @app.get("/enterprise")

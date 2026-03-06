@@ -93,11 +93,72 @@ def create_super_admin(email: str, uid: str):
     print(f"✅ Created super admin: {email}")
 
 
+def seed_super_admin_by_email(email: str):
+    """
+    Seed a super admin by email address.
+    
+    If a user doc already exists (matched by email), update its role to super_admin.
+    Otherwise, create a placeholder doc keyed by email so that on first sign-in
+    the auth service will find it and migrate it to the real UID.
+    """
+    # Check if a user doc with this email already exists
+    query = db.collection("users").where("email", "==", email).limit(1)
+    matches = list(query.stream())
+    
+    if matches:
+        # Update existing doc to super_admin
+        doc = matches[0]
+        doc.reference.update({
+            "role": "super_admin",
+            "access_status": "approved",
+        })
+        print(f"✅ Updated existing user to super_admin: {email} (doc: {doc.id})")
+    else:
+        # Create a placeholder doc keyed by a deterministic ID (email hash)
+        # The auth service will find this by email query on first login and migrate it
+        import hashlib
+        placeholder_id = f"seed-{hashlib.sha256(email.encode()).hexdigest()[:12]}"
+        
+        # Determine enterprise from email domain
+        email_domain = email.split("@")[-1] if "@" in email else ""
+        enterprise_id = None
+        enterprise_name = None
+        ed_access = []
+        
+        if email_domain == "mayo.edu":
+            enterprise_id = "mayo-clinic"
+            enterprise_name = "Mayo Clinic"
+            # Get all EDs for mayo-clinic
+            eds_ref = db.collection("enterprises").document("mayo-clinic").collection("eds")
+            ed_access = [doc.id for doc in eds_ref.stream()]
+        
+        user_ref = db.collection("users").document(placeholder_id)
+        user_ref.set({
+            "email": email,
+            "role": "super_admin",
+            "ed_access": ed_access,
+            "enterprise_id": enterprise_id,
+            "enterprise_name": enterprise_name,
+            "access_status": "approved",
+            "created_at": firestore.SERVER_TIMESTAMP,
+        })
+        print(f"✅ Created super_admin placeholder for: {email} (doc: {placeholder_id})")
+        print(f"   On first Google sign-in, this will be migrated to the real Firebase UID.")
+
+
+# Default super admins to seed
+SEED_SUPER_ADMINS = [
+    "jones.derick@mayo.edu",
+    "morey.jacob@mayo.edu",
+]
+
+
 if __name__ == "__main__":
     print("\n🌱 Seeding Firestore database...\n")
     seed_enterprises()
-    print("\n✅ Seed complete!\n")
     
-    print("To create a super admin, call:")
-    print('  create_super_admin("your-email@gmail.com", "firebase-uid")')
-    print("\nYou can get the UID from Firebase Console → Authentication → Users")
+    print("\n👑 Seeding super admins...\n")
+    for admin_email in SEED_SUPER_ADMINS:
+        seed_super_admin_by_email(admin_email)
+    
+    print("\n✅ Seed complete!\n")

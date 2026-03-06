@@ -17,6 +17,9 @@ db = firestore.Client(project="clinical-assistant-457902")
 # HTTP Bearer scheme for extracting tokens
 security = HTTPBearer(auto_error=False)
 
+# Mayo email domain for auto-approval
+MAYO_DOMAIN = "mayo.edu"
+
 
 class UserProfile:
     """User profile with enterprise and ED access"""
@@ -27,7 +30,8 @@ class UserProfile:
         enterprise_id: Optional[str] = None,
         enterprise_name: Optional[str] = None,
         role: str = "user",
-        ed_access: list = None
+        ed_access: list = None,
+        access_status: str = "approved",
     ):
         self.uid = uid
         self.email = email
@@ -35,6 +39,7 @@ class UserProfile:
         self.enterprise_name = enterprise_name
         self.role = role
         self.ed_access = ed_access or []
+        self.access_status = access_status
 
     def to_dict(self):
         return {
@@ -44,6 +49,7 @@ class UserProfile:
             "enterpriseName": self.enterprise_name,
             "role": self.role,
             "edAccess": self.ed_access,
+            "accessStatus": self.access_status,
         }
 
 
@@ -96,7 +102,10 @@ def get_enterprise_by_domain(email_domain: str) -> Optional[dict]:
 
 def get_or_create_user(decoded_token: dict) -> UserProfile:
     """
-    Get existing user or create new user based on domain validation
+    Get existing user or create new user based on domain validation.
+    
+    @mayo.edu Google accounts are auto-approved.
+    Non-mayo accounts must submit an access request and be approved by an owner.
     """
     # Firebase tokens use 'sub' for user ID, but may also have 'uid' or 'user_id'
     uid = decoded_token.get("sub") or decoded_token.get("uid") or decoded_token.get("user_id")
@@ -120,7 +129,8 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
             enterprise_id=data.get("enterprise_id"),
             enterprise_name=data.get("enterprise_name"),
             role=data.get("role", "user"),
-            ed_access=data.get("ed_access", [])
+            ed_access=data.get("ed_access", []),
+            access_status=data.get("access_status", "approved"),
         )
     
     # No doc found by UID — check if a record exists by email
@@ -143,42 +153,88 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
                 enterprise_id=existing_data.get("enterprise_id"),
                 enterprise_name=existing_data.get("enterprise_name"),
                 role=existing_data.get("role", "user"),
-                ed_access=existing_data.get("ed_access", [])
+                ed_access=existing_data.get("ed_access", []),
+                access_status=existing_data.get("access_status", "approved"),
             )
     
-    # Truly new user - validate domain
+    # Truly new user — check email domain
     email_domain = email.split("@")[-1] if "@" in email else ""
-    enterprise = get_enterprise_by_domain(email_domain)
+    is_mayo = email_domain == MAYO_DOMAIN
     
-    if not enterprise:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Email domain '{email_domain}' is not registered with any enterprise. Contact your administrator."
+    if is_mayo:
+        # Auto-approve @mayo.edu Google sign-ins
+        enterprise = get_enterprise_by_domain(email_domain)
+        
+        if enterprise:
+            # Get all EDs for this enterprise (default: access to all)
+            eds_ref = db.collection("enterprises").document(enterprise["id"]).collection("eds")
+            all_eds = [doc.id for doc in eds_ref.stream()]
+            
+            user_data = {
+                "email": email,
+                "enterprise_id": enterprise["id"],
+                "enterprise_name": enterprise.get("name", ""),
+                "role": "user",
+                "ed_access": all_eds,
+                "access_status": "approved",
+                "created_at": firestore.SERVER_TIMESTAMP,
+            }
+            user_ref.set(user_data)
+            
+            return UserProfile(
+                uid=uid,
+                email=email,
+                enterprise_id=enterprise["id"],
+                enterprise_name=enterprise.get("name", ""),
+                role="user",
+                ed_access=all_eds,
+                access_status="approved",
+            )
+        else:
+            # mayo.edu but no enterprise configured yet — create as approved with no enterprise
+            user_data = {
+                "email": email,
+                "enterprise_id": None,
+                "enterprise_name": None,
+                "role": "user",
+                "ed_access": [],
+                "access_status": "approved",
+                "created_at": firestore.SERVER_TIMESTAMP,
+            }
+            user_ref.set(user_data)
+            
+            return UserProfile(
+                uid=uid,
+                email=email,
+                enterprise_id=None,
+                enterprise_name=None,
+                role="user",
+                ed_access=[],
+                access_status="approved",
+            )
+    else:
+        # Non-mayo email — create user with "no_access" status
+        # They'll need to submit an access request and be approved by an owner
+        user_data = {
+            "email": email,
+            "enterprise_id": None,
+            "enterprise_name": None,
+            "role": "user",
+            "ed_access": [],
+            "access_status": "no_access",
+            "created_at": firestore.SERVER_TIMESTAMP,
+        }
+        user_ref.set(user_data)
+        
+        return UserProfile(
+            uid=uid,
+            email=email,
+            enterprise_id=None,
+            enterprise_name=None,
+            role="user",
+            ed_access=[],
+            access_status="no_access",
         )
-    
-    # Get all EDs for this enterprise (default: access to all)
-    eds_ref = db.collection("enterprises").document(enterprise["id"]).collection("eds")
-    all_eds = [doc.id for doc in eds_ref.stream()]
-    
-    # Create new user
-    user_data = {
-        "email": email,
-        "enterprise_id": enterprise["id"],
-        "enterprise_name": enterprise.get("name", ""),
-        "role": "user",
-        "ed_access": all_eds,
-        "created_at": firestore.SERVER_TIMESTAMP,
-    }
-    user_ref.set(user_data)
-    
-    return UserProfile(
-        uid=uid,
-        email=email,
-        enterprise_id=enterprise["id"],
-        enterprise_name=enterprise.get("name", ""),
-        role="user",
-        ed_access=all_eds
-    )
 
 
 async def get_current_user(
