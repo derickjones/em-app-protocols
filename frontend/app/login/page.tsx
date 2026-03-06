@@ -91,7 +91,7 @@ export default function LoginPage() {
 
           {/* Info */}
           <p className="mt-4 text-center text-gray-500 text-xs">
-            Sign in to search open EM resources. Mayo Clinic staff get access to department protocols automatically.
+            Sign in with your @mayo.edu account for instant access to department protocols.
           </p>
         </div>
       </div>
