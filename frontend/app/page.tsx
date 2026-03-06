@@ -928,14 +928,28 @@ export default function Home() {
           const num = parseInt(m[1], 10);
           const cite = citations[num - 1];
           const label = cite ? cite.protocol_id.replace(/_/g, " ") : `Source ${num}`;
+          const isPersonalCite = cite?.source_type === "personal";
+          const citeHref = isPersonalCite ? "#" : (cite?.source_uri || `#cite-${num}`);
           return (
             <span key={i} className="cite-ref-wrapper">
               <a
-                href={cite?.source_uri || `#cite-${num}`}
-                target={cite?.source_uri ? "_blank" : undefined}
-                rel={cite?.source_uri ? "noopener noreferrer" : undefined}
-                onClick={(e) => {
-                  if (!cite?.source_uri) {
+                href={citeHref}
+                target={(!isPersonalCite && cite?.source_uri) ? "_blank" : undefined}
+                rel={(!isPersonalCite && cite?.source_uri) ? "noopener noreferrer" : undefined}
+                onClick={async (e) => {
+                  if (isPersonalCite && cite?.source_uri) {
+                    e.preventDefault();
+                    try {
+                      const token = await user?.getIdToken();
+                      const res = await fetch(`${API_URL}${cite.source_uri}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data.url) window.open(data.url, "_blank");
+                      }
+                    } catch (err) { console.error("Personal download failed:", err); }
+                  } else if (!cite?.source_uri) {
                     e.preventDefault();
                     document.getElementById(`cite-${num}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }
@@ -969,14 +983,28 @@ export default function Home() {
           const num = parseInt(m[1], 10);
           const cite = citations[num - 1];
           const label = cite ? cite.protocol_id.replace(/_/g, " ") : `Source ${num}`;
+          const isPersonalCite = cite?.source_type === "personal";
+          const citeHref = isPersonalCite ? "#" : (cite?.source_uri || `#cite-${num}`);
           return (
             <span key={i} className="cite-ref-wrapper">
               <a
-                href={cite?.source_uri || `#cite-${num}`}
-                target={cite?.source_uri ? "_blank" : undefined}
-                rel={cite?.source_uri ? "noopener noreferrer" : undefined}
-                onClick={(e) => {
-                  if (!cite?.source_uri) {
+                href={citeHref}
+                target={(!isPersonalCite && cite?.source_uri) ? "_blank" : undefined}
+                rel={(!isPersonalCite && cite?.source_uri) ? "noopener noreferrer" : undefined}
+                onClick={async (e) => {
+                  if (isPersonalCite && cite?.source_uri) {
+                    e.preventDefault();
+                    try {
+                      const token = await user?.getIdToken();
+                      const res = await fetch(`${API_URL}${cite.source_uri}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data.url) window.open(data.url, "_blank");
+                      }
+                    } catch (err) { console.error("Personal download failed:", err); }
+                  } else if (!cite?.source_uri) {
                     e.preventDefault();
                     document.getElementById(`cite-${num}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }
