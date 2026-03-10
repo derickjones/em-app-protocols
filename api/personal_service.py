@@ -68,6 +68,8 @@ class PersonalService:
         return {
             "files_used": files_used,
             "files_limit": PERSONAL_FILE_LIMIT,
+            "file_count": files_used,
+            "file_limit": PERSONAL_FILE_LIMIT,
             "bytes_used": bytes_used,
             "bytes_limit": PERSONAL_BYTES_LIMIT,
         }
