@@ -23,7 +23,7 @@ PERSONAL_BUCKET = os.environ.get("PERSONAL_BUCKET", "clinical-assistant-457902-p
 PERSONAL_FILE_LIMIT = int(os.environ.get("PERSONAL_FILE_LIMIT", "50"))
 PERSONAL_BYTES_LIMIT = int(os.environ.get("PERSONAL_BYTES_LIMIT", str(200 * 1024 * 1024)))  # 200MB
 MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB per file
-MAX_PDF_PAGES = 50
+MAX_PDF_PAGES = 500
 
 ALLOWED_CONTENT_TYPES = {
     "application/pdf": ".pdf",
