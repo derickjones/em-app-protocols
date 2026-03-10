@@ -185,7 +185,6 @@ export default function Home() {
         litflEnabled,
         rebelemEnabled,
         aliemEnabled,
-        personalEnabled,
         selectedJournals: Array.from(selectedJournals),
       }));
       setUniverseDirty(false);
@@ -239,7 +238,6 @@ export default function Home() {
           if (typeof prefs.litflEnabled === 'boolean') setLitflEnabled(prefs.litflEnabled);
           if (typeof prefs.rebelemEnabled === 'boolean') setRebelemEnabled(prefs.rebelemEnabled);
           if (typeof prefs.aliemEnabled === 'boolean') setAliemEnabled(prefs.aliemEnabled);
-          if (typeof prefs.personalEnabled === 'boolean') setPersonalEnabled(prefs.personalEnabled);
           if (Array.isArray(prefs.selectedJournals)) {
             setSelectedJournals(new Set(prefs.selectedJournals));
           }
@@ -914,21 +912,6 @@ export default function Home() {
   };
 
   // ───── Citation-aware Markdown components ─────
-  // Helper: open a personal file via the proxy-download endpoint
-  const openPersonalFile = async (sourceUri: string) => {
-    try {
-      const token = await user?.getIdToken();
-      const res = await fetch(`${API_URL}${sourceUri}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, "_blank");
-      }
-    } catch (err) { console.error("Personal download failed:", err); }
-  };
-
   // Converts inline [N] references into superscript links that scroll to the
   // matching citation and show a tooltip on hover with the source name.
   const citationComponents: Components = {
@@ -945,19 +928,14 @@ export default function Home() {
           const num = parseInt(m[1], 10);
           const cite = citations[num - 1];
           const label = cite ? cite.protocol_id.replace(/_/g, " ") : `Source ${num}`;
-          const isPersonalCite = cite?.source_type === "personal";
-          const citeHref = isPersonalCite ? "#" : (cite?.source_uri || `#cite-${num}`);
           return (
             <span key={i} className="cite-ref-wrapper">
               <a
-                href={citeHref}
-                target={(!isPersonalCite && cite?.source_uri) ? "_blank" : undefined}
-                rel={(!isPersonalCite && cite?.source_uri) ? "noopener noreferrer" : undefined}
-                onClick={async (e) => {
-                  if (isPersonalCite && cite?.source_uri) {
-                    e.preventDefault();
-                    openPersonalFile(cite.source_uri);
-                  } else if (!cite?.source_uri) {
+                href={cite?.source_uri || `#cite-${num}`}
+                target={cite?.source_uri ? "_blank" : undefined}
+                rel={cite?.source_uri ? "noopener noreferrer" : undefined}
+                onClick={(e) => {
+                  if (!cite?.source_uri) {
                     e.preventDefault();
                     document.getElementById(`cite-${num}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }
@@ -991,19 +969,14 @@ export default function Home() {
           const num = parseInt(m[1], 10);
           const cite = citations[num - 1];
           const label = cite ? cite.protocol_id.replace(/_/g, " ") : `Source ${num}`;
-          const isPersonalCite = cite?.source_type === "personal";
-          const citeHref = isPersonalCite ? "#" : (cite?.source_uri || `#cite-${num}`);
           return (
             <span key={i} className="cite-ref-wrapper">
               <a
-                href={citeHref}
-                target={(!isPersonalCite && cite?.source_uri) ? "_blank" : undefined}
-                rel={(!isPersonalCite && cite?.source_uri) ? "noopener noreferrer" : undefined}
-                onClick={async (e) => {
-                  if (isPersonalCite && cite?.source_uri) {
-                    e.preventDefault();
-                    openPersonalFile(cite.source_uri);
-                  } else if (!cite?.source_uri) {
+                href={cite?.source_uri || `#cite-${num}`}
+                target={cite?.source_uri ? "_blank" : undefined}
+                rel={cite?.source_uri ? "noopener noreferrer" : undefined}
+                onClick={(e) => {
+                  if (!cite?.source_uri) {
                     e.preventDefault();
                     document.getElementById(`cite-${num}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                   }
@@ -1456,7 +1429,7 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => { setPersonalEnabled(!personalEnabled); setUniverseDirty(true); }}
+                  onClick={() => setPersonalEnabled(!personalEnabled)}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                     darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'
                   }`}
@@ -2297,7 +2270,18 @@ export default function Home() {
                         const handlePersonalClick = async (e: React.MouseEvent) => {
                           if (!isPersonal || !cite.source_uri) return;
                           e.preventDefault();
-                          openPersonalFile(cite.source_uri);
+                          try {
+                            const token = await user?.getIdToken();
+                            const res = await fetch(`${API_URL}${cite.source_uri}`, {
+                              headers: { Authorization: `Bearer ${token}` },
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              if (data.url) window.open(data.url, "_blank");
+                            }
+                          } catch (e) {
+                            console.error("Failed to get download URL:", e);
+                          }
                         };
 
                         return (

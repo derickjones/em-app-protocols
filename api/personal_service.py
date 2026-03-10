@@ -89,22 +89,30 @@ class PersonalService:
         """Extract text from a PDF using PyMuPDF. Falls back to Gemini Vision for empty pages."""
         import fitz  # PyMuPDF
 
-        doc = fitz.open(stream=file_bytes, filetype="pdf")
-        if doc.page_count > MAX_PDF_PAGES:
+        try:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+        except Exception as e:
+            raise ValueError(f"Could not open PDF: the file may be corrupted, encrypted, or not a valid PDF. ({e})")
+
+        try:
+            if doc.page_count > MAX_PDF_PAGES:
+                raise ValueError(f"PDF has {doc.page_count} pages (max {MAX_PDF_PAGES}). Please upload a shorter document.")
+
+            pages_text = []
+            empty_pages = []
+
+            for i, page in enumerate(doc):
+                try:
+                    text = page.get_text().strip()
+                except Exception as e:
+                    print(f"Warning: failed to extract text from page {i + 1}: {e}")
+                    text = ""
+                if text:
+                    pages_text.append(f"--- Page {i + 1} ---\n{text}")
+                else:
+                    empty_pages.append(i)
+        finally:
             doc.close()
-            raise ValueError(f"PDF has {doc.page_count} pages (max {MAX_PDF_PAGES}). Please upload a shorter document.")
-
-        pages_text = []
-        empty_pages = []
-
-        for i, page in enumerate(doc):
-            text = page.get_text().strip()
-            if text:
-                pages_text.append(f"--- Page {i + 1} ---\n{text}")
-            else:
-                empty_pages.append(i)
-
-        doc.close()
 
         # Fallback: use Gemini Vision for pages with no extractable text (scanned PDFs)
         if empty_pages and len(empty_pages) <= 10:
@@ -130,10 +138,12 @@ class PersonalService:
         if page_num is not None:
             import fitz
             doc = fitz.open(stream=file_bytes, filetype="pdf")
-            page = doc[page_num]
-            pix = page.get_pixmap(dpi=200)
-            img_bytes = pix.tobytes("png")
-            doc.close()
+            try:
+                page = doc[page_num]
+                pix = page.get_pixmap(dpi=200)
+                img_bytes = pix.tobytes("png")
+            finally:
+                doc.close()
             mime = "image/png"
         else:
             img_bytes = file_bytes
@@ -171,26 +181,33 @@ class PersonalService:
         """Render each PDF page as a PNG and upload to GCS. Returns list of image dicts."""
         import fitz  # PyMuPDF
 
-        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        try:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+        except Exception as e:
+            print(f"Failed to open PDF for page rendering: {e}")
+            return []
+
         page_images = []
 
-        for i, page in enumerate(doc):
-            try:
-                pix = page.get_pixmap(dpi=150)
-                png_bytes = pix.tobytes("png")
+        try:
+            for i, page in enumerate(doc):
+                try:
+                    pix = page.get_pixmap(dpi=150)
+                    png_bytes = pix.tobytes("png")
 
-                blob_path = f"{uid}/{file_id}/page_{i + 1}.png"
-                blob = self.bucket.blob(blob_path)
-                blob.upload_from_string(png_bytes, content_type="image/png")
+                    blob_path = f"{uid}/{file_id}/page_{i + 1}.png"
+                    blob = self.bucket.blob(blob_path)
+                    blob.upload_from_string(png_bytes, content_type="image/png")
 
-                page_images.append({
-                    "page": i + 1,
-                    "gcs_uri": f"gs://{PERSONAL_BUCKET}/{blob_path}",
-                })
-            except Exception as e:
-                print(f"Failed to render page {i + 1} for {file_id}: {e}")
+                    page_images.append({
+                        "page": i + 1,
+                        "gcs_uri": f"gs://{PERSONAL_BUCKET}/{blob_path}",
+                    })
+                except Exception as e:
+                    print(f"Failed to render page {i + 1} for {file_id}: {e}")
+        finally:
+            doc.close()
 
-        doc.close()
         return page_images
 
     # ─── Upload + Process ─────────────────────────────────────────────────
@@ -298,13 +315,21 @@ class PersonalService:
                 "chunk_count": chunk_count,
             }
 
-        except Exception as e:
-            # Mark as failed in Firestore
+        except ValueError as e:
+            # Validation errors (quota, duplicate, extraction failures) — re-raise as-is
             self.db.collection("users").document(uid).collection("personal_files").document(file_id).update({
                 "status": "failed",
                 "error": str(e)[:500],
             })
             raise
+        except Exception as e:
+            # Unexpected errors — mark as failed and wrap in RuntimeError
+            error_msg = f"Processing failed: {str(e)[:400]}"
+            self.db.collection("users").document(uid).collection("personal_files").document(file_id).update({
+                "status": "failed",
+                "error": error_msg[:500],
+            })
+            raise RuntimeError(error_msg) from e
 
     def _index_to_corpus(self, text_uri: str) -> int:
         """Index a text file into the personal RAG corpus. Returns estimated chunk count."""
@@ -441,12 +466,11 @@ class PersonalService:
                     print(f"Deleted RAG file: {file_name}")
                 return
 
-    # ─── File Download ───────────────────────────────────────────────────
+    # ─── Signed URL ──────────────────────────────────────────────────────
 
-    def get_file_data(self, uid: str, file_id: str) -> Tuple[bytes, str, str]:
-        """Download the original file from GCS and return (bytes, content_type, filename).
-        Proxies through the API to avoid signed-URL issues on Cloud Run."""
-
+    def get_signed_url(self, uid: str, file_id: str, expiration_minutes: int = 60) -> str:
+        """Generate a signed URL for the original uploaded file."""
+        import datetime
         doc = self.db.collection("users").document(uid).collection("personal_files").document(file_id).get()
         if not doc.exists:
             raise FileNotFoundError(f"File {file_id} not found")
@@ -459,8 +483,14 @@ class PersonalService:
         if not blob.exists():
             raise FileNotFoundError(f"Original file not found in GCS")
 
-        file_bytes = blob.download_as_bytes()
-        return file_bytes, content_type, filename
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(minutes=expiration_minutes),
+            method="GET",
+            response_type=content_type,
+            response_disposition=f'inline; filename="{filename}"',
+        )
+        return url
 
     # ─── Delete All User Files ────────────────────────────────────────────
 

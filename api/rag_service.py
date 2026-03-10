@@ -504,7 +504,7 @@ ANSWER:"""
     def _get_personal_images(self, source_uri: str) -> List[Dict]:
         """Get page images for a personal file from Firestore metadata.
         source_uri format: gs://clinical-assistant-457902-personal/{uid}/{file_id}.txt
-        Returns images as base64 data URIs (no signing needed).
+        Returns images with signed URLs (valid for 1 hour).
         """
         try:
             parts = source_uri.replace("gs://", "").split("/")
@@ -518,7 +518,7 @@ ANSWER:"""
                 return self._metadata_cache[cache_key]
 
             from google.cloud import firestore as _fs
-            import base64
+            import datetime
             db = _fs.Client()
             doc = db.collection("users").document(uid).collection("personal_files").document(file_id).get()
             if not doc.exists:
@@ -529,19 +529,21 @@ ANSWER:"""
 
             bucket = self.storage_client.bucket(PERSONAL_BUCKET)
             result = []
-            for img in raw_images[:5]:  # Limit to first 5 pages for performance
+            for img in raw_images:
                 gcs_uri = img.get("gcs_uri", "")
                 if gcs_uri:
                     blob_path = gcs_uri.replace(f"gs://{PERSONAL_BUCKET}/", "")
                     blob = bucket.blob(blob_path)
-                    if blob.exists():
-                        img_bytes = blob.download_as_bytes()
-                        b64 = base64.b64encode(img_bytes).decode("utf-8")
-                        result.append({
-                            "page": img.get("page", 0),
-                            "url": f"data:image/png;base64,{b64}",
-                            "source": f"📁 {filename}",
-                        })
+                    signed_url = blob.generate_signed_url(
+                        version="v4",
+                        expiration=datetime.timedelta(hours=1),
+                        method="GET",
+                    )
+                    result.append({
+                        "page": img.get("page", 0),
+                        "url": signed_url,
+                        "source": f"📁 {filename}",
+                    })
 
             self._metadata_cache[cache_key] = result
             return result
