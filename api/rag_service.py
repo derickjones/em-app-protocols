@@ -501,10 +501,15 @@ ANSWER:"""
         
         return None
 
-    def _get_personal_images(self, source_uri: str) -> List[Dict]:
-        """Get page images for a personal file from Firestore metadata.
+    def _get_personal_images(self, source_uri: str, matched_pages: List[int] = None) -> List[Dict]:
+        """Render page images ON-DEMAND for a personal file.
+
+        Instead of pre-rendering all pages at upload time, this downloads the
+        original PDF from GCS and renders only the matched pages (≤5) using
+        PyMuPDF at 100 DPI.  For image uploads it returns a signed URL to the
+        original.  Results are cached per (file, pages) within the request.
+
         source_uri format: gs://clinical-assistant-457902-personal/{uid}/{file_id}.txt
-        Returns images with signed URLs (valid for 1 hour).
         """
         try:
             parts = source_uri.replace("gs://", "").split("/")
@@ -513,40 +518,102 @@ ANSWER:"""
             uid = parts[1]
             file_id = parts[2].replace(".txt", "")
 
-            cache_key = f"personal/{uid}/{file_id}"
+            # Cache key includes matched pages so repeated calls are free
+            pages_key = ",".join(str(p) for p in sorted(matched_pages)) if matched_pages else "default"
+            cache_key = f"personal/{uid}/{file_id}/{pages_key}"
             if cache_key in self._metadata_cache:
                 return self._metadata_cache[cache_key]
 
-            from google.cloud import firestore as _fs
             import datetime
+            from google.cloud import firestore as _fs
             db = _fs.Client()
+
             doc = db.collection("users").document(uid).collection("personal_files").document(file_id).get()
             if not doc.exists:
                 return []
             data = doc.to_dict()
             filename = data.get("filename", file_id)
-            raw_images = data.get("images", [])
+            content_type = data.get("content_type", "application/pdf")
 
             bucket = self.storage_client.bucket(PERSONAL_BUCKET)
             result = []
-            for img in raw_images:
-                gcs_uri = img.get("gcs_uri", "")
-                if gcs_uri:
-                    blob_path = gcs_uri.replace(f"gs://{PERSONAL_BUCKET}/", "")
-                    blob = bucket.blob(blob_path)
+
+            # ── Image uploads: just return a signed URL to the original ──
+            if content_type and content_type.startswith("image/"):
+                blob = bucket.blob(f"{uid}/{file_id}.original")
+                if blob.exists():
                     signed_url = blob.generate_signed_url(
                         version="v4",
                         expiration=datetime.timedelta(hours=1),
                         method="GET",
                     )
                     result.append({
-                        "page": img.get("page", 0),
+                        "page": 1,
                         "url": signed_url,
                         "source": f"📁 {filename}",
                     })
+                self._metadata_cache[cache_key] = result
+                return result
+
+            # ── PDF uploads: render matched pages on-demand ──
+            if content_type != "application/pdf":
+                # Text / markdown files have no visual pages
+                self._metadata_cache[cache_key] = []
+                return []
+
+            # Determine which pages to render (cap at 5)
+            pages_to_render = sorted(matched_pages)[:5] if matched_pages else [1]
+
+            # Download the original PDF bytes from GCS
+            original_blob = bucket.blob(f"{uid}/{file_id}.original")
+            if not original_blob.exists():
+                print(f"Original PDF not found in GCS for {file_id}")
+                self._metadata_cache[cache_key] = []
+                return []
+
+            pdf_bytes = original_blob.download_as_bytes()
+
+            import fitz  # PyMuPDF
+            try:
+                pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            except Exception as e:
+                print(f"Failed to open PDF for on-demand rendering: {e}")
+                self._metadata_cache[cache_key] = []
+                return []
+
+            try:
+                total_pages = len(pdf_doc)
+                for page_num in pages_to_render:
+                    if page_num < 1 or page_num > total_pages:
+                        continue
+                    try:
+                        page = pdf_doc[page_num - 1]  # 0-indexed
+                        pix = page.get_pixmap(dpi=100)
+                        png_bytes = pix.tobytes("png")
+
+                        # Upload rendered page to GCS (acts as a cache for future requests)
+                        blob_path = f"{uid}/{file_id}/page_{page_num}.png"
+                        blob = bucket.blob(blob_path)
+                        blob.upload_from_string(png_bytes, content_type="image/png")
+
+                        signed_url = blob.generate_signed_url(
+                            version="v4",
+                            expiration=datetime.timedelta(hours=1),
+                            method="GET",
+                        )
+                        result.append({
+                            "page": page_num,
+                            "url": signed_url,
+                            "source": f"📁 {filename}",
+                        })
+                    except Exception as e:
+                        print(f"Failed to render page {page_num} for {file_id}: {e}")
+            finally:
+                pdf_doc.close()
 
             self._metadata_cache[cache_key] = result
             return result
+
         except Exception as e:
             print(f"Error getting personal images for {source_uri}: {e}")
             return []
@@ -631,8 +698,10 @@ ANSWER:"""
                                 "protocol_rank": ctx_idx
                             })
             elif source_type == "personal":
-                # Get personal file images from Firestore
-                personal_images = self._get_personal_images(ctx["source"])
+                # Parse page numbers from the RAG chunk text (format: "--- Page N ---")
+                import re
+                matched_pages = [int(m) for m in re.findall(r'--- Page (\d+)', ctx.get("text", ""))]
+                personal_images = self._get_personal_images(ctx["source"], matched_pages=matched_pages or None)
                 for img in personal_images:
                     img_url = img.get("url", "")
                     if img_url and img_url not in seen_images:

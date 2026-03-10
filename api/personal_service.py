@@ -179,39 +179,6 @@ class PersonalService:
             return parts[0].get("text", "") if parts else ""
         return ""
 
-    def _render_pdf_page_images(self, uid: str, file_id: str, file_bytes: bytes) -> list:
-        """Render each PDF page as a PNG and upload to GCS. Returns list of image dicts."""
-        import fitz  # PyMuPDF
-
-        try:
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-        except Exception as e:
-            print(f"Failed to open PDF for page rendering: {e}")
-            return []
-
-        page_images = []
-
-        try:
-            for i, page in enumerate(doc):
-                try:
-                    pix = page.get_pixmap(dpi=150)
-                    png_bytes = pix.tobytes("png")
-
-                    blob_path = f"{uid}/{file_id}/page_{i + 1}.png"
-                    blob = self.bucket.blob(blob_path)
-                    blob.upload_from_string(png_bytes, content_type="image/png")
-
-                    page_images.append({
-                        "page": i + 1,
-                        "gcs_uri": f"gs://{PERSONAL_BUCKET}/{blob_path}",
-                    })
-                except Exception as e:
-                    print(f"Failed to render page {i + 1} for {file_id}: {e}")
-        finally:
-            doc.close()
-
-        return page_images
-
     # ─── Upload + Process ─────────────────────────────────────────────────
 
     def upload_and_process(self, uid: str, filename: str, content_type: str, file_bytes: bytes) -> Dict:
@@ -264,22 +231,11 @@ class PersonalService:
             original_blob = self.bucket.blob(f"{uid}/{file_id}.original")
             original_blob.upload_from_string(file_bytes, content_type=content_type)
 
-            # 2. Extract text
-            page_images = []  # Will be populated for PDFs
+            # 2. Extract text (no page rendering — images rendered on-demand at query time)
             if content_type == "application/pdf":
                 extracted_text = self._extract_text_from_pdf(file_bytes)
-                # Render page images for the carousel
-                page_images = self._render_pdf_page_images(uid, file_id, file_bytes)
             elif content_type.startswith("image/"):
                 extracted_text = self._extract_text_from_image(file_bytes, content_type)
-                # Store the original image as page 1 for the carousel
-                img_blob = self.bucket.blob(f"{uid}/{file_id}/page_1.png")
-                if content_type == "image/png":
-                    img_blob.upload_from_string(file_bytes, content_type="image/png")
-                else:
-                    # Convert JPEG to PNG for consistency
-                    img_blob.upload_from_string(file_bytes, content_type=content_type)
-                page_images = [{"page": 1, "gcs_uri": f"gs://{PERSONAL_BUCKET}/{uid}/{file_id}/page_1.png"}]
             else:
                 # Plain text or markdown
                 extracted_text = file_bytes.decode("utf-8", errors="replace")
@@ -299,14 +255,14 @@ class PersonalService:
             chunk_count = self._index_to_corpus(text_uri)
 
             # 5. Update Firestore with success
+            # Note: no pre-rendered images — page images are rendered on-demand at query time
             self.db.collection("users").document(uid).collection("personal_files").document(file_id).update({
                 "status": "indexed",
                 "chunk_count": chunk_count,
                 "indexed_at": firestore.SERVER_TIMESTAMP,
                 "gcs_text": text_uri,
                 "gcs_original": f"gs://{PERSONAL_BUCKET}/{uid}/{file_id}.original",
-                "images": page_images,
-                "page_count": len(page_images),
+                "content_type": content_type,
             })
 
             return {
