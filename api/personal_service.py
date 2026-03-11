@@ -429,6 +429,9 @@ class PersonalService:
     def get_signed_url(self, uid: str, file_id: str, expiration_minutes: int = 60) -> str:
         """Generate a signed URL for the original uploaded file."""
         import datetime
+        from google.auth import iam as auth_iam
+        from google.oauth2 import service_account as oauth2_sa
+
         doc = self.db.collection("users").document(uid).collection("personal_files").document(file_id).get()
         if not doc.exists:
             raise FileNotFoundError(f"File {file_id} not found")
@@ -441,10 +444,29 @@ class PersonalService:
         if not blob.exists():
             raise FileNotFoundError(f"Original file not found in GCS")
 
+        # Build signing credentials from compute-engine credentials (Cloud Run)
+        credentials, project = google.auth.default()
+        if not hasattr(credentials, "service_account_email"):
+            credentials.refresh(google.auth.transport.requests.Request())
+        sa_email = getattr(credentials, "service_account_email", None) or f"{PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+        signer = auth_iam.Signer(
+            request=google.auth.transport.requests.Request(),
+            credentials=credentials,
+            service_account_email=sa_email,
+        )
+        signing_creds = oauth2_sa.Credentials(
+            signer=signer,
+            service_account_email=sa_email,
+            token_uri="https://oauth2.googleapis.com/token",
+            project_id=project or PROJECT_ID,
+        )
+
         url = blob.generate_signed_url(
             version="v4",
             expiration=datetime.timedelta(minutes=expiration_minutes),
             method="GET",
+            credentials=signing_creds,
             response_type=content_type,
             response_disposition=f'inline; filename="{filename}"',
         )

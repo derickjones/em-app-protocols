@@ -501,13 +501,46 @@ ANSWER:"""
         
         return None
 
+    def _sign_personal_blob(self, blob, expiration_hours: int = 1) -> str:
+        """Generate a signed URL for a personal file blob.
+        Works on Cloud Run by using IAM signBlob API with compute credentials."""
+        import datetime
+        from google.auth import default as _auth_default
+        from google.auth.transport import requests as _auth_requests
+        from google.auth import iam as _iam
+        from google.auth import credentials as _creds
+        import google.oauth2.service_account
+
+        credentials, _ = _auth_default()
+        auth_req = _auth_requests.Request()
+        credentials.refresh(auth_req)
+
+        # On Cloud Run, use IAM signBlob to create a signer
+        sa_email = credentials.service_account_email
+        signer = _iam.Signer(
+            request=auth_req,
+            credentials=credentials,
+            service_account_email=sa_email,
+        )
+        signing_creds = google.oauth2.service_account.Credentials(
+            signer=signer,
+            service_account_email=sa_email,
+            token_uri="https://oauth2.googleapis.com/token",
+        )
+
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(hours=expiration_hours),
+            method="GET",
+            credentials=signing_creds,
+        )
+
     def _get_personal_images(self, source_uri: str, matched_pages: List[int] = None) -> List[Dict]:
         """Render page images ON-DEMAND for a personal file.
 
-        Instead of pre-rendering all pages at upload time, this downloads the
-        original PDF from GCS and renders only the matched pages (≤5) using
-        PyMuPDF at 100 DPI.  For image uploads it returns a signed URL to the
-        original.  Results are cached per (file, pages) within the request.
+        Downloads the original PDF from GCS, renders only the matched pages
+        (≤5) at 100 DPI, uploads as public PNGs, and returns public URLs —
+        same pattern as WikEM/LITFL images.
 
         source_uri format: gs://clinical-assistant-457902-personal/{uid}/{file_id}.txt
         """
@@ -524,7 +557,6 @@ ANSWER:"""
             if cache_key in self._metadata_cache:
                 return self._metadata_cache[cache_key]
 
-            import datetime
             from google.cloud import firestore as _fs
             db = _fs.Client()
 
@@ -538,15 +570,11 @@ ANSWER:"""
             bucket = self.storage_client.bucket(PERSONAL_BUCKET)
             result = []
 
-            # ── Image uploads: just return a signed URL to the original ──
+            # ── Image uploads: return signed URL to the original ──
             if content_type and content_type.startswith("image/"):
                 blob = bucket.blob(f"{uid}/{file_id}.original")
                 if blob.exists():
-                    signed_url = blob.generate_signed_url(
-                        version="v4",
-                        expiration=datetime.timedelta(hours=1),
-                        method="GET",
-                    )
+                    signed_url = self._sign_personal_blob(blob)
                     result.append({
                         "page": 1,
                         "url": signed_url,
@@ -591,16 +619,12 @@ ANSWER:"""
                         pix = page.get_pixmap(dpi=100)
                         png_bytes = pix.tobytes("png")
 
-                        # Upload rendered page to GCS (acts as a cache for future requests)
+                        # Upload rendered page to GCS and generate signed URL
                         blob_path = f"{uid}/{file_id}/page_{page_num}.png"
                         blob = bucket.blob(blob_path)
                         blob.upload_from_string(png_bytes, content_type="image/png")
+                        signed_url = self._sign_personal_blob(blob)
 
-                        signed_url = blob.generate_signed_url(
-                            version="v4",
-                            expiration=datetime.timedelta(hours=1),
-                            method="GET",
-                        )
                         result.append({
                             "page": page_num,
                             "url": signed_url,
