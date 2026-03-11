@@ -29,9 +29,14 @@ ALLOWED_CONTENT_TYPES = {
     "application/pdf": ".pdf",
     "image/png": ".png",
     "image/jpeg": ".jpg",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
     "text/plain": ".txt",
     "text/markdown": ".md",
 }
+
+# HEIC/HEIF types that need conversion to JPEG for browser/Gemini compatibility
+HEIC_TYPES = {"image/heic", "image/heif"}
 
 
 class PersonalService:
@@ -84,6 +89,38 @@ class PersonalService:
             limit_mb = quota["bytes_limit"] / (1024 * 1024)
             return f"Storage limit reached ({used_mb:.1f}MB / {limit_mb:.0f}MB). Delete some files to free space."
         return None
+
+    # ─── HEIC/HEIF Conversion ────────────────────────────────────────────
+
+    def _convert_heic_to_jpeg(self, file_bytes: bytes, filename: str) -> Tuple[bytes, str, str]:
+        """Convert HEIC/HEIF image to JPEG. Returns (jpeg_bytes, 'image/jpeg', new_filename)."""
+        from PIL import Image
+        import pillow_heif
+
+        # Register HEIF opener with Pillow
+        pillow_heif.register_heif_opener()
+
+        img = Image.open(io.BytesIO(file_bytes))
+
+        # Handle EXIF rotation
+        from PIL import ImageOps
+        img = ImageOps.exif_transpose(img)
+
+        # Convert to RGB (HEIC can be RGBA or other modes)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+
+        # Save as JPEG
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        jpeg_bytes = buf.getvalue()
+
+        # Update filename extension
+        base = filename.rsplit(".", 1)[0] if "." in filename else filename
+        new_filename = f"{base}.jpg"
+
+        print(f"Converted HEIC ({len(file_bytes)} bytes) → JPEG ({len(jpeg_bytes)} bytes)")
+        return jpeg_bytes, "image/jpeg", new_filename
 
     # ─── Text Extraction ──────────────────────────────────────────────────
 
@@ -188,12 +225,16 @@ class PersonalService:
         """
         # Validate content type
         if content_type not in ALLOWED_CONTENT_TYPES:
-            raise ValueError(f"Unsupported file type: {content_type}. Allowed: PDF, PNG, JPG, TXT, MD")
+            raise ValueError(f"Unsupported file type: {content_type}. Allowed: PDF, PNG, JPG, HEIC, TXT, MD")
 
         # Validate size
         if len(file_bytes) > MAX_UPLOAD_SIZE:
             max_mb = MAX_UPLOAD_SIZE / (1024 * 1024)
             raise ValueError(f"File too large ({len(file_bytes) / (1024*1024):.1f}MB). Max: {max_mb:.0f}MB per file.")
+
+        # Convert HEIC/HEIF → JPEG (browsers & Gemini don't support HEIC)
+        if content_type in HEIC_TYPES:
+            file_bytes, content_type, filename = self._convert_heic_to_jpeg(file_bytes, filename)
 
         # Check quota
         quota_err = self._check_quota(uid, len(file_bytes))

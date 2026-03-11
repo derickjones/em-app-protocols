@@ -2154,16 +2154,25 @@ async def personal_upload(
     """
     Upload a personal file for RAG indexing.
 
-    Accepts PDF, PNG, JPG, TXT, MD files up to 20 MB.
+    Accepts PDF, PNG, JPG, HEIC, HEIF, TXT, MD files up to 20 MB.
+    HEIC/HEIF images (iPhone photos) are automatically converted to JPEG.
     Text extraction and indexing happen in the background.
     Returns immediately with file metadata and status='processing'.
     """
     try:
         file_bytes = await file.read()
+        content_type = file.content_type or "application/octet-stream"
+        fname = file.filename or "unknown"
+
+        # Fix MIME type for HEIC/HEIF — some browsers send application/octet-stream
+        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+        if content_type == "application/octet-stream" and ext in ("heic", "heif"):
+            content_type = f"image/{ext}"
+
         result = personal_service.upload_and_process(
             uid=user.uid,
-            filename=file.filename or "unknown",
-            content_type=file.content_type or "application/octet-stream",
+            filename=fname,
+            content_type=content_type,
             file_bytes=file_bytes,
         )
         return result

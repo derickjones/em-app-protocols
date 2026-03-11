@@ -51,11 +51,13 @@ const ALLOWED_TYPES = [
   "application/pdf",
   "image/png",
   "image/jpeg",
+  "image/heic",
+  "image/heif",
   "text/plain",
   "text/markdown",
 ];
 
-const ALLOWED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".txt", ".md"];
+const ALLOWED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".heic", ".heif", ".txt", ".md"];
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -352,7 +354,7 @@ export default function PersonalPage() {
                   Drop files here or <span className="text-violet-600 dark:text-violet-400 underline">browse</span>
                 </p>
                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                  PDF, PNG, JPG, TXT, MD — up to 20 MB each
+                  PDF, PNG, JPG, HEIC, TXT, MD — up to 20 MB each
                 </p>
               </div>
             )}

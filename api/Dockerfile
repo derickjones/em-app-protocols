@@ -2,6 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# System deps for pillow-heif (HEIC/HEIF image support for iPhone photos)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libheif-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
