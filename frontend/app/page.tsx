@@ -2012,6 +2012,69 @@ export default function Home() {
                   </div>
                 )}
 
+                {/* Local Protocol Cards — highlighted box above answer (Q&A fusion mode) */}
+                {mode === "qa" && protocolCards.length > 0 && (
+                  <div className={`rounded-2xl overflow-hidden border-l-4 ${
+                    darkMode
+                      ? 'border-l-blue-500 bg-blue-950/30 border border-blue-900/40'
+                      : 'border-l-blue-500 bg-blue-50/70 border border-blue-200/60'
+                  }`}>
+                    <div className="px-5 pt-4 pb-2">
+                      <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Your Local Protocols
+                        <span className={`text-xs font-normal ${darkMode ? 'text-blue-400/60' : 'text-blue-500/60'}`}>
+                          {protocolCards.length} match{protocolCards.length !== 1 ? 'es' : ''}
+                        </span>
+                      </h3>
+                    </div>
+                    {/* Carousel with scroll arrows */}
+                    <div className="relative group/protocols px-2 pb-4">
+                      {/* Left arrow */}
+                      <button
+                        onClick={(e) => {
+                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-protocol-carousel]');
+                          if (container) container.scrollBy({ left: -340, behavior: 'smooth' });
+                        }}
+                        className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/protocols:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
+                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      {/* Right arrow */}
+                      <button
+                        onClick={(e) => {
+                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-protocol-carousel]');
+                          if (container) container.scrollBy({ left: 340, behavior: 'smooth' });
+                        }}
+                        className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/protocols:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
+                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                      {/* Fade edges */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-r ${darkMode ? 'from-blue-950/30' : 'from-blue-50/70'} to-transparent rounded-l-xl`} />
+                      <div className={`absolute right-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-l ${darkMode ? 'from-blue-950/30' : 'from-blue-50/70'} to-transparent rounded-r-xl`} />
+                      {/* Scroll container */}
+                      <div
+                        data-protocol-carousel
+                        className="flex gap-4 overflow-x-auto px-2 py-1 snap-x snap-mandatory scroll-smooth"
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                      >
+                        {protocolCards.map((card, idx) => (
+                          <div key={`qa-${card.protocol_id}-${idx}`} className="flex-shrink-0 w-80 snap-start">
+                            <ProtocolCard card={card} darkMode={darkMode} compact />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Answer — streaming or final */}
                 <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-neutral-900 border border-neutral-800' : 'bg-white border border-gray-200'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
@@ -2115,65 +2178,6 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-
-                {/* Local Protocol Cards — horizontal carousel (Q&A fusion mode) */}
-                {mode === "qa" && protocolCards.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Related Local Protocols
-                      <span className={`text-xs font-normal ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                        {protocolCards.length} protocol{protocolCards.length !== 1 ? 's' : ''}
-                      </span>
-                    </h3>
-                    {/* Carousel with scroll arrows */}
-                    <div className="relative group/protocols">
-                      {/* Left arrow */}
-                      <button
-                        onClick={(e) => {
-                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-protocol-carousel]');
-                          if (container) container.scrollBy({ left: -340, behavior: 'smooth' });
-                        }}
-                        className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/protocols:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
-                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
-                        }`}
-                      >
-                        <ChevronLeft className="w-5 h-5" />
-                      </button>
-                      {/* Right arrow */}
-                      <button
-                        onClick={(e) => {
-                          const container = (e.currentTarget as HTMLElement).parentElement?.querySelector('[data-protocol-carousel]');
-                          if (container) container.scrollBy({ left: 340, behavior: 'smooth' });
-                        }}
-                        className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center opacity-0 group-hover/protocols:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm ${
-                          darkMode ? 'bg-neutral-800/90 text-white hover:bg-neutral-700' : 'bg-white/90 text-gray-700 hover:bg-white'
-                        }`}
-                      >
-                        <ChevronRight className="w-5 h-5" />
-                      </button>
-                      {/* Fade edges */}
-                      <div className={`absolute left-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-r ${darkMode ? 'from-neutral-950' : 'from-gray-50'} to-transparent rounded-l-xl`} />
-                      <div className={`absolute right-0 top-0 bottom-0 w-8 z-[5] pointer-events-none bg-gradient-to-l ${darkMode ? 'from-neutral-950' : 'from-gray-50'} to-transparent rounded-r-xl`} />
-                      {/* Scroll container */}
-                      <div
-                        data-protocol-carousel
-                        className={`flex gap-4 overflow-x-auto px-2 py-3 snap-x snap-mandatory scroll-smooth rounded-xl ${
-                          darkMode ? 'bg-neutral-900/50' : 'bg-gray-100/50'
-                        }`}
-                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                      >
-                        {protocolCards.map((card, idx) => (
-                          <div key={`qa-${card.protocol_id}-${idx}`} className="flex-shrink-0 w-80 snap-start">
-                            <ProtocolCard card={card} darkMode={darkMode} compact />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Images - Horizontal Scrolling Carousel */}
                 {response && response.images.length > 0 && (
