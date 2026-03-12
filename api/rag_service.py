@@ -226,7 +226,7 @@ CRITICAL RULES:
 
 RESPONSE FORMAT:
 
-🔴 **BOTTOM LINE:** Start with 1-2 sentences giving the most critical actionable answer. A physician glancing at this line alone should get what they need.
+**Bottom Line:** Start with 1-2 sentences giving the most critical actionable answer. A physician glancing at this line alone should get what they need.
 
 Then use the structure that best fits the question — pick from these as needed:
 

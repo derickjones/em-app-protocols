@@ -515,6 +515,10 @@ export default function Home() {
       router.push("/login");
       return;
     }
+
+    // Capture the question and clear the input immediately
+    const submittedQuestion = question.trim();
+    setQuestion("");
     
     setLoading(true);
     setIsStreaming(false);
@@ -547,7 +551,7 @@ export default function Home() {
           method: "POST",
           headers,
           body: JSON.stringify({
-            query: question.trim(),
+            query: submittedQuestion,
             ed_ids: Array.from(selectedEds),
             bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
             enterprise_id: enterprise?.id || undefined,
@@ -603,9 +607,9 @@ export default function Home() {
         // Save conversation
         const newConversation: Conversation = {
           id: conversationId,
-          title: question.trim().slice(0, 50) + (question.length > 50 ? "..." : ""),
+          title: submittedQuestion.slice(0, 50) + (submittedQuestion.length > 50 ? "..." : ""),
           timestamp: new Date().toISOString(),
-          question: question.trim(),
+          question: submittedQuestion,
           response: { answer: "", images: [], citations: [], query_time_ms: queryTimeMs },
           mode: "protocol-summary",
           protocolCards: cards,
@@ -640,7 +644,7 @@ export default function Home() {
         method: "POST",
         headers,
         body: JSON.stringify({ 
-          query: question.trim(),
+          query: submittedQuestion,
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
@@ -657,7 +661,7 @@ export default function Home() {
             method: "POST",
             headers,
             body: JSON.stringify({
-              query: question.trim(),
+              query: submittedQuestion,
               ed_ids: Array.from(selectedEds),
               bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
               enterprise_id: enterprise?.id || undefined,
@@ -770,9 +774,9 @@ export default function Home() {
       const savedResponse = finalData || { answer: fullAnswer, images: [], citations: [], query_time_ms: 0 };
       const newConversation: Conversation = {
         id: conversationId,
-        title: question.trim().slice(0, 50) + (question.length > 50 ? "..." : ""),
+        title: submittedQuestion.slice(0, 50) + (submittedQuestion.length > 50 ? "..." : ""),
         timestamp: new Date().toISOString(),
-        question: question.trim(),
+        question: submittedQuestion,
         response: savedResponse,
         mode: "qa",
         protocolCards: cards.length > 0 ? cards : undefined,
