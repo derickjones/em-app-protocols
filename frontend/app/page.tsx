@@ -2066,7 +2066,7 @@ export default function Home() {
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                       >
                         {protocolCards.map((card, idx) => (
-                          <div key={`qa-${card.protocol_id}-${idx}`} className="flex-shrink-0 w-80 snap-start">
+                          <div key={`qa-${card.protocol_id}-${idx}`} className="flex-shrink-0 w-72 snap-start">
                             <ProtocolCard card={card} darkMode={darkMode} compact />
                           </div>
                         ))}

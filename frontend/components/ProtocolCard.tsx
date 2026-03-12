@@ -40,7 +40,7 @@ export default function ProtocolCard({ card, darkMode, compact = false }: Protoc
       {/* Image Carousel */}
       {images.length > 0 && (
         <div className="relative bg-black/5">
-          <div className={`flex items-center justify-center ${compact ? 'h-48' : 'h-72'} overflow-hidden`}>
+          <div className={`flex items-center justify-center ${compact ? 'h-32' : 'h-72'} overflow-hidden`}>
             <img
               src={images[currentPage]?.url}
               alt={`${displayName} — Page ${images[currentPage]?.page}`}
@@ -94,7 +94,7 @@ export default function ProtocolCard({ card, darkMode, compact = false }: Protoc
         </div>
 
         <p
-          className={`text-sm mt-3 leading-relaxed ${compact ? 'line-clamp-3' : ''} ${
+          className={`text-sm mt-3 leading-relaxed ${compact ? 'line-clamp-2' : ''} ${
             darkMode ? "text-gray-300" : "text-gray-600"
           }`}
         >
