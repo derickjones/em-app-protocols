@@ -591,6 +591,10 @@ ANSWER:"""
 
             # Determine which pages to render (cap at 5)
             pages_to_render = sorted(matched_pages)[:5] if matched_pages else [1]
+            if not matched_pages:
+                print(f"Warning: no page markers found for {file_id}, defaulting to page 1")
+            else:
+                print(f"Personal PDF {file_id}: rendering pages {pages_to_render}")
 
             # Download the original PDF bytes from GCS
             original_blob = bucket.blob(f"{uid}/{file_id}.original")
@@ -642,10 +646,29 @@ ANSWER:"""
             print(f"Error getting personal images for {source_uri}: {e}")
             return []
 
-    def _get_images_from_contexts(self, contexts: List[Dict]) -> List[Dict]:
-        """Extract images from context sources - maintains protocol relevance order"""
+    def _get_images_from_contexts(self, contexts: List[Dict], all_contexts: List[Dict] = None) -> List[Dict]:
+        """Extract images from context sources - maintains protocol relevance order.
+        
+        all_contexts: optional pre-dedup list so personal page numbers can be
+        collected from every chunk that matched, not just the single surviving
+        context after deduplication.
+        """
         seen_images = set()
         images = []
+
+        # Pre-collect ALL page numbers per personal source from every chunk
+        # (before dedup threw the extras away).
+        import re as _re
+        personal_all_pages: Dict[str, List[int]] = {}
+        for ctx in (all_contexts or contexts):
+            if ctx.get("source_type") == "personal":
+                src = ctx.get("source", "")
+                pages = [int(m) for m in _re.findall(r'--- Page (\d+)', ctx.get("text", ""))]
+                if pages:
+                    personal_all_pages.setdefault(src, []).extend(pages)
+        # Deduplicate & sort per source
+        for src in personal_all_pages:
+            personal_all_pages[src] = sorted(set(personal_all_pages[src]))
         
         # Process contexts in order (most relevant first)
         for ctx_idx, ctx in enumerate(contexts):
@@ -722,9 +745,11 @@ ANSWER:"""
                                 "protocol_rank": ctx_idx
                             })
             elif source_type == "personal":
-                # Parse page numbers from the RAG chunk text (format: "--- Page N ---")
-                import re
-                matched_pages = [int(m) for m in re.findall(r'--- Page (\d+)', ctx.get("text", ""))]
+                # Use pre-collected pages from ALL chunks (not just this deduped one)
+                matched_pages = personal_all_pages.get(ctx.get("source", ""), [])
+                if not matched_pages:
+                    # Fallback: parse from this single chunk
+                    matched_pages = [int(m) for m in _re.findall(r'--- Page (\d+)', ctx.get("text", ""))]
                 personal_images = self._get_personal_images(ctx["source"], matched_pages=matched_pages or None)
                 for img in personal_images:
                     img_url = img.get("url", "")
@@ -963,6 +988,7 @@ ANSWER:"""
                 }
         
         # Step 1.6: Apply adaptive relevance filter (min 5, max 10 unique sources)
+        all_contexts = list(contexts)  # preserve pre-dedup for personal page collection
         contexts = self._filter_by_relevance(contexts)
 
         # Step 2: Generate answer with Gemini (fast, no grounding overhead)
@@ -971,7 +997,7 @@ ANSWER:"""
         # Step 3: Get images from contexts
         images = []
         if include_images:
-            images = self._get_images_from_contexts(contexts)
+            images = self._get_images_from_contexts(contexts, all_contexts=all_contexts)
         
         # Step 4: Build citations (contexts already filtered + deduplicated)
         citations = [
@@ -1050,6 +1076,7 @@ ANSWER:"""
                 return
 
         # Step 1.6: Apply adaptive relevance filter (min 5, max 10 unique sources)
+        all_contexts = list(contexts)  # preserve pre-dedup for personal page collection
         contexts = self._filter_by_relevance(contexts)
 
         # Step 2: Stream answer from Gemini
@@ -1059,7 +1086,7 @@ ANSWER:"""
         # Step 3: Get images
         images = []
         if include_images:
-            images = self._get_images_from_contexts(contexts)
+            images = self._get_images_from_contexts(contexts, all_contexts=all_contexts)
 
         # Step 4: Build citations (contexts already filtered + deduplicated)
         citations = [
