@@ -1968,7 +1968,7 @@ export default function Home() {
           </div>
         ) : (
           /* Results View */
-          <div className="space-y-6 pb-32">
+          <div className="space-y-6 pb-[50vh]">
             {/* User Question */}
             <div className="flex justify-end">
               <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-blue-50 border border-blue-100'}`}>
