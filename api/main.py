@@ -1908,6 +1908,7 @@ async def list_admin_users(
                 "role": user_data.get("role", "user"),
                 "edAccess": user_data.get("ed_access", []),
                 "enterpriseId": user_data.get("enterprise_id", ""),
+                "accessStatus": user_data.get("access_status", ""),
                 "createdAt": user_data.get("createdAt", ""),
             })
         

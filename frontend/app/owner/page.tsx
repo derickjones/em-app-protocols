@@ -14,6 +14,7 @@ interface Admin {
   role: string;
   edAccess: string[];
   enterpriseId: string;
+  accessStatus: string;
   createdAt: string;
 }
 
@@ -1354,18 +1355,25 @@ export default function OwnerDashboard() {
                     <p className="text-sm text-[#5f6368]">Add admins to manage protocols</p>
                   </div>
                 ) : (
-                  <ul className="divide-y divide-[#3c4043]">
-                    {admins.map((admin) => (
-                      <li key={admin.uid} className="p-5 hover:bg-[#2c2d2e] transition-colors">
-                        <div className="flex items-center justify-between">
+                  <div>
+                    {/* Table header */}
+                    <div className="grid grid-cols-[1fr_180px_48px] items-center px-5 py-3 border-b border-[#3c4043] text-xs text-[#9aa0a6] uppercase tracking-wider">
+                      <span>User</span>
+                      <span className="text-center">Mayo Protocol Access</span>
+                      <span></span>
+                    </div>
+                    <ul className="divide-y divide-[#3c4043]">
+                      {admins.map((admin) => (
+                        <li key={admin.uid} className="grid grid-cols-[1fr_180px_48px] items-center px-5 py-4 hover:bg-[#2c2d2e] transition-colors">
+                          {/* User info */}
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-[#8ab4f8]/20 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-full bg-[#8ab4f8]/20 flex items-center justify-center shrink-0">
                               <Mail className="w-5 h-5 text-[#8ab4f8]" />
                             </div>
-                            <div>
-                              <h3 className="font-medium text-white">{admin.email}</h3>
+                            <div className="min-w-0">
+                              <h3 className="font-medium text-white truncate">{admin.email}</h3>
                               <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
                                   admin.role === "super_admin" 
                                     ? "bg-yellow-500/20 text-yellow-400"
                                     : admin.role === "admin"
@@ -1374,11 +1382,6 @@ export default function OwnerDashboard() {
                                 }`}>
                                   {admin.role}
                                 </span>
-                                {admin.enterpriseId && (
-                                  <span className="text-xs text-[#5f6368]">
-                                    {admin.enterpriseId}
-                                  </span>
-                                )}
                                 {admin.edAccess && admin.edAccess.length > 0 && (
                                   <span className="text-xs text-[#9aa0a6]">
                                     {admin.edAccess.length} ED(s)
@@ -1387,18 +1390,33 @@ export default function OwnerDashboard() {
                               </div>
                             </div>
                           </div>
-                          {admin.role !== "super_admin" && (
-                            <button
-                              onClick={() => handleRemoveAdmin(admin.uid)}
-                              className="p-2 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                          {/* Mayo Protocol Access column */}
+                          <div className="flex justify-center">
+                            {admin.enterpriseId ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400">
+                                <Check className="w-3.5 h-3.5" /> Yes
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-red-500/15 text-red-400">
+                                <X className="w-3.5 h-3.5" /> No
+                              </span>
+                            )}
+                          </div>
+                          {/* Actions */}
+                          <div className="flex justify-end">
+                            {admin.role !== "super_admin" && (
+                              <button
+                                onClick={() => handleRemoveAdmin(admin.uid)}
+                                className="p-2 text-[#9aa0a6] hover:text-red-400 hover:bg-red-400/10 rounded-full transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             )}
