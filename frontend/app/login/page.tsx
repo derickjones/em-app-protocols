@@ -114,13 +114,13 @@ export default function LoginPage() {
               onClick={() => setShowCorporate(!showCorporate)}
               className="w-full text-center text-sm text-gray-500 hover:text-gray-300 transition-colors"
             >
-              {showCorporate ? "Hide" : "On a work computer? Sign in with email"}
+              {showCorporate ? "Hide" : "Or sign in with email"}
             </button>
 
             {showCorporate && (
               <form onSubmit={handleCorporateLogin} className="mt-4 space-y-3">
                 <p className="text-xs text-gray-500">
-                  Use this if Google sign-in is blocked on your corporate laptop.
+                  Enter your email to sign in without Google.
                 </p>
                 <input
                   type="email"
