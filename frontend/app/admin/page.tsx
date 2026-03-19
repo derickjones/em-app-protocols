@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin, Link2, Loader2 } from "lucide-react";
+import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin, Link2, Loader2, Bookmark } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 
@@ -88,6 +88,8 @@ export default function AdminPage() {
   const [ragStatus, setRagStatus] = useState<Record<string, "indexed" | "missing">>({});
   const [pendingProtocols, setPendingProtocols] = useState<Set<string>>(new Set());
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [highlightedSet, setHighlightedSet] = useState<Set<string>>(new Set());
+  const [togglingHighlight, setTogglingHighlight] = useState<string | null>(null);
 
   // Derived helpers
   const currentEnterprise = enterprises.find((e) => e.id === selectedEnterprise);
@@ -273,6 +275,58 @@ export default function AdminPage() {
       fetchRagStatus();
     }
   }, [isAuthenticated, fetchProtocols, fetchAllHospitals, fetchRagStatus]);
+
+  // Fetch highlighted protocols for the current enterprise
+  const fetchHighlighted = useCallback(async () => {
+    try {
+      const token = await getIdToken();
+      if (!token) return;
+      const res = await fetch(`${API_URL}/enterprise/highlighted`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const ids = new Set<string>((data.highlighted || []).map((h: { protocol_id: string }) => h.protocol_id));
+        setHighlightedSet(ids);
+      }
+    } catch (err) {
+      console.error("Failed to fetch highlighted:", err);
+    }
+  }, [getIdToken]);
+
+  useEffect(() => {
+    if (isAuthenticated && selectedEnterprise) {
+      fetchHighlighted();
+    }
+  }, [isAuthenticated, selectedEnterprise, fetchHighlighted]);
+
+  // Toggle highlight for a protocol
+  const toggleHighlight = async (enterpriseId: string, edId: string, bundleId: string, protocolId: string) => {
+    const key = protocolId;
+    setTogglingHighlight(key);
+    try {
+      const token = await getIdToken();
+      if (!token) return;
+      const res = await fetch(`${API_URL}/enterprise/highlighted`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ protocol_id: protocolId, enterprise_id: enterpriseId, ed_id: edId, bundle_id: bundleId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHighlightedSet(prev => {
+          const next = new Set(prev);
+          if (data.status === "added") next.add(protocolId);
+          else next.delete(protocolId);
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to toggle highlight:", err);
+    } finally {
+      setTogglingHighlight(null);
+    }
+  };
 
   const toggleHospital = (hospital: string) => {
     const newExpanded = new Set(expandedHospitals);
@@ -1161,6 +1215,18 @@ export default function AdminPage() {
                               <p className="text-xs text-[#5f6368]">
                                 {new Date(protocol.processed_at).toLocaleDateString()}
                               </p>
+                              <button
+                                onClick={() => toggleHighlight(selectedEnterprise, selectedED, selectedBundle, protocol.protocol_id)}
+                                disabled={togglingHighlight === protocol.protocol_id}
+                                title={highlightedSet.has(protocol.protocol_id) ? "Remove highlight" : "Highlight for all users"}
+                                className={`p-2 rounded-full transition-colors disabled:opacity-50 ${
+                                  highlightedSet.has(protocol.protocol_id)
+                                    ? "text-blue-400 hover:text-blue-300 hover:bg-blue-400/10"
+                                    : "text-[#9aa0a6] hover:text-blue-400 hover:bg-blue-400/10"
+                                }`}
+                              >
+                                <Bookmark className={`w-4 h-4 ${highlightedSet.has(protocol.protocol_id) ? "fill-current" : ""}`} />
+                              </button>
                               <button
                                 onClick={() => handleDelete(selectedEnterprise, selectedED, selectedBundle, protocol.protocol_id)}
                                 disabled={deleting === `${selectedEnterprise}/${selectedED}/${selectedBundle}/${protocol.protocol_id}`}

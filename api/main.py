@@ -1741,6 +1741,115 @@ async def upload_pdf_from_url(request: UploadFromURLRequest):
 
 
 # ============================================================================
+# HIGHLIGHTED PROTOCOLS ENDPOINTS
+# ============================================================================
+
+class HighlightRequest(BaseModel):
+    """Request to highlight/unhighlight a protocol"""
+    protocol_id: str
+    enterprise_id: str
+    ed_id: str
+    bundle_id: str
+
+
+@app.get("/enterprise/highlighted")
+async def get_highlighted_protocols(user: UserProfile = Depends(get_current_user)):
+    """
+    Get highlighted protocols for the user's enterprise.
+    Returns protocol metadata + images for display on the main page.
+    All authenticated enterprise users can read.
+    """
+    from google.cloud import firestore as fs
+    db_hl = fs.Client(project="clinical-assistant-457902")
+
+    enterprise_id = user.enterprise_id
+    if not enterprise_id:
+        return {"highlighted": []}
+
+    try:
+        highlights_ref = db_hl.collection("enterprises").document(enterprise_id).collection("highlighted_protocols")
+        highlights = []
+
+        for doc in highlights_ref.order_by("highlighted_at", direction=fs.Query.DESCENDING).stream():
+            data = doc.to_dict()
+            pid = data.get("protocol_id", "")
+            eid = data.get("ed_id", "")
+            bid = data.get("bundle_id", "")
+
+            # Fetch protocol metadata from GCS for images/summary/pdf_url
+            protocol = protocol_service.get_protocol(enterprise_id, eid, bid, pid)
+
+            # Build display name
+            display_name = pid.replace("_", " ").replace(".pdf", "")
+
+            # Build pdf_url
+            pdf_url = f"https://storage.googleapis.com/{protocol_service.bucket.name}/{enterprise_id}/{eid}/{bid}/{pid}/{pid}.pdf"
+
+            images = []
+            if protocol:
+                images = [
+                    {"page": img.get("page", 0), "url": img.get("url", "")}
+                    for img in protocol.get("images", [])
+                    if img.get("url")
+                ]
+
+            highlights.append({
+                "protocol_id": pid,
+                "enterprise_id": enterprise_id,
+                "ed_id": eid,
+                "bundle_id": bid,
+                "summary": protocol.get("summary", "") if protocol else "",
+                "pdf_url": pdf_url,
+                "images": images,
+                "relevance_score": 1.0,
+                "highlighted_at": data.get("highlighted_at").isoformat() if data.get("highlighted_at") and hasattr(data["highlighted_at"], "isoformat") else None,
+                "highlighted_by": data.get("highlighted_by", ""),
+            })
+
+        return {"highlighted": highlights}
+
+    except Exception as e:
+        print(f"Error fetching highlighted protocols: {e}")
+        return {"highlighted": []}
+
+
+@app.post("/enterprise/highlighted")
+async def toggle_highlighted_protocol(
+    req: HighlightRequest,
+    user: UserProfile = Depends(get_current_user),
+):
+    """
+    Toggle a protocol's highlighted status. Admin/super_admin only.
+    If already highlighted → remove. If not → add.
+    """
+    require_admin(user)
+
+    from google.cloud import firestore as fs
+    db_hl = fs.Client(project="clinical-assistant-457902")
+
+    enterprise_id = req.enterprise_id
+    doc_id = f"{req.ed_id}__{req.bundle_id}__{req.protocol_id}"
+    doc_ref = db_hl.collection("enterprises").document(enterprise_id).collection("highlighted_protocols").document(doc_id)
+
+    existing = doc_ref.get()
+    if existing.exists:
+        # Remove highlight
+        doc_ref.delete()
+        return {"status": "removed", "protocol_id": req.protocol_id}
+    else:
+        # Add highlight
+        doc_ref.set({
+            "protocol_id": req.protocol_id,
+            "enterprise_id": enterprise_id,
+            "ed_id": req.ed_id,
+            "bundle_id": req.bundle_id,
+            "highlighted_by": user.uid,
+            "highlighted_at": fs.SERVER_TIMESTAMP,
+        })
+        return {"status": "added", "protocol_id": req.protocol_id}
+
+
+# ============================================================================
 # ADMIN MANAGEMENT ENDPOINTS
 # ============================================================================
 

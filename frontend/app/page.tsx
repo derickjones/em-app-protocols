@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star, Bookmark } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
@@ -93,6 +93,7 @@ export default function Home() {
   // Protocol cards state
   const [protocolCards, setProtocolCards] = useState<ProtocolCardData[]>([]);
   const [favoriteProtocols, setFavoriteProtocols] = useState<ProtocolCardData[]>([]);
+  const [highlightedProtocols, setHighlightedProtocols] = useState<ProtocolCardData[]>([]);
   
   // Enterprise/ED/Bundle selection state
   const [enterprise, setEnterprise] = useState<EnterpriseData | null>(null);
@@ -386,6 +387,27 @@ export default function Home() {
       fetchEnterprise();
     }
   }, [user, userProfile, hasAccess, fetchEnterprise]);
+
+  // Fetch highlighted protocols for the user's enterprise
+  useEffect(() => {
+    if (!enterprise?.id) return;
+    const fetchHighlighted = async () => {
+      try {
+        const token = await getIdToken();
+        if (!token) return;
+        const res = await fetch(`${API_URL}/enterprise/highlighted`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setHighlightedProtocols(data.highlighted || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch highlighted protocols:", err);
+      }
+    };
+    fetchHighlighted();
+  }, [enterprise?.id, getIdToken]);
 
   // Load selected bundles from localStorage
   useEffect(() => {
@@ -1788,6 +1810,56 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              {/* Highlighted Protocols (admin-curated) */}
+              {highlightedProtocols.length > 0 && (
+                <div className="mt-6 w-full max-w-2xl mx-auto">
+                  <div className={`rounded-2xl overflow-hidden ${
+                    darkMode
+                      ? 'bg-neutral-900 border border-blue-900/40'
+                      : 'bg-white border border-blue-200'
+                  }`}>
+                    {/* Header */}
+                    <div className={`flex items-center gap-2 px-5 py-3 ${
+                      darkMode ? 'border-b border-blue-900/40 bg-blue-950/20' : 'border-b border-blue-100 bg-blue-50/50'
+                    }`}>
+                      <Bookmark className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-500'} fill-current`} />
+                      <span className={`text-sm font-semibold ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                        Highlighted by Your Practice
+                      </span>
+                    </div>
+                    {/* Protocol rows */}
+                    {highlightedProtocols.map((card, idx) => {
+                      const name = card.protocol_id
+                        .replace(/_/g, " ")
+                        .replace(/\.pdf$/i, "")
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                      return (
+                        <a
+                          key={`hl-${card.protocol_id}`}
+                          href={card.pdf_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`w-full flex items-center justify-between px-5 py-3 text-left transition-colors duration-150 ${
+                            idx < highlightedProtocols.length - 1
+                              ? darkMode ? 'border-b border-neutral-800' : 'border-b border-gray-100'
+                              : ''
+                          } ${
+                            darkMode
+                              ? 'hover:bg-blue-950/30 text-gray-300'
+                              : 'hover:bg-blue-50/50 text-gray-600'
+                          }`}
+                        >
+                          <span className="text-sm">{name}</span>
+                          <ChevronRight className={`w-4 h-4 flex-shrink-0 ${
+                            darkMode ? 'text-blue-400/70' : 'text-blue-400/70'
+                          }`} />
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Favorited Protocols */}
               {favoriteProtocols.length > 0 && (
