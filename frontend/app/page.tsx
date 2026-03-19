@@ -1813,15 +1813,11 @@ export default function Home() {
                         .replace(/\.pdf$/i, "")
                         .replace(/\b\w/g, (c) => c.toUpperCase());
                       return (
-                        <button
+                        <a
                           key={`fav-${card.protocol_id}`}
-                          onClick={() => {
-                            setQuestion(name);
-                            setTimeout(() => {
-                              const el = document.querySelector<HTMLButtonElement>('[title="Submit"]');
-                              el?.click();
-                            }, 100);
-                          }}
+                          href={card.pdf_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className={`w-full flex items-center justify-between px-5 py-3 text-left transition-colors duration-150 ${
                             idx < favoriteProtocols.length - 1
                               ? darkMode ? 'border-b border-neutral-800' : 'border-b border-gray-100'
@@ -1836,7 +1832,7 @@ export default function Home() {
                           <ChevronRight className={`w-4 h-4 flex-shrink-0 ${
                             darkMode ? 'text-red-400/70' : 'text-red-400/70'
                           }`} />
-                        </button>
+                        </a>
                       );
                     })}
                   </div>
