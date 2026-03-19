@@ -2,7 +2,8 @@
 
 /**
  * Login Page
- * Google-only sign-in with Mayo domain auto-approve.
+ * Google sign-in with Mayo domain auto-approve.
+ * Corporate fallback for Mayo laptops blocked by Imprivata (EMA-71).
  * Non-mayo users see a "Request Access" form under the Mayo Bundle section.
  */
 
@@ -13,8 +14,10 @@ import { useAuth } from "@/lib/auth-context";
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [showCorporate, setShowCorporate] = useState(false);
+  const [corporateEmail, setCorporateEmail] = useState("");
 
-  const { user, userProfile, signInWithGoogle, error: authError } = useAuth();
+  const { user, userProfile, signInWithGoogle, corporateLogin, error: authError } = useAuth();
   const router = useRouter();
 
   const handleGoogleSignIn = async () => {
@@ -22,8 +25,6 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await signInWithGoogle();
-      // After sign-in, check if auto-approved (mayo email) and redirect
-      // The auth context will update userProfile, and the useEffect below handles redirect
     } catch {
       // Error is set in auth context
     } finally {
@@ -31,9 +32,22 @@ export default function LoginPage() {
     }
   };
 
-  // If user is signed in, always redirect to home
-  // App access is open; Mayo protocol access is gated in the main page
-  if (user && userProfile) {
+  const handleCorporateLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+    setIsLoading(true);
+    try {
+      await corporateLogin(corporateEmail);
+      router.push("/");
+    } catch {
+      // Error is set in auth context
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // If user is signed in (Google or corporate), redirect to home
+  if ((user || userProfile) && userProfile) {
     router.push("/");
     return null;
   }
@@ -86,13 +100,46 @@ export default function LoginPage() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            {isLoading ? "Signing in..." : "Sign in with Google"}
+            {isLoading && !showCorporate ? "Signing in..." : "Sign in with Google"}
           </button>
 
           {/* Info */}
           <p className="mt-4 text-center text-gray-400 text-sm">
             Sign in with your <span className="font-semibold text-blue-400">@mayo.edu</span> account for instant access to department protocols.
           </p>
+
+          {/* Corporate Login Toggle */}
+          <div className="mt-6 border-t border-white/10 pt-4">
+            <button
+              onClick={() => setShowCorporate(!showCorporate)}
+              className="w-full text-center text-sm text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              {showCorporate ? "Hide" : "On a work computer? Sign in with email"}
+            </button>
+
+            {showCorporate && (
+              <form onSubmit={handleCorporateLogin} className="mt-4 space-y-3">
+                <p className="text-xs text-gray-500">
+                  Use this if Google sign-in is blocked on your corporate laptop.
+                </p>
+                <input
+                  type="email"
+                  placeholder="your.name@mayo.edu"
+                  value={corporateEmail}
+                  onChange={(e) => setCorporateEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-[#131314] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading || !corporateEmail}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-medium rounded-lg transition-colors text-sm"
+                >
+                  {isLoading && showCorporate ? "Signing in..." : "Sign in with email"}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -22,6 +22,15 @@ from rag_service import RAGService
 from protocol_service import ProtocolService
 from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_ed_access, require_admin, verify_firebase_token, check_email_verified
 from personal_service import PersonalService
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+
+# Initialize Firebase Admin SDK (uses Application Default Credentials on Cloud Run)
+if not firebase_admin._apps:
+    firebase_admin.initialize_app()
+
+# Firebase Web API key — needed for REST token exchange (server-side only)
+FIREBASE_API_KEY = os.environ.get("FIREBASE_API_KEY", "AIzaSyB5zFvhhcLVAJ4aYgJT3MlhhUY__k8egMk")
 
 # RAG Configuration
 PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
@@ -180,6 +189,31 @@ class AccessRequestCreate(BaseModel):
     mayo_email: str = Field(..., description="Mayo email address (must end in @mayo.edu)")
 
 
+class CorporateLoginRequest(BaseModel):
+    """Request for corporate passwordless login (EMA-71)"""
+    email: str = Field(..., description="User's email address")
+
+
+class CorporateLoginResponse(BaseModel):
+    """Response with Firebase tokens created server-side"""
+    idToken: str
+    refreshToken: str
+    expiresIn: str
+    user: UserProfileResponse
+
+
+class TokenRefreshRequest(BaseModel):
+    """Request to refresh an expired corporate login token"""
+    refreshToken: str = Field(..., description="Firebase refresh token")
+
+
+class TokenRefreshResponse(BaseModel):
+    """Response with refreshed token"""
+    idToken: str
+    refreshToken: str
+    expiresIn: str
+
+
 # ----- Endpoints -----
 
 @app.get("/", response_model=HealthResponse)
@@ -211,6 +245,141 @@ async def get_current_user_profile(user: UserProfile = Depends(get_current_user)
     Creates user if first login with valid domain
     """
     return UserProfileResponse(**user.to_dict())
+
+
+@app.post("/auth/corporate-login", response_model=CorporateLoginResponse)
+async def corporate_login(data: CorporateLoginRequest):
+    """
+    Corporate passwordless login (EMA-71).
+    
+    For users on Mayo corporate laptops where Imprivata CE blocks
+    googleapis.com, preventing all Firebase client-side auth.
+    
+    Flow:
+    1. Get or create Firebase user by email (Admin SDK — server-side)
+    2. Create custom token (Admin SDK)
+    3. Exchange custom token for idToken + refreshToken via Firebase REST API
+    4. Create/fetch Firestore user profile (always starts as no_access for corporate)
+    5. Return tokens + profile to frontend
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    email = data.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email address required")
+    
+    try:
+        # Step 1: Get or create the Firebase Auth user
+        try:
+            fb_user = firebase_auth.get_user_by_email(email)
+            logger.info(f"Corporate login: existing user {fb_user.uid} for {email}")
+        except firebase_auth.UserNotFoundError:
+            fb_user = firebase_auth.create_user(
+                email=email,
+                email_verified=True,  # Corporate email — trusted
+            )
+            logger.info(f"Corporate login: created user {fb_user.uid} for {email}")
+        
+        # Step 2: Create a custom token
+        custom_token = firebase_auth.create_custom_token(fb_user.uid)
+        
+        # Step 3: Exchange custom token for real Firebase ID token + refresh token
+        # This call goes from Cloud Run → Google's API (no Imprivata blocking here)
+        exchange_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={FIREBASE_API_KEY}"
+        exchange_resp = requests.post(exchange_url, json={
+            "token": custom_token.decode("utf-8") if isinstance(custom_token, bytes) else custom_token,
+            "returnSecureToken": True,
+        })
+        
+        if exchange_resp.status_code != 200:
+            logger.error(f"Token exchange failed: {exchange_resp.status_code} {exchange_resp.text}")
+            raise HTTPException(
+                status_code=502,
+                detail="Failed to exchange authentication token"
+            )
+        
+        token_data = exchange_resp.json()
+        id_token = token_data["idToken"]
+        refresh_token = token_data["refreshToken"]
+        expires_in = token_data.get("expiresIn", "3600")
+        
+        # Step 4: Get or create Firestore user profile
+        # Corporate login users ALWAYS start as no_access (even @mayo.edu)
+        # — they must go through the owner approval flow for Mayo bundles
+        from google.cloud import firestore as fs
+        db = fs.Client(project="clinical-assistant-457902")
+        
+        user_ref = db.collection("users").document(fb_user.uid)
+        user_doc = user_ref.get()
+        
+        if user_doc.exists:
+            profile_data = user_doc.to_dict()
+        else:
+            # New corporate user — always no_access
+            profile_data = {
+                "email": email,
+                "enterprise_id": None,
+                "enterprise_name": None,
+                "role": "user",
+                "ed_access": [],
+                "access_status": "no_access",
+                "auth_method": "corporate",
+                "created_at": fs.SERVER_TIMESTAMP,
+            }
+            user_ref.set(profile_data)
+        
+        user_profile = UserProfileResponse(
+            uid=fb_user.uid,
+            email=email,
+            enterpriseId=profile_data.get("enterprise_id"),
+            enterpriseName=profile_data.get("enterprise_name"),
+            role=profile_data.get("role", "user"),
+            edAccess=profile_data.get("ed_access", []),
+            accessStatus=profile_data.get("access_status", "no_access"),
+        )
+        
+        return CorporateLoginResponse(
+            idToken=id_token,
+            refreshToken=refresh_token,
+            expiresIn=expires_in,
+            user=user_profile,
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Corporate login error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Corporate login failed. Please try again.")
+
+
+@app.post("/auth/refresh-token", response_model=TokenRefreshResponse)
+async def refresh_corporate_token(data: TokenRefreshRequest):
+    """
+    Refresh an expired Firebase ID token using a refresh token.
+    
+    Used by corporate login users whose tokens are managed client-side
+    (not by Firebase JS SDK). The frontend calls this before the 1-hour
+    ID token expires.
+    """
+    refresh_url = f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}"
+    resp = requests.post(refresh_url, json={
+        "grant_type": "refresh_token",
+        "refresh_token": data.refreshToken,
+    })
+    
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=401,
+            detail="Failed to refresh token. Please sign in again."
+        )
+    
+    token_data = resp.json()
+    return TokenRefreshResponse(
+        idToken=token_data["id_token"],
+        refreshToken=token_data["refresh_token"],
+        expiresIn=token_data.get("expires_in", "3600"),
+    )
 
 
 # ----- Access Request Endpoints -----

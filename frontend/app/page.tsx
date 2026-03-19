@@ -162,7 +162,7 @@ export default function Home() {
     if (litflEnabled) sources.push("litfl");
     if (rebelemEnabled) sources.push("rebelem");
     if (aliemEnabled) sources.push("aliem");
-    if (personalEnabled && user) sources.push("personal");
+    if (personalEnabled && (user || userProfile)) sources.push("personal");
     return sources;
   };
 
@@ -343,10 +343,10 @@ export default function Home() {
 
   // Load enterprise when user is available
   useEffect(() => {
-    if (user && hasAccess) {
+    if ((user || userProfile) && hasAccess) {
       fetchEnterprise();
     }
-  }, [user, hasAccess, fetchEnterprise]);
+  }, [user, userProfile, hasAccess, fetchEnterprise]);
 
   // Load selected bundles from localStorage
   useEffect(() => {
@@ -511,7 +511,7 @@ export default function Home() {
     if (!question.trim() || loading || isStreaming) return;
     
     // Require login to search
-    if (!user) {
+    if (!user && !userProfile) {
       router.push("/login");
       return;
     }
@@ -2279,7 +2279,7 @@ export default function Home() {
                           if (!isPersonal || !cite.source_uri) return;
                           e.preventDefault();
                           try {
-                            const token = await user?.getIdToken();
+                            const token = await getIdToken();
                             const res = await fetch(`${API_URL}${cite.source_uri}`, {
                               headers: { Authorization: `Bearer ${token}` },
                             });

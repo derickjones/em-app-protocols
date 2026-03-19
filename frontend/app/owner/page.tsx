@@ -107,7 +107,7 @@ export default function OwnerDashboard() {
 
   // Check if user is owner or super_admin — only super_admins can access
   useEffect(() => {
-    if (!authLoading && (!user || userProfile?.role !== "super_admin")) {
+    if (!authLoading && ((!user && !userProfile) || userProfile?.role !== "super_admin")) {
       router.push("/");
     }
   }, [user, userProfile, authLoading, router]);

@@ -9,6 +9,12 @@
  * - Non-mayo Google sign-in → authenticated but no app access
  *   → can submit access request (name + @mayo.edu email)
  *   → owner approves at /owner → user gets access
+ * 
+ * Corporate fallback (EMA-71):
+ * - Passwordless email login for environments where Google
+ *   popup/redirect is blocked by Imprivata or browser policy.
+ *   Backend creates Firebase user & exchanges tokens server-side,
+ *   bypassing blocked googleapis.com domains entirely.
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
@@ -40,6 +46,7 @@ interface AuthContextType {
   isMayoUser: boolean;
   hasAccess: boolean;
   signInWithGoogle: () => Promise<void>;
+  corporateLogin: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
   submitAccessRequest: (name: string, mayoEmail: string) => Promise<{ status: string; message: string }>;
@@ -50,13 +57,85 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
+// Keys for storing corporate login tokens in localStorage
+const CORPORATE_TOKEN_KEY = "em_corporate_id_token";
+const CORPORATE_REFRESH_KEY = "em_corporate_refresh_token";
+const CORPORATE_EXPIRY_KEY = "em_corporate_token_expiry";
+const CORPORATE_PROFILE_KEY = "em_corporate_profile";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch user profile from backend after auth
+  // Track whether this session is a corporate (server-token) login
+  const [isCorporateSession, setIsCorporateSession] = useState(false);
+
+  // ----- Corporate token helpers -----
+
+  const storeCorporateTokens = (idToken: string, refreshToken: string, expiresIn: string, profile: UserProfile) => {
+    const expiryMs = Date.now() + parseInt(expiresIn, 10) * 1000;
+    localStorage.setItem(CORPORATE_TOKEN_KEY, idToken);
+    localStorage.setItem(CORPORATE_REFRESH_KEY, refreshToken);
+    localStorage.setItem(CORPORATE_EXPIRY_KEY, expiryMs.toString());
+    localStorage.setItem(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
+  };
+
+  const clearCorporateTokens = () => {
+    localStorage.removeItem(CORPORATE_TOKEN_KEY);
+    localStorage.removeItem(CORPORATE_REFRESH_KEY);
+    localStorage.removeItem(CORPORATE_EXPIRY_KEY);
+    localStorage.removeItem(CORPORATE_PROFILE_KEY);
+  };
+
+  const getCorporateIdToken = (): string | null => {
+    return localStorage.getItem(CORPORATE_TOKEN_KEY);
+  };
+
+  const getCorporateRefreshToken = (): string | null => {
+    return localStorage.getItem(CORPORATE_REFRESH_KEY);
+  };
+
+  const isCorporateTokenExpired = (): boolean => {
+    const expiry = localStorage.getItem(CORPORATE_EXPIRY_KEY);
+    if (!expiry) return true;
+    // Refresh 5 minutes before actual expiry
+    return Date.now() > parseInt(expiry, 10) - 5 * 60 * 1000;
+  };
+
+  const refreshCorporateToken = async (): Promise<string | null> => {
+    const refreshToken = getCorporateRefreshToken();
+    if (!refreshToken) return null;
+
+    try {
+      const resp = await fetch(`${API_URL}/auth/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!resp.ok) {
+        // Refresh failed — force re-login
+        clearCorporateTokens();
+        setIsCorporateSession(false);
+        setUserProfile(null);
+        return null;
+      }
+
+      const data = await resp.json();
+      const expiryMs = Date.now() + parseInt(data.expiresIn, 10) * 1000;
+      localStorage.setItem(CORPORATE_TOKEN_KEY, data.idToken);
+      localStorage.setItem(CORPORATE_REFRESH_KEY, data.refreshToken);
+      localStorage.setItem(CORPORATE_EXPIRY_KEY, expiryMs.toString());
+      return data.idToken;
+    } catch {
+      return null;
+    }
+  };
+
+  // ----- Shared helpers -----
+
   const fetchUserProfile = async (firebaseUser: User): Promise<UserProfile | null> => {
     try {
       const token = await firebaseUser.getIdToken();
@@ -79,15 +158,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchProfileWithToken = async (idToken: string): Promise<UserProfile | null> => {
+    try {
+      const response = await fetch(`${API_URL}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch (err) {
+      console.error("Failed to fetch user profile:", err);
+      return null;
+    }
+  };
+
   const refreshProfile = async () => {
-    if (user) {
+    if (isCorporateSession) {
+      const token = await getIdToken();
+      if (token) {
+        const profile = await fetchProfileWithToken(token);
+        setUserProfile(profile);
+        if (profile) {
+          localStorage.setItem(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
+        }
+      }
+    } else if (user) {
       const profile = await fetchUserProfile(user);
       setUserProfile(profile);
     }
   };
 
+  // ----- Init: restore corporate session or listen for Firebase auth -----
+
   useEffect(() => {
-    // Handle redirect result (for corporate environments where popups are blocked)
+    // Check for existing corporate session first
+    const savedToken = getCorporateIdToken();
+    const savedProfile = localStorage.getItem(CORPORATE_PROFILE_KEY);
+
+    if (savedToken && savedProfile) {
+      // Restore corporate session
+      setIsCorporateSession(true);
+      setUserProfile(JSON.parse(savedProfile));
+      setLoading(false);
+
+      // Refresh token if needed (async, non-blocking)
+      if (isCorporateTokenExpired()) {
+        refreshCorporateToken().then(async (newToken) => {
+          if (newToken) {
+            const profile = await fetchProfileWithToken(newToken);
+            if (profile) {
+              setUserProfile(profile);
+              localStorage.setItem(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
+            }
+          }
+        });
+      }
+      return; // Don't set up Firebase listener for corporate sessions
+    }
+
+    // Standard Firebase auth flow
     getRedirectResult(auth)
       .then(async (result) => {
         if (result?.user) {
@@ -114,7 +247,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ----- Auth methods -----
 
   const signInWithGoogle = async () => {
     setError(null);
@@ -123,9 +258,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await fetchUserProfile(result.user);
       setUserProfile(profile);
     } catch (err: unknown) {
-      // If popup is blocked or closed by corporate policy, fall back to redirect.
-      // Corporate environments (e.g. Mayo laptops) can trigger several different
-      // error codes depending on how the popup is prevented. See EMA-71.
       const code = (err as { code?: string })?.code;
       const popupFailureCodes = [
         "auth/popup-closed-by-user",
@@ -142,20 +274,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const corporateLogin = async (email: string) => {
+    setError(null);
+    try {
+      const resp = await fetch(`${API_URL}/auth/corporate-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ detail: "Login failed" }));
+        throw new Error(data.detail || "Corporate login failed");
+      }
+
+      const data = await resp.json();
+      
+      // Store tokens locally (Firebase SDK is bypassed for corporate users)
+      storeCorporateTokens(data.idToken, data.refreshToken, data.expiresIn, data.user);
+      setIsCorporateSession(true);
+      setUserProfile(data.user);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Corporate login failed";
+      setError(message);
+      throw err;
+    }
+  };
+
   const signOut = async () => {
-    await firebaseSignOut(auth);
+    if (isCorporateSession) {
+      clearCorporateTokens();
+      setIsCorporateSession(false);
+    } else {
+      await firebaseSignOut(auth);
+    }
+    setUser(null);
     setUserProfile(null);
   };
 
   const getIdToken = async (): Promise<string | null> => {
+    // Corporate session: use stored token, refresh if needed
+    if (isCorporateSession) {
+      if (isCorporateTokenExpired()) {
+        return refreshCorporateToken();
+      }
+      return getCorporateIdToken();
+    }
+    // Standard Firebase session
     if (!user) return null;
     return user.getIdToken();
   };
 
   const submitAccessRequest = async (name: string, mayoEmail: string): Promise<{ status: string; message: string }> => {
-    if (!user) throw new Error("Must be signed in to submit access request");
+    const token = await getIdToken();
+    if (!token) throw new Error("Must be signed in to submit access request");
     
-    const token = await user.getIdToken();
     const response = await fetch(`${API_URL}/access-requests`, {
       method: "POST",
       headers: {
@@ -172,14 +345,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     // Refresh profile to get updated access_status
-    const profile = await fetchUserProfile(user);
-    setUserProfile(profile);
+    await refreshProfile();
     
     return data;
   };
 
-  // Derived state
-  const isMayoUser = user?.email?.endsWith("@mayo.edu") ?? false;
+  // Derived state — corporate users count as "signed in" even without a Firebase User object
+  const isSignedIn = !!user || isCorporateSession;
+  const isMayoUser = (user?.email?.endsWith("@mayo.edu") ?? false) || (userProfile?.email?.endsWith("@mayo.edu") ?? false);
   const hasAccess = userProfile?.accessStatus === "approved" || false;
 
   return (
@@ -192,6 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isMayoUser,
         hasAccess,
         signInWithGoogle,
+        corporateLogin,
         signOut,
         getIdToken,
         submitAccessRequest,

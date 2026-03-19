@@ -10,3 +10,4 @@ python-multipart==0.0.*
 PyMuPDF==1.25.*
 Pillow>=10.0
 pillow-heif>=0.16
+firebase-admin>=6.0

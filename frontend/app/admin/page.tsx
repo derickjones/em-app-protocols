@@ -55,7 +55,7 @@ interface UploadStatus {
 }
 
 export default function AdminPage() {
-  const { user, userProfile, loading: authLoading } = useAuth();
+  const { user, userProfile, loading: authLoading, getIdToken } = useAuth();
 
   // Selection state
   const [enterprises, setEnterprises] = useState<EnterpriseInfo[]>([]);
@@ -94,10 +94,11 @@ export default function AdminPage() {
 
   // Fetch enterprises hierarchy from Firestore
   useEffect(() => {
-    if (!user) return;
+    if (!user && !userProfile) return;
     const fetchEnterprises = async () => {
       try {
-        const token = await user.getIdToken();
+        const token = await getIdToken();
+        if (!token) return;
         const res = await fetch(`${API_URL}/admin/enterprises`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -164,9 +165,10 @@ export default function AdminPage() {
   }, [selectedEnterprise, selectedED, selectedBundle]);
 
   const fetchRagStatus = useCallback(async () => {
-    if (!user || !selectedEnterprise || !selectedED || !selectedBundle) return;
+    if ((!user && !userProfile) || !selectedEnterprise || !selectedED || !selectedBundle) return;
     try {
-      const token = await user.getIdToken();
+      const token = await getIdToken();
+      if (!token) return;
       const params = new URLSearchParams({
         enterprise_id: selectedEnterprise,
         ed_id: selectedED,

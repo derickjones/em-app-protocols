@@ -99,7 +99,7 @@ function statusBadge(status: string, error?: string) {
 }
 
 export default function PersonalPage() {
-  const { user, getIdToken } = useAuth();
+  const { user, userProfile, getIdToken } = useAuth();
   const router = useRouter();
 
   const [files, setFiles] = useState<PersonalFile[]>([]);
@@ -112,7 +112,7 @@ export default function PersonalPage() {
   const [showPhiWarning, setShowPhiWarning] = useState(true);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user && !userProfile) return;
     try {
       const token = await getIdToken();
       if (!token) return;
@@ -134,7 +134,7 @@ export default function PersonalPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, getIdToken]);
+  }, [user, userProfile, getIdToken]);
 
   useEffect(() => {
     fetchData();
@@ -149,7 +149,7 @@ export default function PersonalPage() {
   }, [files, fetchData]);
 
   const handleUpload = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0 || !user) return;
+    if (!fileList || fileList.length === 0 || (!user && !userProfile)) return;
     setUploadError(null);
     setUploading(true);
 
@@ -197,7 +197,7 @@ export default function PersonalPage() {
   };
 
   const handleDelete = async (fileId: string) => {
-    if (!user) return;
+    if (!user && !userProfile) return;
     setDeletingId(fileId);
     try {
       const token = await getIdToken();
@@ -215,7 +215,7 @@ export default function PersonalPage() {
   };
 
   const handleDeleteAll = async () => {
-    if (!user || !confirm("Delete ALL personal files? This cannot be undone.")) return;
+    if ((!user && !userProfile) || !confirm("Delete ALL personal files? This cannot be undone.")) return;
     try {
       const token = await getIdToken();
       if (!token) return;
@@ -232,7 +232,7 @@ export default function PersonalPage() {
   const quotaPct = quota ? Math.round((quota.file_count / quota.file_limit) * 100) : 0;
   const storagePct = quota ? Math.round((quota.bytes_used / quota.bytes_limit) * 100) : 0;
 
-  if (!user) {
+  if (!user && !userProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black">
         <p className="text-gray-500 dark:text-gray-400">Please sign in to manage personal files.</p>
