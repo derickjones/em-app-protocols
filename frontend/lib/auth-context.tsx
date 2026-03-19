@@ -43,6 +43,7 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   error: string | null;
+  isSignedIn: boolean;
   isMayoUser: boolean;
   hasAccess: boolean;
   signInWithGoogle: () => Promise<void>;
@@ -377,6 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userProfile,
         loading,
         error,
+        isSignedIn,
         isMayoUser,
         hasAccess,
         signInWithGoogle,

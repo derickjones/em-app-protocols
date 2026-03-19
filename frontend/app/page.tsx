@@ -205,7 +205,7 @@ export default function Home() {
     setUniverseDirty(true);
   };
 
-  const { user, userProfile, loading: authLoading, hasAccess, signOut, getIdToken, submitAccessRequest, refreshProfile } = useAuth();
+  const { user, userProfile, loading: authLoading, isSignedIn, hasAccess, signOut, getIdToken, submitAccessRequest, refreshProfile } = useAuth();
   const router = useRouter();
 
   // Mayo access request form state (shown in bundle section for non-approved users)
@@ -895,7 +895,7 @@ export default function Home() {
           rating,
           reasons: Array.from(feedbackReasons),
           comment: feedbackComment,
-          user_email: user?.email || "anonymous",
+          user_email: user?.email || userProfile?.email || "anonymous",
         }),
       });
       setFeedbackSubmitted(true);
@@ -1422,7 +1422,7 @@ export default function Home() {
           </div>
 
           {/* My Files — Personal RAG toggle */}
-          {user && (
+          {isSignedIn && (
             <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
                 <div className="flex items-center gap-2 px-1 mb-2">
@@ -1468,7 +1468,7 @@ export default function Home() {
           )}
 
           {/* Mayo Protocols — Request Access (sidebar) */}
-          {user && !hasAccess && (
+          {isSignedIn && !hasAccess && (
             <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
                 <div className="flex items-center gap-2 px-1 mb-2">
@@ -1599,7 +1599,7 @@ export default function Home() {
           )}
 
           {/* Enterprise + ED Selector */}
-          {user && hasAccess && enterprise && (
+          {isSignedIn && hasAccess && enterprise && (
             <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
               {/* Enterprise selector (super_admin) or name (regular user) */}
@@ -1700,13 +1700,13 @@ export default function Home() {
           )}
 
           {/* User Auth - at bottom */}
-          {user ? (
+          {isSignedIn ? (
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-gray-100'}`}
               >
-                {user.photoURL ? (
+                {user?.photoURL ? (
                   <img 
                     src={user.photoURL} 
                     alt="Profile" 
@@ -1715,14 +1715,14 @@ export default function Home() {
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
-                    {user.email?.charAt(0).toUpperCase()}
+                    {(user?.email || userProfile?.email || "?").charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div className="flex-1 min-w-0 text-left">
                   <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                    {userProfile?.enterpriseName || user.email?.split("@")[0]}
+                    {userProfile?.enterpriseName || (user?.email || userProfile?.email || "").split("@")[0]}
                   </p>
-                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{user.email}</p>
+                  <p className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{user?.email || userProfile?.email}</p>
                 </div>
                 <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'} ${showUserMenu ? 'rotate-180' : ''}`} />
               </button>
@@ -1735,7 +1735,7 @@ export default function Home() {
                   />
                   <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 ${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-gray-200'}`}>
                     <div className={`px-4 py-3 border-b ${darkMode ? 'border-neutral-800' : 'border-gray-100'}`}>
-                      <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user.email}</p>
+                      <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user?.email || userProfile?.email}</p>
                       {userProfile?.enterpriseName && (
                         <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{userProfile.enterpriseName}</p>
                       )}
