@@ -16,7 +16,7 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "EM Protocols",
+  title: "EMA",
   description: "AI-powered emergency medicine clinical decision support",
 };
 
