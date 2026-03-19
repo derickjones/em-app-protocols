@@ -217,10 +217,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         });
       }
-      return; // Don't set up Firebase listener for corporate sessions
+      // Don't return early — always set up the Firebase listener below
+      // so that switching from corporate → Google sign-in works seamlessly
     }
 
-    // Standard Firebase auth flow
+    // Standard Firebase auth flow (always active)
     getRedirectResult(auth)
       .then(async (result) => {
         if (result?.user) {
@@ -237,9 +238,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
       
       if (firebaseUser) {
+        // If we had a corporate session but now have a real Firebase user,
+        // switch over to standard Firebase auth
+        if (getCorporateIdToken()) {
+          clearCorporateTokens();
+          setIsCorporateSession(false);
+        }
         const profile = await fetchUserProfile(firebaseUser);
         setUserProfile(profile);
-      } else {
+      } else if (!getCorporateIdToken()) {
+        // Only clear profile if there's no corporate session either
         setUserProfile(null);
       }
       
@@ -253,6 +261,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     setError(null);
+
+    // Clear any existing corporate session so Google auth takes over cleanly
+    if (isCorporateSession) {
+      clearCorporateTokens();
+      setIsCorporateSession(false);
+    }
+
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const profile = await fetchUserProfile(result.user);
