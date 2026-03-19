@@ -172,7 +172,7 @@ export default function OwnerDashboard() {
       fetchAdmins();
       fetchEnterprises();
       fetchAllUsers();
-      fetchAccessRequests();
+      fetchAccessRequests("pending"); // Default filter matches initial requestsFilter state
       fetchNotifications();
     }
   }, [userProfile]);
