@@ -1392,9 +1392,13 @@ export default function OwnerDashboard() {
                           </div>
                           {/* Mayo Protocol Access column */}
                           <div className="flex justify-center">
-                            {admin.enterpriseId ? (
+                            {admin.email?.endsWith("@mayo.edu") ? (
                               <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400">
                                 <Check className="w-3.5 h-3.5" /> Yes
+                              </span>
+                            ) : admin.enterpriseId ? (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-amber-500/15 text-amber-400">
+                                <Check className="w-3.5 h-3.5" /> Approved (Gmail)
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-red-500/15 text-red-400">
