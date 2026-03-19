@@ -17,7 +17,7 @@ def seed_enterprises():
             "id": "mayo-clinic",
             "name": "Mayo Clinic",
             "slug": "mayo-clinic",
-            "allowed_domains": ["mayo.edu", "mayo.org", "gmail.com"],
+            "allowed_domains": ["mayo.edu", "mayo.org"],
             "subscription_tier": "enterprise",
             "settings": {
                 "allow_user_signup": True,
