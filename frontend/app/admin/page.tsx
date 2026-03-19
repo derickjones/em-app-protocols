@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin, Link2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin, Link2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 
@@ -86,6 +86,8 @@ export default function AdminPage() {
   const [urlInput, setUrlInput] = useState("");
   const [urlUploading, setUrlUploading] = useState(false);
   const [ragStatus, setRagStatus] = useState<Record<string, "indexed" | "missing">>({});
+  const [pendingProtocols, setPendingProtocols] = useState<Set<string>>(new Set());
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Derived helpers
   const currentEnterprise = enterprises.find((e) => e.id === selectedEnterprise);
@@ -189,6 +191,80 @@ export default function AdminPage() {
       console.error("Failed to fetch RAG status:", err);
     }
   }, [user, selectedEnterprise, selectedED, selectedBundle]);
+
+  // Poll rag-status every 10s until all pending protocols are indexed (max 5 min)
+  const startIndexPolling = useCallback((protocolIds: string[]) => {
+    // Stop any existing polling
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    const pending = new Set(protocolIds);
+    setPendingProtocols(new Set(pending));
+
+    const maxAttempts = 30; // 30 × 10s = 5 minutes
+    let attempts = 0;
+
+    const poll = async () => {
+      attempts++;
+      try {
+        const token = await getIdToken();
+        if (!token) return;
+        const params = new URLSearchParams({
+          enterprise_id: selectedEnterprise,
+          ed_id: selectedED,
+          bundle_id: selectedBundle,
+        });
+        const res = await fetch(`${API_URL}/admin/rag-status?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const statusMap: Record<string, "indexed" | "missing"> = {};
+          for (const file of data.files || []) {
+            statusMap[file.protocol_id] = file.status;
+          }
+          setRagStatus(statusMap);
+
+          // Remove protocols that are now indexed from the mutable pending set
+          for (const pid of Array.from(pending)) {
+            if (statusMap[pid] === "indexed") {
+              pending.delete(pid);
+            }
+          }
+          setPendingProtocols(new Set(pending));
+
+          // Also refresh the protocol list to pick up newly processed files
+          fetchProtocols();
+
+          // Stop polling if all are indexed or max attempts reached
+          if (pending.size === 0 || attempts >= maxAttempts) {
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+            }
+            setPendingProtocols(new Set());
+          }
+        }
+      } catch (err) {
+        console.error("Polling rag-status failed:", err);
+      }
+    };
+
+    // Initial check after 10s, then every 10s
+    pollingRef.current = setInterval(poll, 10000);
+  }, [getIdToken, selectedEnterprise, selectedED, selectedBundle, fetchProtocols]);
+
+  // Cleanup polling on unmount or when selections change
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [selectedEnterprise, selectedED, selectedBundle]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -411,6 +487,7 @@ export default function AdminPage() {
     const totalFiles = pdfFiles.length;
     let completedFiles = 0;
     let failedFiles: string[] = [];
+    const uploadedProtocolIds: string[] = [];
 
     setUploadStatus({ 
       status: "uploading", 
@@ -444,6 +521,10 @@ export default function AdminPage() {
         if (!uploadRes.ok) {
           failedFiles.push(file.name);
         } else {
+          const uploadData = await uploadRes.json();
+          if (uploadData.protocol_id) {
+            uploadedProtocolIds.push(uploadData.protocol_id);
+          }
           completedFiles++;
         }
 
@@ -485,6 +566,11 @@ export default function AdminPage() {
       fetchProtocols();
       fetchAllHospitals();
     }, 2000);
+
+    // Start polling for RAG indexing status on uploaded protocols
+    if (uploadedProtocolIds.length > 0) {
+      startIndexPolling(uploadedProtocolIds);
+    }
 
     setTimeout(() => {
       setUploadStatus({ status: "idle", message: "" });
@@ -538,6 +624,11 @@ export default function AdminPage() {
           fetchProtocols();
           fetchAllHospitals();
         }, 2000);
+
+        // Start polling for RAG indexing status
+        if (data.protocol_id) {
+          startIndexPolling([data.protocol_id]);
+        }
       } else {
         const err = await res.json().catch(() => ({ detail: "Upload failed" }));
         setUploadStatus({
@@ -1020,6 +1111,15 @@ export default function AdminPage() {
                     </button>
                   </div>
 
+                  {pendingProtocols.size > 0 && (
+                    <div className="flex items-center gap-2 px-5 py-3 bg-yellow-400/10 border-b border-[#3c4043]">
+                      <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                      <span className="text-sm text-yellow-400">
+                        Processing {pendingProtocols.size} protocol{pendingProtocols.size > 1 ? "s" : ""}… checking every 10s
+                      </span>
+                    </div>
+                  )}
+
                   {protocols.length === 0 ? (
                     <div className="p-8 text-center">
                       <FileText className="w-12 h-12 mx-auto text-[#5f6368] mb-3" />
@@ -1040,7 +1140,12 @@ export default function AdminPage() {
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
-                              {ragStatus[protocol.protocol_id] === "indexed" ? (
+                              {pendingProtocols.has(protocol.protocol_id) && ragStatus[protocol.protocol_id] !== "indexed" ? (
+                                <span className="flex items-center gap-1 text-xs text-yellow-400" title="Processing — Cloud Function is indexing this protocol">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  Processing…
+                                </span>
+                              ) : ragStatus[protocol.protocol_id] === "indexed" ? (
                                 <span className="flex items-center gap-1 text-xs text-green-400" title="Indexed in RAG">
                                   <CheckCircle className="w-3.5 h-3.5" />
                                   Indexed
