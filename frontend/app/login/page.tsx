@@ -124,7 +124,7 @@ export default function LoginPage() {
                 </p>
                 <input
                   type="email"
-                  placeholder="your.name@mayo.edu"
+                  placeholder="your.name@email.com"
                   value={corporateEmail}
                   onChange={(e) => setCorporateEmail(e.target.value)}
                   required
