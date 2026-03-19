@@ -1792,24 +1792,53 @@ export default function Home() {
               {/* Favorited Protocols */}
               {favoriteProtocols.length > 0 && (
                 <div className="mt-6 w-full max-w-2xl mx-auto">
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <Star className={`w-4 h-4 ${darkMode ? 'text-yellow-400' : 'text-yellow-500'} fill-current`} />
-                    <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                      Favorited Protocols
-                    </h3>
-                  </div>
-                  <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
-                    {favoriteProtocols.map((card) => (
-                      <div key={`fav-${card.protocol_id}`} className="flex-shrink-0 w-72 snap-start">
-                        <ProtocolCard
-                          card={card}
-                          darkMode={darkMode}
-                          compact
-                          isStarred
-                          onToggleStar={toggleFavorite}
-                        />
-                      </div>
-                    ))}
+                  <div className={`rounded-2xl overflow-hidden ${
+                    darkMode
+                      ? 'bg-neutral-900 border border-neutral-800'
+                      : 'bg-white border border-gray-200'
+                  }`}>
+                    {/* Header */}
+                    <div className={`flex items-center gap-2 px-5 py-3 ${
+                      darkMode ? 'border-b border-neutral-800' : 'border-b border-gray-100'
+                    }`}>
+                      <Star className={`w-4 h-4 ${darkMode ? 'text-yellow-400' : 'text-yellow-500'} fill-current`} />
+                      <span className={`text-sm font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                        Favorited Protocols
+                      </span>
+                    </div>
+                    {/* Protocol rows */}
+                    {favoriteProtocols.map((card, idx) => {
+                      const name = card.protocol_id
+                        .replace(/_/g, " ")
+                        .replace(/\.pdf$/i, "")
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                      return (
+                        <button
+                          key={`fav-${card.protocol_id}`}
+                          onClick={() => {
+                            setQuestion(name);
+                            setTimeout(() => {
+                              const el = document.querySelector<HTMLButtonElement>('[title="Submit"]');
+                              el?.click();
+                            }, 100);
+                          }}
+                          className={`w-full flex items-center justify-between px-5 py-3 text-left transition-colors duration-150 ${
+                            idx < favoriteProtocols.length - 1
+                              ? darkMode ? 'border-b border-neutral-800' : 'border-b border-gray-100'
+                              : ''
+                          } ${
+                            darkMode
+                              ? 'hover:bg-neutral-800/60 text-gray-300'
+                              : 'hover:bg-gray-50 text-gray-600'
+                          }`}
+                        >
+                          <span className="text-sm">{name}</span>
+                          <ChevronRight className={`w-4 h-4 flex-shrink-0 ${
+                            darkMode ? 'text-red-400/70' : 'text-red-400/70'
+                          }`} />
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
