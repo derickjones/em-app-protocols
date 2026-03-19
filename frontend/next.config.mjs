@@ -8,6 +8,33 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        // Redirect old domain to new domain
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'www.emergencymedicineapp.com',
+          },
+        ],
+        destination: 'https://www.emergencymedicine.app/:path*',
+        permanent: true,
+      },
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'emergencymedicineapp.com',
+          },
+        ],
+        destination: 'https://www.emergencymedicine.app/:path*',
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {
