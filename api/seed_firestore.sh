@@ -11,7 +11,7 @@ echo ""
 # Create demo-hospital organization
 echo "Creating demo-hospital organization..."
 curl -s -X PATCH \
-  "${FIRESTORE_URL}/organizations/demo-hospital?updateMask.fieldPaths=name&updateMask.fieldPaths=slug&updateMask.fieldPaths=allowed_domains&updateMask.fieldPaths=default_bundles&updateMask.fieldPaths=subscription_tier" \
+  "${FIRESTORE_URL}/enterprises/demo-hospital?updateMask.fieldPaths=name&updateMask.fieldPaths=slug&updateMask.fieldPaths=allowed_domains&updateMask.fieldPaths=default_bundles&updateMask.fieldPaths=subscription_tier" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -29,7 +29,7 @@ echo "✅ Created: Demo Hospital"
 # Create mayo-clinic organization
 echo "Creating mayo-clinic organization..."
 curl -s -X PATCH \
-  "${FIRESTORE_URL}/organizations/mayo-clinic?updateMask.fieldPaths=name&updateMask.fieldPaths=slug&updateMask.fieldPaths=allowed_domains&updateMask.fieldPaths=default_bundles&updateMask.fieldPaths=subscription_tier" \
+  "${FIRESTORE_URL}/enterprises/mayo-clinic?updateMask.fieldPaths=name&updateMask.fieldPaths=slug&updateMask.fieldPaths=allowed_domains&updateMask.fieldPaths=default_bundles&updateMask.fieldPaths=subscription_tier" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -72,7 +72,7 @@ for bundle in practice nursing telemed pediatric trauma; do
   esac
   
   curl -s -X PATCH \
-    "${FIRESTORE_URL}/organizations/demo-hospital/bundles/${bundle}?updateMask.fieldPaths=name&updateMask.fieldPaths=slug&updateMask.fieldPaths=color" \
+    "${FIRESTORE_URL}/enterprises/demo-hospital/bundles/${bundle}?updateMask.fieldPaths=name&updateMask.fieldPaths=slug&updateMask.fieldPaths=color" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H "Content-Type: application/json" \
     -d "{

@@ -123,6 +123,24 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
     if user_doc.exists:
         # Return existing user
         data = user_doc.to_dict()
+
+        # EMA-FIX: Re-link @mayo.edu users who have no enterprise
+        # (created before enterprise was seeded, or enterprise lookup failed)
+        email_domain = email.split("@")[-1] if "@" in email else ""
+        if email_domain == MAYO_DOMAIN and not data.get("enterprise_id"):
+            enterprise = get_enterprise_by_domain(email_domain)
+            if enterprise:
+                eds_ref = db.collection("enterprises").document(enterprise["id"]).collection("eds")
+                all_eds = [doc.id for doc in eds_ref.stream()]
+                patch = {
+                    "enterprise_id": enterprise["id"],
+                    "enterprise_name": enterprise.get("name", ""),
+                    "ed_access": all_eds,
+                    "access_status": "approved",
+                }
+                user_ref.update(patch)
+                data.update(patch)
+
         return UserProfile(
             uid=uid,
             email=email,
@@ -144,6 +162,19 @@ def get_or_create_user(decoded_token: dict) -> UserProfile:
             
             # Migrate: copy data to the real UID document, delete the old one
             existing_data["email"] = email  # ensure email is current
+
+            # EMA-FIX: Re-link enterprise if missing (same logic as UID path)
+            email_domain = email.split("@")[-1] if "@" in email else ""
+            if email_domain == MAYO_DOMAIN and not existing_data.get("enterprise_id"):
+                enterprise = get_enterprise_by_domain(email_domain)
+                if enterprise:
+                    eds_ref = db.collection("enterprises").document(enterprise["id"]).collection("eds")
+                    all_eds = [doc.id for doc in eds_ref.stream()]
+                    existing_data["enterprise_id"] = enterprise["id"]
+                    existing_data["enterprise_name"] = enterprise.get("name", "")
+                    existing_data["ed_access"] = all_eds
+                    existing_data["access_status"] = "approved"
+
             user_ref.set(existing_data)
             existing_doc.reference.delete()
             
