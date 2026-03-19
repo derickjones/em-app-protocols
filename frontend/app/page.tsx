@@ -94,8 +94,8 @@ export default function Home() {
   const [protocolCards, setProtocolCards] = useState<ProtocolCardData[]>([]);
   const [favoriteProtocols, setFavoriteProtocols] = useState<ProtocolCardData[]>([]);
   const [highlightedProtocols, setHighlightedProtocols] = useState<ProtocolCardData[]>([]);
-  const [highlightedOpen, setHighlightedOpen] = useState(true);
-  const [favoritesOpen, setFavoritesOpen] = useState(true);
+  const [highlightedOpen, setHighlightedOpen] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
   
   // Enterprise/ED/Bundle selection state
   const [enterprise, setEnterprise] = useState<EnterpriseData | null>(null);
