@@ -395,7 +395,7 @@ export default function Home() {
       try {
         const token = await getIdToken();
         if (!token) return;
-        const res = await fetch(`${API_URL}/enterprise/highlighted`, {
+        const res = await fetch(`${API_URL}/enterprise/highlighted?enterprise_id=${encodeURIComponent(enterprise.id)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {

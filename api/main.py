@@ -1753,7 +1753,10 @@ class HighlightRequest(BaseModel):
 
 
 @app.get("/enterprise/highlighted")
-async def get_highlighted_protocols(user: UserProfile = Depends(get_current_user)):
+async def get_highlighted_protocols(
+    enterprise_id: Optional[str] = Query(None, description="Enterprise ID (required for super_admin with no default enterprise)"),
+    user: UserProfile = Depends(get_current_user),
+):
     """
     Get highlighted protocols for the user's enterprise.
     Returns protocol metadata + images for display on the main page.
@@ -1762,28 +1765,25 @@ async def get_highlighted_protocols(user: UserProfile = Depends(get_current_user
     from google.cloud import firestore as fs
     db_hl = fs.Client(project="clinical-assistant-457902")
 
-    enterprise_id = user.enterprise_id
-    if not enterprise_id:
+    eid = enterprise_id or user.enterprise_id
+    if not eid:
         return {"highlighted": []}
 
     try:
-        highlights_ref = db_hl.collection("enterprises").document(enterprise_id).collection("highlighted_protocols")
+        highlights_ref = db_hl.collection("enterprises").document(eid).collection("highlighted_protocols")
         highlights = []
 
         for doc in highlights_ref.order_by("highlighted_at", direction=fs.Query.DESCENDING).stream():
             data = doc.to_dict()
             pid = data.get("protocol_id", "")
-            eid = data.get("ed_id", "")
+            ed = data.get("ed_id", "")
             bid = data.get("bundle_id", "")
 
             # Fetch protocol metadata from GCS for images/summary/pdf_url
-            protocol = protocol_service.get_protocol(enterprise_id, eid, bid, pid)
-
-            # Build display name
-            display_name = pid.replace("_", " ").replace(".pdf", "")
+            protocol = protocol_service.get_protocol(eid, ed, bid, pid)
 
             # Build pdf_url
-            pdf_url = f"https://storage.googleapis.com/{protocol_service.bucket.name}/{enterprise_id}/{eid}/{bid}/{pid}/{pid}.pdf"
+            pdf_url = f"https://storage.googleapis.com/{protocol_service.bucket.name}/{eid}/{ed}/{bid}/{pid}/{pid}.pdf"
 
             images = []
             if protocol:
@@ -1795,8 +1795,8 @@ async def get_highlighted_protocols(user: UserProfile = Depends(get_current_user
 
             highlights.append({
                 "protocol_id": pid,
-                "enterprise_id": enterprise_id,
-                "ed_id": eid,
+                "enterprise_id": eid,
+                "ed_id": ed,
                 "bundle_id": bid,
                 "summary": protocol.get("summary", "") if protocol else "",
                 "pdf_url": pdf_url,
