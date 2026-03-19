@@ -99,7 +99,7 @@ export default function Home() {
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
   const [showBundleSelector, setShowBundleSelector] = useState(false);
 
-  // ED Universe state
+  // EM Universe state
   const [settingsCollapsed, setSettingsCollapsed] = useState(false); // settings panel default open
   const [wikemEnabled, setWikemEnabled] = useState(true);
   const [pmcEnabled, setPmcEnabled] = useState(true);
@@ -174,7 +174,7 @@ export default function Home() {
   // Is the globe "on"? (any external source is active)
   const globeActive = wikemEnabled || pmcEnabled || litflEnabled || rebelemEnabled || aliemEnabled;
 
-  // Save ED Universe preferences to localStorage
+  // Save EM Universe preferences to localStorage
   const saveUniversePreferences = () => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(UNIVERSE_KEY, JSON.stringify({
@@ -226,7 +226,7 @@ export default function Home() {
         setDarkMode(prefersDark);
       }
 
-      // Load ED Universe preferences
+      // Load EM Universe preferences
       const savedUniverse = localStorage.getItem(UNIVERSE_KEY);
       if (savedUniverse) {
         try {
@@ -240,7 +240,7 @@ export default function Home() {
             setSelectedJournals(new Set(prefs.selectedJournals));
           }
         } catch (e) {
-          console.warn("Failed to load ED Universe preferences", e);
+          console.warn("Failed to load EM Universe preferences", e);
         }
       }
     }
@@ -1027,12 +1027,12 @@ export default function Home() {
             <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Dark</span>
           </div>
 
-          {/* ED Universe — Knowledge Sources */}
+          {/* EM Universe — Knowledge Sources */}
           <div className={`mb-4 rounded-xl border ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
             <div className={`px-3 py-2 flex items-center gap-2`}>
               <Globe className={`w-3.5 h-3.5 flex-shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
               <span className={`text-xs font-medium tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Ed Universe
+                EM Universe
               </span>
             </div>
 
@@ -1570,7 +1570,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Save Preferences — covers ED Universe + ED selections */}
+          {/* Save Preferences — covers EM Universe + ED selections */}
           {universeDirty && (
             <div className="mb-4">
               <button
@@ -1761,7 +1761,7 @@ export default function Home() {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => toggleSource("wikem")}
-                      title="ED Universe — WikEM topics + PMC peer-reviewed literature"
+                      title="EM Universe — WikEM topics + PMC peer-reviewed literature"
                       className={`p-2 rounded-xl transition-all duration-200 ${
                         globeActive
                           ? darkMode
@@ -2293,7 +2293,7 @@ export default function Home() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => toggleSource("wikem")}
-                  title="ED Universe — WikEM topics + PMC peer-reviewed literature"
+                  title="EM Universe — WikEM topics + PMC peer-reviewed literature"
                   className={`p-1.5 rounded-lg transition-all duration-200 ${
                     globeActive
                       ? darkMode
