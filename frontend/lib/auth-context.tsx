@@ -123,9 +123,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await fetchUserProfile(result.user);
       setUserProfile(profile);
     } catch (err: unknown) {
-      // If popup is blocked or closed by corporate policy, fall back to redirect
+      // If popup is blocked or closed by corporate policy, fall back to redirect.
+      // Corporate environments (e.g. Mayo laptops) can trigger several different
+      // error codes depending on how the popup is prevented. See EMA-71.
       const code = (err as { code?: string })?.code;
-      if (code === "auth/popup-closed-by-user" || code === "auth/popup-blocked") {
+      const popupFailureCodes = [
+        "auth/popup-closed-by-user",
+        "auth/popup-blocked",
+        "auth/cancelled-popup-request",
+      ];
+      if (code && popupFailureCodes.includes(code)) {
         await signInWithRedirect(auth, googleProvider);
         return;
       }
