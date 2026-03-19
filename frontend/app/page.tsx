@@ -94,6 +94,8 @@ export default function Home() {
   const [protocolCards, setProtocolCards] = useState<ProtocolCardData[]>([]);
   const [favoriteProtocols, setFavoriteProtocols] = useState<ProtocolCardData[]>([]);
   const [highlightedProtocols, setHighlightedProtocols] = useState<ProtocolCardData[]>([]);
+  const [highlightedOpen, setHighlightedOpen] = useState(true);
+  const [favoritesOpen, setFavoritesOpen] = useState(true);
   
   // Enterprise/ED/Bundle selection state
   const [enterprise, setEnterprise] = useState<EnterpriseData | null>(null);
@@ -1813,98 +1815,130 @@ export default function Home() {
 
               {/* Pinned Protocols — combined highlighted + favorites */}
               {(highlightedProtocols.length > 0 || favoriteProtocols.length > 0) && (
-                <div className="mt-6 w-full max-w-2xl mx-auto">
-                  <div className={`rounded-2xl overflow-hidden ${
-                    darkMode
-                      ? 'bg-neutral-900 border border-neutral-800'
-                      : 'bg-white border border-gray-200'
-                  }`}>
-                    {/* Highlighted section */}
-                    {highlightedProtocols.length > 0 && (
-                      <>
-                        <div className={`flex items-center gap-2 px-4 py-2 ${
-                          darkMode ? 'border-b border-red-900/40 bg-red-950/20' : 'border-b border-red-100 bg-red-50/50'
-                        }`}>
+                <div className="mt-6 w-full max-w-2xl mx-auto flex flex-col gap-2">
+
+                  {/* Highlighted section */}
+                  {highlightedProtocols.length > 0 && (
+                    <div className={`rounded-xl overflow-hidden ${
+                      darkMode
+                        ? 'bg-neutral-900 border border-red-900/30'
+                        : 'bg-white border border-red-200'
+                    }`}>
+                      <button
+                        onClick={() => setHighlightedOpen(!highlightedOpen)}
+                        className={`w-full flex items-center justify-between px-4 py-2 cursor-pointer transition-colors ${
+                          darkMode ? 'bg-red-950/20 hover:bg-red-950/30' : 'bg-red-50/50 hover:bg-red-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
                           <Bookmark className={`w-3.5 h-3.5 ${darkMode ? 'text-red-400' : 'text-red-500'} fill-current`} />
                           <span className={`text-xs font-semibold ${darkMode ? 'text-red-300' : 'text-red-700'}`}>
                             Highlighted by Your Practice
                           </span>
+                          <span className={`text-xs ${darkMode ? 'text-red-400/50' : 'text-red-400/70'}`}>
+                            {highlightedProtocols.length}
+                          </span>
                         </div>
-                        {highlightedProtocols.map((card, idx) => {
-                          const name = card.protocol_id
-                            .replace(/_/g, " ")
-                            .replace(/\.pdf$/i, "")
-                            .replace(/\b\w/g, (c) => c.toUpperCase());
-                          return (
-                            <a
-                              key={`hl-${card.protocol_id}`}
-                              href={card.pdf_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors duration-150 ${
-                                idx < highlightedProtocols.length - 1
-                                  ? darkMode ? 'border-b border-neutral-800/50' : 'border-b border-gray-100'
-                                  : ''
-                              } ${
-                                darkMode
-                                  ? 'hover:bg-red-950/30 text-gray-300'
-                                  : 'hover:bg-red-50/50 text-gray-600'
-                              }`}
-                            >
-                              <span className="text-sm">{name}</span>
-                              <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${
-                                darkMode ? 'text-red-400/70' : 'text-red-400/70'
-                              }`} />
-                            </a>
-                          );
-                        })}
-                      </>
-                    )}
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          darkMode ? 'text-red-400/60' : 'text-red-400/60'
+                        } ${highlightedOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {highlightedOpen && (
+                        <div className={`${darkMode ? 'border-t border-red-900/30' : 'border-t border-red-100'}`}>
+                          {highlightedProtocols.map((card, idx) => {
+                            const name = card.protocol_id
+                              .replace(/_/g, " ")
+                              .replace(/\.pdf$/i, "")
+                              .replace(/\b\w/g, (c) => c.toUpperCase());
+                            return (
+                              <a
+                                key={`hl-${card.protocol_id}`}
+                                href={card.pdf_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors duration-150 ${
+                                  idx < highlightedProtocols.length - 1
+                                    ? darkMode ? 'border-b border-neutral-800/50' : 'border-b border-gray-100'
+                                    : ''
+                                } ${
+                                  darkMode
+                                    ? 'hover:bg-red-950/30 text-gray-300'
+                                    : 'hover:bg-red-50/50 text-gray-600'
+                                }`}
+                              >
+                                <span className="text-sm">{name}</span>
+                                <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${
+                                  darkMode ? 'text-red-400/70' : 'text-red-400/70'
+                                }`} />
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                    {/* Favorites section */}
-                    {favoriteProtocols.length > 0 && (
-                      <>
-                        <div className={`flex items-center gap-2 px-4 py-2 ${
-                          darkMode
-                            ? `border-b border-neutral-800 ${highlightedProtocols.length > 0 ? 'border-t border-t-neutral-800' : ''}`
-                            : `border-b border-gray-100 ${highlightedProtocols.length > 0 ? 'border-t border-t-gray-200' : ''}`
-                        }`}>
+                  {/* Favorites section */}
+                  {favoriteProtocols.length > 0 && (
+                    <div className={`rounded-xl overflow-hidden ${
+                      darkMode
+                        ? 'bg-neutral-900 border border-neutral-800'
+                        : 'bg-white border border-gray-200'
+                    }`}>
+                      <button
+                        onClick={() => setFavoritesOpen(!favoritesOpen)}
+                        className={`w-full flex items-center justify-between px-4 py-2 cursor-pointer transition-colors ${
+                          darkMode ? 'hover:bg-neutral-800/50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
                           <Star className={`w-3.5 h-3.5 ${darkMode ? 'text-yellow-400' : 'text-yellow-500'} fill-current`} />
                           <span className={`text-xs font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                             Favorited Protocols
                           </span>
+                          <span className={`text-xs ${darkMode ? 'text-neutral-500' : 'text-gray-400'}`}>
+                            {favoriteProtocols.length}
+                          </span>
                         </div>
-                        {favoriteProtocols.map((card, idx) => {
-                          const name = card.protocol_id
-                            .replace(/_/g, " ")
-                            .replace(/\.pdf$/i, "")
-                            .replace(/\b\w/g, (c) => c.toUpperCase());
-                          return (
-                            <a
-                              key={`fav-${card.protocol_id}`}
-                              href={card.pdf_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors duration-150 ${
-                                idx < favoriteProtocols.length - 1
-                                  ? darkMode ? 'border-b border-neutral-800/50' : 'border-b border-gray-100'
-                                  : ''
-                              } ${
-                                darkMode
-                                  ? 'hover:bg-neutral-800/60 text-gray-300'
-                                  : 'hover:bg-gray-50 text-gray-600'
-                              }`}
-                            >
-                              <span className="text-sm">{name}</span>
-                              <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${
-                                darkMode ? 'text-neutral-500' : 'text-gray-400'
-                              }`} />
-                            </a>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          darkMode ? 'text-neutral-500' : 'text-gray-400'
+                        } ${favoritesOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {favoritesOpen && (
+                        <div className={`${darkMode ? 'border-t border-neutral-800' : 'border-t border-gray-200'}`}>
+                          {favoriteProtocols.map((card, idx) => {
+                            const name = card.protocol_id
+                              .replace(/_/g, " ")
+                              .replace(/\.pdf$/i, "")
+                              .replace(/\b\w/g, (c) => c.toUpperCase());
+                            return (
+                              <a
+                                key={`fav-${card.protocol_id}`}
+                                href={card.pdf_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors duration-150 ${
+                                  idx < favoriteProtocols.length - 1
+                                    ? darkMode ? 'border-b border-neutral-800/50' : 'border-b border-gray-100'
+                                    : ''
+                                } ${
+                                  darkMode
+                                    ? 'hover:bg-neutral-800/60 text-gray-300'
+                                    : 'hover:bg-gray-50 text-gray-600'
+                                }`}
+                              >
+                                <span className="text-sm">{name}</span>
+                                <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${
+                                  darkMode ? 'text-neutral-500' : 'text-gray-400'
+                                }`} />
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 </div>
               )}
 
