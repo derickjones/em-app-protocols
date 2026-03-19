@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Heart, Syringe, Activity, Stethoscope, Zap, Brain, Bone, ShieldPlus, Cross, Pill, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
@@ -97,7 +97,6 @@ export default function Home() {
   const [selectedEds, setSelectedEds] = useState<Set<string>>(new Set());
   const [selectedBundles, setSelectedBundles] = useState<Set<string>>(new Set());
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
-  const [showBundleSelector, setShowBundleSelector] = useState(false);
 
   // EM Universe state
   const [settingsCollapsed, setSettingsCollapsed] = useState(false); // settings panel default open
@@ -403,60 +402,6 @@ export default function Home() {
     });
   };
 
-  // Get icon for bundle based on name or index
-  const getBundleIcon = (bundleName: string, index: number, isSelected: boolean) => {
-    const iconClass = "w-4 h-4";
-    const off = "text-neutral-500";
-    
-    // Match bundle names to relevant icons
-    const nameLower = bundleName.toLowerCase();
-    if (nameLower.includes('cardiac') || nameLower.includes('acls') || nameLower.includes('heart')) {
-      return <Heart className={`${iconClass} ${isSelected ? 'text-red-500' : off}`} />;
-    }
-    if (nameLower.includes('trauma') || nameLower.includes('injury')) {
-      return <Zap className={`${iconClass} ${isSelected ? 'text-orange-500' : off}`} />;
-    }
-    if (nameLower.includes('neuro') || nameLower.includes('stroke') || nameLower.includes('brain')) {
-      return <Brain className={`${iconClass} ${isSelected ? 'text-purple-500' : off}`} />;
-    }
-    if (nameLower.includes('ortho') || nameLower.includes('fracture') || nameLower.includes('bone')) {
-      return <Bone className={`${iconClass} ${isSelected ? 'text-gray-400' : off}`} />;
-    }
-    if (nameLower.includes('peds') || nameLower.includes('pediatric')) {
-      return <ShieldPlus className={`${iconClass} ${isSelected ? 'text-pink-500' : off}`} />;
-    }
-    if (nameLower.includes('med') || nameLower.includes('pharm') || nameLower.includes('drug')) {
-      return <Pill className={`${iconClass} ${isSelected ? 'text-green-500' : off}`} />;
-    }
-    if (nameLower.includes('procedure') || nameLower.includes('injection')) {
-      return <Syringe className={`${iconClass} ${isSelected ? 'text-cyan-500' : off}`} />;
-    }
-    
-    // Cycle through icons for generic bundles
-    const icons = [
-      <Activity key="activity" className={`${iconClass} ${isSelected ? 'text-red-500' : off}`} />,
-      <Stethoscope key="stethoscope" className={`${iconClass} ${isSelected ? 'text-blue-500' : off}`} />,
-      <Heart key="heart" className={`${iconClass} ${isSelected ? 'text-red-500' : off}`} />,
-      <Cross key="cross" className={`${iconClass} ${isSelected ? 'text-emerald-500' : off}`} />,
-      <Zap key="zap" className={`${iconClass} ${isSelected ? 'text-yellow-500' : off}`} />,
-      <Brain key="brain" className={`${iconClass} ${isSelected ? 'text-purple-500' : off}`} />,
-    ];
-    return icons[index % icons.length];
-  };
-
-  // Toggle bundle selection
-  const toggleBundleSelection = (bundleKey: string) => {
-    setSelectedBundles(prev => {
-      const next = new Set(prev);
-      if (next.has(bundleKey)) {
-        next.delete(bundleKey);
-      } else {
-        next.add(bundleKey);
-      }
-      return next;
-    });
-  };
-
   // Toggle ED selection
   const toggleEdSelection = (edId: string) => {
     setSelectedEds(prev => {
@@ -469,24 +414,6 @@ export default function Home() {
       }
       return next;
     });
-  };
-
-  // Get available bundles across all selected EDs (union)
-  const getAvailableBundles = (): BundleData[] => {
-    if (!enterprise) return [];
-    const seen = new Set<string>();
-    const bundles: BundleData[] = [];
-    for (const ed of enterprise.eds) {
-      if (selectedEds.has(ed.id)) {
-        for (const b of ed.bundles) {
-          if (!seen.has(b.id)) {
-            seen.add(b.id);
-            bundles.push(b);
-          }
-        }
-      }
-    }
-    return bundles;
   };
 
   // Open lightbox and log image click for popularity ranking
@@ -1819,38 +1746,6 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-
-              {/* Bundle Toggle Chips — Mayo Protocol Access Gate */}
-              {hasAccess && getAvailableBundles().length > 0 && (
-                <div className="mt-6">
-                  <p className={`text-xs font-semibold uppercase tracking-widest mb-3 text-center ${darkMode ? 'text-neutral-400' : 'text-gray-500'}`}>
-                    Protocol Bundles
-                  </p>
-                  <div className="flex flex-wrap gap-3 justify-center">
-                    {getAvailableBundles().map((bundle, index) => {
-                      const isSelected = selectedBundles.has(bundle.id);
-                      return (
-                        <button
-                          key={bundle.id}
-                          onClick={() => toggleBundleSelection(bundle.id)}
-                          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                            isSelected
-                              ? darkMode
-                                ? 'bg-neutral-800 text-gray-200 border-2 border-blue-500/60'
-                                : 'bg-white text-gray-700 border-2 border-blue-400'
-                              : darkMode
-                                ? 'bg-neutral-800 text-gray-400 border-2 border-neutral-700 hover:text-gray-300 hover:border-neutral-600'
-                                : 'bg-gray-100 text-gray-500 border-2 border-gray-200 hover:text-gray-600 hover:border-gray-300'
-                          }`}
-                        >
-                          {getBundleIcon(bundle.name, index, isSelected)}
-                          <span>{bundle.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
 
             </div>
