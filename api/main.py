@@ -458,6 +458,7 @@ async def list_access_requests(
 ):
     """
     List access requests. Super admins see all.
+    Optional status filter applied in-memory to avoid composite index requirement.
     """
     if user.role not in ["super_admin"]:
         raise HTTPException(status_code=403, detail="Only owners can view access requests")
@@ -465,17 +466,17 @@ async def list_access_requests(
     try:
         requests_ref = db.collection("access_requests")
         
-        if status_filter:
-            query = requests_ref.where("status", "==", status_filter)
-        else:
-            query = requests_ref
-        
-        # Order by requested_at desc
-        query = query.order_by("requested_at", direction=firestore.Query.DESCENDING)
+        # Fetch all, order by requested_at desc (single-field index, no composite needed)
+        query = requests_ref.order_by("requested_at", direction=firestore.Query.DESCENDING)
         
         results = []
         for doc in query.stream():
             data = doc.to_dict()
+            
+            # Apply status filter in-memory if provided
+            if status_filter and data.get("status") != status_filter:
+                continue
+            
             data["id"] = doc.id
             # Convert timestamps to strings
             if data.get("requested_at"):

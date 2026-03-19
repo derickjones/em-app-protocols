@@ -86,10 +86,15 @@ export default function OwnerDashboard() {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Access requests state
-  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [allAccessRequests, setAllAccessRequests] = useState<AccessRequest[]>([]);
   const [requestsFilter, setRequestsFilter] = useState<"pending" | "approved" | "denied" | "all">("pending");
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+
+  // Derived: filter access requests client-side
+  const accessRequests = requestsFilter === "all"
+    ? allAccessRequests
+    : allAccessRequests.filter((r) => r.status === requestsFilter);
 
   // Notifications state
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
@@ -172,7 +177,7 @@ export default function OwnerDashboard() {
       fetchAdmins();
       fetchEnterprises();
       fetchAllUsers();
-      fetchAccessRequests("pending"); // Default filter matches initial requestsFilter state
+      fetchAccessRequests();
       fetchNotifications();
     }
   }, [userProfile]);
@@ -193,18 +198,17 @@ export default function OwnerDashboard() {
     }
   };
 
-  // Fetch access requests
-  const fetchAccessRequests = async (statusFilter?: string) => {
+  // Fetch access requests (always fetch all, filter client-side)
+  const fetchAccessRequests = async () => {
     setRequestsLoading(true);
     try {
       const token = await user?.getIdToken();
-      const filterParam = statusFilter && statusFilter !== "all" ? `?status=${statusFilter}` : "";
-      const res = await fetch(`${API_URL}/access-requests${filterParam}`, {
+      const res = await fetch(`${API_URL}/access-requests`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
-        setAccessRequests(data.requests || []);
+        setAllAccessRequests(data.requests || []);
       }
     } catch (err) {
       console.error("Failed to fetch access requests:", err);
@@ -241,7 +245,7 @@ export default function OwnerDashboard() {
       });
       if (res.ok) {
         // Refresh requests and notifications
-        await fetchAccessRequests(requestsFilter === "all" ? undefined : requestsFilter);
+        await fetchAccessRequests();
         await fetchNotifications();
       } else {
         const err = await res.json();
@@ -254,13 +258,6 @@ export default function OwnerDashboard() {
       setProcessingRequest(null);
     }
   };
-
-  // When filter changes, refetch
-  useEffect(() => {
-    if (userProfile?.role === "super_admin") {
-      fetchAccessRequests(requestsFilter === "all" ? undefined : requestsFilter);
-    }
-  }, [requestsFilter]);
 
   const handleAddAdmin = async () => {
     if (!newAdminEmail.trim()) return;
@@ -1004,7 +1001,7 @@ export default function OwnerDashboard() {
                   </h2>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => { fetchAccessRequests(requestsFilter === "all" ? undefined : requestsFilter); fetchNotifications(); }}
+                      onClick={() => { fetchAccessRequests(); fetchNotifications(); }}
                       disabled={requestsLoading}
                       className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
                     >
