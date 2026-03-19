@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 
 export interface ProtocolCardData {
   protocol_id: string;
@@ -18,9 +18,11 @@ interface ProtocolCardProps {
   card: ProtocolCardData;
   darkMode: boolean;
   compact?: boolean; // compact mode for carousel embedding
+  isStarred?: boolean;
+  onToggleStar?: (card: ProtocolCardData) => void;
 }
 
-export default function ProtocolCard({ card, darkMode, compact = false }: ProtocolCardProps) {
+export default function ProtocolCard({ card, darkMode, compact = false, isStarred = false, onToggleStar }: ProtocolCardProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const images = card.images || [];
 
@@ -91,6 +93,21 @@ export default function ProtocolCard({ card, darkMode, compact = false }: Protoc
               {card.ed_id || "—"} › {card.bundle_id}
             </p>
           </div>
+          {onToggleStar && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleStar(card); }}
+              title={isStarred ? "Remove from favorites" : "Add to favorites"}
+              className={`flex-shrink-0 p-1 rounded-lg transition-all duration-200 ${
+                isStarred
+                  ? 'text-yellow-400 hover:text-yellow-300'
+                  : darkMode
+                    ? 'text-neutral-600 hover:text-yellow-400'
+                    : 'text-gray-300 hover:text-yellow-400'
+              }`}
+            >
+              <Star className={`w-4 h-4 ${isStarred ? 'fill-current' : ''}`} />
+            </button>
+          )}
         </div>
 
         <p

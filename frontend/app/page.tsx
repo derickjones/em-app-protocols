@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
@@ -14,6 +14,7 @@ const THEME_KEY = "em-protocol-theme";
 const BUNDLE_KEY = "em-protocol-selected-bundles";
 const ED_KEY = "em-protocol-selected-eds";
 const UNIVERSE_KEY = "em-protocol-ed-universe";
+const FAVORITES_KEY = "em-protocol-favorites";
 
 // PMC Journal registry — key is the exact string stored in GCS metadata
 const PMC_JOURNALS: { key: string; label: string; count: number }[] = [
@@ -91,6 +92,7 @@ export default function Home() {
 
   // Protocol cards state
   const [protocolCards, setProtocolCards] = useState<ProtocolCardData[]>([]);
+  const [favoriteProtocols, setFavoriteProtocols] = useState<ProtocolCardData[]>([]);
   
   // Enterprise/ED/Bundle selection state
   const [enterprise, setEnterprise] = useState<EnterpriseData | null>(null);
@@ -242,6 +244,17 @@ export default function Home() {
           console.warn("Failed to load EM Universe preferences", e);
         }
       }
+
+      // Load favorite protocols
+      const savedFavorites = localStorage.getItem(FAVORITES_KEY);
+      if (savedFavorites) {
+        try {
+          const favs = JSON.parse(savedFavorites);
+          if (Array.isArray(favs)) setFavoriteProtocols(favs);
+        } catch (e) {
+          console.warn("Failed to load favorite protocols", e);
+        }
+      }
     }
   }, []);
 
@@ -256,6 +269,35 @@ export default function Home() {
       }
     }
   }, [darkMode]);
+
+  // Save favorite protocols to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && favoriteProtocols.length > 0) {
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(favoriteProtocols));
+    }
+  }, [favoriteProtocols]);
+
+  // Toggle a protocol as favorite
+  const toggleFavorite = useCallback((card: ProtocolCardData) => {
+    setFavoriteProtocols(prev => {
+      const exists = prev.some(f => f.protocol_id === card.protocol_id);
+      if (exists) {
+        const next = prev.filter(f => f.protocol_id !== card.protocol_id);
+        // Clear from localStorage if empty
+        if (next.length === 0 && typeof window !== 'undefined') {
+          localStorage.removeItem(FAVORITES_KEY);
+        }
+        return next;
+      } else {
+        return [...prev, card];
+      }
+    });
+  }, []);
+
+  // Check if a protocol is favorited
+  const isFavorited = useCallback((protocolId: string) => {
+    return favoriteProtocols.some(f => f.protocol_id === protocolId);
+  }, [favoriteProtocols]);
 
   // Load conversations from localStorage on mount
   useEffect(() => {
@@ -1747,6 +1789,30 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Favorited Protocols */}
+              {favoriteProtocols.length > 0 && (
+                <div className="mt-6 w-full max-w-2xl mx-auto">
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <Star className={`w-4 h-4 ${darkMode ? 'text-yellow-400' : 'text-yellow-500'} fill-current`} />
+                    <h3 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      Favorited Protocols
+                    </h3>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
+                    {favoriteProtocols.map((card) => (
+                      <div key={`fav-${card.protocol_id}`} className="flex-shrink-0 w-72 snap-start">
+                        <ProtocolCard
+                          card={card}
+                          darkMode={darkMode}
+                          compact
+                          isStarred
+                          onToggleStar={toggleFavorite}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             </div>
           </div>
@@ -1841,7 +1907,13 @@ export default function Home() {
                       >
                         {protocolCards.map((card, idx) => (
                           <div key={`qa-${card.protocol_id}-${idx}`} className="flex-shrink-0 w-72 snap-start">
-                            <ProtocolCard card={card} darkMode={darkMode} compact />
+                            <ProtocolCard
+                              card={card}
+                              darkMode={darkMode}
+                              compact
+                              isStarred={isFavorited(card.protocol_id)}
+                              onToggleStar={toggleFavorite}
+                            />
                           </div>
                         ))}
                       </div>
