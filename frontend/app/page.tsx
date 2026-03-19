@@ -1816,15 +1816,15 @@ export default function Home() {
                 <div className="mt-6 w-full max-w-2xl mx-auto">
                   <div className={`rounded-2xl overflow-hidden ${
                     darkMode
-                      ? 'bg-neutral-900 border border-blue-900/40'
-                      : 'bg-white border border-blue-200'
+                      ? 'bg-neutral-900 border border-red-900/40'
+                      : 'bg-white border border-red-200'
                   }`}>
                     {/* Header */}
                     <div className={`flex items-center gap-2 px-5 py-3 ${
-                      darkMode ? 'border-b border-blue-900/40 bg-blue-950/20' : 'border-b border-blue-100 bg-blue-50/50'
+                      darkMode ? 'border-b border-red-900/40 bg-red-950/20' : 'border-b border-red-100 bg-red-50/50'
                     }`}>
-                      <Bookmark className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-500'} fill-current`} />
-                      <span className={`text-sm font-semibold ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                      <Bookmark className={`w-4 h-4 ${darkMode ? 'text-red-400' : 'text-red-500'} fill-current`} />
+                      <span className={`text-sm font-semibold ${darkMode ? 'text-red-300' : 'text-red-700'}`}>
                         Highlighted by Your Practice
                       </span>
                     </div>
@@ -1846,13 +1846,13 @@ export default function Home() {
                               : ''
                           } ${
                             darkMode
-                              ? 'hover:bg-blue-950/30 text-gray-300'
-                              : 'hover:bg-blue-50/50 text-gray-600'
+                              ? 'hover:bg-red-950/30 text-gray-300'
+                              : 'hover:bg-red-50/50 text-gray-600'
                           }`}
                         >
                           <span className="text-sm">{name}</span>
                           <ChevronRight className={`w-4 h-4 flex-shrink-0 ${
-                            darkMode ? 'text-blue-400/70' : 'text-blue-400/70'
+                            darkMode ? 'text-red-400/70' : 'text-red-400/70'
                           }`} />
                         </a>
                       );

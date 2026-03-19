@@ -1782,8 +1782,11 @@ async def get_highlighted_protocols(
             # Fetch protocol metadata from GCS for images/summary/pdf_url
             protocol = protocol_service.get_protocol(eid, ed, bid, pid)
 
-            # Build pdf_url
-            pdf_url = f"https://storage.googleapis.com/{protocol_service.bucket.name}/{eid}/{ed}/{bid}/{pid}/{pid}.pdf"
+            # Build pdf_url – use the raw bucket (public) so browsers can open it
+            if ed:
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{eid}/{ed}/{bid}/{pid}.pdf"
+            else:
+                pdf_url = f"https://storage.googleapis.com/clinical-assistant-457902-protocols-raw/{eid}/{bid}/{pid}.pdf"
 
             images = []
             if protocol:
