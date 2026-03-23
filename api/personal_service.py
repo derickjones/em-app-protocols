@@ -188,6 +188,19 @@ class PersonalService:
             img_bytes = file_bytes
             mime = content_type
 
+        # Normalize MIME types — phones/browsers sometimes send non-standard types
+        mime_map = {
+            "image/jpg": "image/jpeg",
+            "image/heic": "image/jpeg",  # Should already be converted, but just in case
+            "image/heif": "image/jpeg",
+            "application/octet-stream": "image/jpeg",  # Fallback for unknown
+        }
+        mime = mime_map.get(mime, mime)
+
+        # Validate the image isn't too large for inline_data (Gemini limit ~20MB base64)
+        if len(img_bytes) > 15 * 1024 * 1024:
+            raise Exception("Image too large for Gemini Vision (max ~15MB)")
+
         b64 = base64.b64encode(img_bytes).decode("utf-8")
 
         url = f"https://us-west4-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/us-west4/publishers/google/models/gemini-2.0-flash:generateContent"
@@ -205,9 +218,16 @@ class PersonalService:
             "generation_config": {"max_output_tokens": 2048, "temperature": 0.1},
         }
 
-        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp = requests.post(url, headers=headers, json=payload, timeout=60)
         if resp.status_code != 200:
-            raise Exception(f"Gemini Vision failed: {resp.status_code}")
+            # Log the full error response for debugging
+            error_body = ""
+            try:
+                error_body = resp.text[:500]
+            except Exception:
+                pass
+            print(f"Gemini Vision error {resp.status_code} for mime={mime}, size={len(img_bytes)}: {error_body}")
+            raise Exception(f"Gemini Vision failed: {resp.status_code}: {error_body[:200]}")
 
         result = resp.json()
         candidates = result.get("candidates", [])

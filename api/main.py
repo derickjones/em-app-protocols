@@ -2452,10 +2452,20 @@ async def personal_upload(
         content_type = file.content_type or "application/octet-stream"
         fname = file.filename or "unknown"
 
-        # Fix MIME type for HEIC/HEIF — some browsers send application/octet-stream
+        # Fix MIME type — mobile browsers often send application/octet-stream
         ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
-        if content_type == "application/octet-stream" and ext in ("heic", "heif"):
-            content_type = f"image/{ext}"
+        ext_to_mime = {
+            "heic": "image/heic",
+            "heif": "image/heif",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "pdf": "application/pdf",
+            "txt": "text/plain",
+            "md": "text/markdown",
+        }
+        if content_type == "application/octet-stream" and ext in ext_to_mime:
+            content_type = ext_to_mime[ext]
 
         result = personal_service.upload_and_process(
             uid=user.uid,
