@@ -588,14 +588,19 @@ async def list_notifications(
     try:
         target_role = "owner" if user.role == "super_admin" else "admin"
         
-        notifications_ref = db.collection("notifications").where(
-            "target_role", "==", target_role
-        ).order_by("created_at", direction=firestore.Query.DESCENDING).limit(50)
+        # Fetch all recent notifications, filter by target_role in-memory
+        # to avoid requiring a Firestore composite index (where + order_by)
+        notifications_ref = db.collection("notifications").order_by(
+            "created_at", direction=firestore.Query.DESCENDING
+        ).limit(200)
         
         results = []
         unread_count = 0
         for doc in notifications_ref.stream():
             data = doc.to_dict()
+            # Filter by target_role in-memory
+            if data.get("target_role") != target_role:
+                continue
             data["id"] = doc.id
             is_read = user.uid in data.get("read_by", [])
             data["read"] = is_read
