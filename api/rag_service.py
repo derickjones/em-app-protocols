@@ -77,9 +77,10 @@ class RAGService:
         }
         
         payload = {
-            "query": {"text": query},
+            "query": {"text": query, "similarityTopK": top_k},
             "vertex_rag_store": {
-                "rag_corpora": [corpus_name]
+                "rag_corpora": [corpus_name],
+                "similarityTopK": top_k
             }
         }
         
@@ -151,7 +152,9 @@ class RAGService:
         Filter contexts using an adaptive relevance threshold.
         
         Uses the best score as an anchor and keeps contexts within
-        score_multiplier × best_score. Deduplicates by source key.
+        score_multiplier × best_score. Deduplicates by source key,
+        but allows up to LOCAL_MAX_CHUNKS chunks from local/personal sources
+        so multi-page protocols are properly represented.
         Returns between min_results and max_results unique sources.
         
         Contexts must already be sorted by score ascending (lower = better).
@@ -159,27 +162,40 @@ class RAGService:
         if not contexts:
             return []
 
+        LOCAL_MAX_CHUNKS = 3  # allow up to 3 chunks per local/personal source
+
         from collections import OrderedDict
         best_score = contexts[0].get("score", 0)
         # Guard against near-zero scores — use a floor so the cutoff isn't too tight
         cutoff = max(best_score * score_multiplier, 0.05)
 
-        seen_keys = OrderedDict()
+        seen_keys: OrderedDict = OrderedDict()   # key → chunk count
+        result = []
         for ctx in contexts:
             key = self._get_source_key(ctx)
-            if key in seen_keys:
-                continue  # already have this source (better-scored chunk)
-            # Always include up to min_results unique sources
-            if len(seen_keys) < min_results:
-                seen_keys[key] = ctx
-            # Beyond min, only include if within the relevance cutoff and under max
-            elif ctx.get("score", 1) <= cutoff and len(seen_keys) < max_results:
-                seen_keys[key] = ctx
-            # Stop once we hit max
-            if len(seen_keys) >= max_results:
+            source_type = ctx.get("source_type", "local")
+            is_local = source_type in ("local", "personal")
+            chunk_limit = LOCAL_MAX_CHUNKS if is_local else 1
+
+            existing_count = seen_keys.get(key, 0)
+            if existing_count >= chunk_limit:
+                continue  # already have enough chunks from this source
+
+            # Always include up to min_results unique sources (by key)
+            unique_sources = len(seen_keys)
+            if unique_sources < min_results or existing_count == 0:
+                # still building up the minimum set OR adding more chunks for an existing local source
+                pass
+            elif ctx.get("score", 1) > cutoff or len(result) >= max_results:
                 break
 
-        return list(seen_keys.values())
+            seen_keys[key] = existing_count + 1
+            result.append(ctx)
+
+            if len(result) >= max_results:
+                break
+
+        return result
 
     def _build_prompt_and_context(self, query: str, contexts: List[Dict]) -> tuple[str, str]:
         """Build the prompt and context text for Gemini. Returns (prompt, context_text)."""
@@ -223,6 +239,7 @@ CRITICAL RULES:
 2. ONLY use information from the provided context. Do NOT add outside medical knowledge.
 3. If the context does not contain enough information to answer the question, say so clearly.
 4. Add [1], [2] etc. citation numbers inline throughout your answer matching the context sources used. Every factual claim should have a citation.
+5. SOURCE PRIORITY: If a "Local Protocol" or "User Upload" source is present in the context, draw your primary answer from it. External sources (WikEM, PMC Literature, LITFL, REBEL EM, ALiEM) should only supplement or clarify — never override the local protocol's guidance.
 
 RESPONSE FORMAT:
 
@@ -804,9 +821,11 @@ ANSWER:"""
         
         def fetch_local():
             try:
-                contexts = self._retrieve_contexts(query, self.corpus_name)
+                contexts = self._retrieve_contexts(query, self.corpus_name, top_k=10)
                 for ctx in contexts:
                     ctx["source_type"] = "local"
+                    # Boost local protocol relevance: halve score so local ranks ahead of external
+                    ctx["score"] = ctx.get("score", 0) * 0.5
                 return contexts
             except Exception as e:
                 print(f"Local corpus query failed: {e}")
@@ -879,6 +898,8 @@ ANSWER:"""
                     user_contexts = [c for c in contexts if c.get("source", "").startswith(user_prefix)]
                     for ctx in user_contexts:
                         ctx["source_type"] = "personal"
+                        # Boost personal file relevance same as local protocols
+                        ctx["score"] = ctx.get("score", 0) * 0.5
                     return user_contexts[:5]
                 return []
             except Exception as e:
