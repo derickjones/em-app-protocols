@@ -85,7 +85,7 @@ JOURNALS = [
 
 DATE_FILTER = "2015/01/01:3000/12/31[PDAT]"  # 2015 to present
 BATCH_SIZE = 500
-MAX_PER_JOURNAL = 50000  # Safety cap
+MAX_PER_JOURNAL = 9999  # NCBI ESearch hard cap — use EDirect for >9,999
 
 # Paths
 SCRIPT_DIR = Path(__file__).parent
@@ -111,33 +111,60 @@ def fetch_ids_for_journal(journal: str) -> list[dict]:
     """
     term = f'"{journal}"[JOUR] AND {DATE_FILTER}'
 
-    # Get total count first
-    handle = Entrez.esearch(db="pmc", term=term, retmax=0)
-    record = Entrez.read(handle)
-    handle.close()
+    # Get total count first (with retry)
+    for attempt in range(3):
+        try:
+            handle = Entrez.esearch(db="pmc", term=term, retmax=0)
+            record = Entrez.read(handle)
+            handle.close()
+            break
+        except Exception as e:
+            if attempt == 2:
+                log.error(f"  Failed to get count for {journal}: {e}")
+                return []
+            time.sleep(2 ** attempt)
+
     total = int(record["Count"])
     log.info(f"  {journal}: {total:,} articles (2015–present)")
 
     if total == 0:
         return []
 
+    if total > MAX_PER_JOURNAL:
+        log.warning(f"  ⚠️  {journal} has {total:,} articles — capped at {MAX_PER_JOURNAL:,} (NCBI ESearch limit)")
+
     total_to_fetch = min(total, MAX_PER_JOURNAL)
     ids = []
 
     for start in range(0, total_to_fetch, BATCH_SIZE):
-        handle = Entrez.esearch(
-            db="pmc",
-            term=term,
-            retstart=start,
-            retmax=BATCH_SIZE,
-            sort="pub_date",
-        )
-        record = Entrez.read(handle)
-        handle.close()
-        ids.extend(record["IdList"])
+        # NCBI hard cap: retstart must be < 9999
+        if start >= 9999:
+            break
+        batch_size = min(BATCH_SIZE, 9999 - start)
 
-        # Rate limiting: 10/sec with API key, 3/sec without
-        time.sleep(0.12)
+        for attempt in range(3):
+            try:
+                handle = Entrez.esearch(
+                    db="pmc",
+                    term=term,
+                    retstart=start,
+                    retmax=batch_size,
+                    sort="pub_date",
+                )
+                record = Entrez.read(handle)
+                handle.close()
+                ids.extend(record["IdList"])
+                break
+            except Exception as e:
+                if attempt == 2:
+                    log.warning(f"  ⚠️  Batch at offset {start} failed after 3 attempts: {e}")
+                else:
+                    wait = 2 ** (attempt + 1)
+                    log.info(f"  Retry {attempt+1} for offset {start} (waiting {wait}s)...")
+                    time.sleep(wait)
+
+        # Rate limiting: conservative 0.2s with API key to avoid disconnects
+        time.sleep(0.2)
 
     # Normalize PMCIDs
     articles = []
