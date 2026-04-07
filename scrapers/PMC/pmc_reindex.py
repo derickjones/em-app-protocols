@@ -99,9 +99,10 @@ def api_headers() -> dict:
 # ---------------------------------------------------------------------------
 
 
-def upload_md_files_to_gcs(dry_run: bool = False) -> int:
+def upload_md_files_to_gcs(dry_run: bool = False, new_only: bool = False) -> int:
     """
-    Batch upload all .md files from output/processed/ to GCS.
+    Batch upload .md files from output/processed/ to GCS.
+    If new_only=True, skips files that already exist in GCS (incremental mode).
     Uses ThreadPoolExecutor for parallel uploads.
     Returns count of files uploaded.
     """
@@ -110,7 +111,21 @@ def upload_md_files_to_gcs(dry_run: bool = False) -> int:
         log.error(f"No .md files found in {PROCESSED_DIR}")
         return 0
 
-    log.info(f"Found {len(md_files):,} markdown files to upload to gs://{GCS_BUCKET_NAME}/{GCS_PROCESSED_PREFIX}")
+    if new_only:
+        # Filter to only files not already in GCS
+        client = gcs.Client(project=PROJECT_ID)
+        try:
+            bucket = client.get_bucket(GCS_BUCKET_NAME)
+        except Exception:
+            bucket = client.create_bucket(GCS_BUCKET_NAME, location="us-west4")
+        existing = {blob.name.split("/")[-1] for blob in bucket.list_blobs(prefix=GCS_PROCESSED_PREFIX)}
+        md_files = [f for f in md_files if f.name not in existing]
+        log.info(f"Incremental mode: {len(md_files):,} new files to upload (skipping existing GCS files)")
+        if not md_files:
+            log.info("  Nothing new to upload — GCS is already up to date")
+            return 0
+    else:
+        log.info(f"Found {len(md_files):,} markdown files to upload to gs://{GCS_BUCKET_NAME}/{GCS_PROCESSED_PREFIX}")
 
     if dry_run:
         log.info("[DRY RUN] Would upload %d files", len(md_files))
@@ -355,22 +370,85 @@ def _poll_operation(op_name: str, description: str = "operation", max_wait: int 
 # ---------------------------------------------------------------------------
 
 
+def reindex_incremental(dry_run: bool = False):
+    """
+    Incremental re-index pipeline — adds NEW articles only.
+    Keeps the existing corpus ID and does NOT delete/recreate the corpus.
+
+    Use this when adding new journals or re-scraping new articles.
+    Use full reindex() only for a complete rebuild (e.g. schema change).
+
+      1. Upload only NEW .md files to GCS (skips files already there)
+      2. Import only the new GCS files into the EXISTING corpus
+      3. Corpus ID stays the same — no Cloud Run env var update needed
+    """
+    print()
+    print("=" * 70)
+    print("📚 PMC RAG INCREMENTAL INDEX (new articles only)")
+    print("=" * 70)
+    if dry_run:
+        print("  ⚠️  DRY RUN — no changes will be made")
+    print()
+
+    # Load existing corpus
+    config = load_config()
+    if not config or not config.get("corpus_name"):
+        log.error("No existing corpus config found. Run a full reindex first.")
+        log.error("  python pmc_reindex.py")
+        return
+
+    corpus_name = config["corpus_name"]
+    corpus_id = config["corpus_id"]
+    log.info(f"Using existing corpus: {corpus_id}")
+    print()
+
+    # Step 1: Upload only new .md files to GCS
+    log.info("STEP 1/2: Uploading NEW .md files to GCS (skipping existing)...")
+    uploaded = upload_md_files_to_gcs(dry_run=dry_run, new_only=True)
+    print()
+
+    if uploaded == 0 and not dry_run:
+        log.info("No new files to index — corpus is already up to date.")
+        return
+
+    # Step 2: Import the new files into the existing corpus
+    # Vertex AI RAG de-duplicates by GCS URI, so re-importing an existing
+    # file creates a duplicate chunk — new_only upload prevents this.
+    log.info("STEP 2/2: Importing new files into existing corpus...")
+    success = import_gcs_to_corpus(corpus_name, dry_run=dry_run)
+    print()
+
+    # Update last_indexed timestamp in config
+    if not dry_run:
+        save_config(corpus_name, corpus_id)
+
+    print("=" * 70)
+    print("📚 INCREMENTAL INDEX COMPLETE")
+    print("=" * 70)
+    print(f"  Corpus ID:    {corpus_id}  (unchanged — no env var update needed)")
+    print(f"  New files:    {uploaded:,}")
+    print(f"  Import:       {'✅ Success' if success else '❌ Failed'}")
+    print()
+
+
 def reindex(
     skip_upload: bool = False,
     upload_only: bool = False,
     dry_run: bool = False,
 ):
     """
-    Full re-index pipeline:
-      1. Upload .md files to GCS
+    Full re-index pipeline — deletes and recreates the corpus from scratch.
+    Use for complete rebuilds (schema/chunking changes, corruption, etc.).
+
+      1. Upload ALL .md files to GCS
       2. Delete old corpus
       3. Create new corpus
       4. Batch import from GCS
-      5. Save config + print instructions
+      5. Save config + print Cloud Run update instructions
     """
     print()
     print("=" * 70)
-    print("📚 PMC RAG RE-INDEX")
+    print("📚 PMC RAG FULL RE-INDEX")
     print("=" * 70)
     if dry_run:
         print("  ⚠️  DRY RUN — no changes will be made")
@@ -464,23 +542,29 @@ def reindex(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PMC RAG Re-Indexer — rebuild the corpus from scratch",
+        description="PMC RAG Re-Indexer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Full rebuild
+  # Add new journal articles to existing corpus (NO corpus ID change):
+  python pmc_reindex.py --incremental
+
+  # Full rebuild — new corpus ID, update Cloud Run env var after:
   python pmc_reindex.py
 
-  # Upload .md files to GCS only
+  # Upload .md files to GCS only (no corpus changes):
   python pmc_reindex.py --upload-only
 
-  # Rebuild corpus from existing GCS files (skip upload)
+  # Rebuild corpus from already-uploaded GCS files:
   python pmc_reindex.py --skip-upload
 
-  # Preview what would happen
+  # Preview what would happen:
+  python pmc_reindex.py --incremental --dry-run
   python pmc_reindex.py --dry-run
         """,
     )
+    parser.add_argument("--incremental", action="store_true",
+                        help="Add only NEW articles to existing corpus (keeps same corpus ID)")
     parser.add_argument("--upload-only", action="store_true",
                         help="Only upload .md files to GCS, don't touch the corpus")
     parser.add_argument("--skip-upload", action="store_true",
@@ -492,12 +576,17 @@ Examples:
 
     if args.upload_only and args.skip_upload:
         parser.error("Cannot use --upload-only and --skip-upload together")
+    if args.incremental and (args.upload_only or args.skip_upload):
+        parser.error("--incremental cannot be combined with --upload-only or --skip-upload")
 
-    reindex(
-        skip_upload=args.skip_upload,
-        upload_only=args.upload_only,
-        dry_run=args.dry_run,
-    )
+    if args.incremental:
+        reindex_incremental(dry_run=args.dry_run)
+    else:
+        reindex(
+            skip_upload=args.skip_upload,
+            upload_only=args.upload_only,
+            dry_run=args.dry_run,
+        )
 
 
 if __name__ == "__main__":
