@@ -243,6 +243,13 @@ class PersonalService:
         Upload a file, extract text, index into RAG corpus, and track in Firestore.
         Returns file metadata dict.
         """
+        # Normalize non-standard MIME types before validation (mobile browsers send image/jpg etc.)
+        mime_normalizer = {
+            "image/jpg": "image/jpeg",
+            "application/octet-stream": "image/jpeg",  # last-resort fallback
+        }
+        content_type = mime_normalizer.get(content_type, content_type)
+
         # Validate content type
         if content_type not in ALLOWED_CONTENT_TYPES:
             raise ValueError(f"Unsupported file type: {content_type}. Allowed: PDF, PNG, JPG, HEIC, TXT, MD")

@@ -2452,7 +2452,7 @@ async def personal_upload(
         content_type = file.content_type or "application/octet-stream"
         fname = file.filename or "unknown"
 
-        # Fix MIME type — mobile browsers often send application/octet-stream
+        # Normalize MIME type — mobile browsers send non-standard types (image/jpg, application/octet-stream, etc.)
         ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
         ext_to_mime = {
             "heic": "image/heic",
@@ -2464,6 +2464,14 @@ async def personal_upload(
             "txt": "text/plain",
             "md": "text/markdown",
         }
+        # Normalize known bad MIME types regardless of extension
+        mime_normalizer = {
+            "image/jpg": "image/jpeg",       # iPhones send image/jpg instead of image/jpeg
+            "image/heic": "image/heic",      # pass through (handled below)
+            "application/octet-stream": ext_to_mime.get(ext, content_type),  # fallback to extension
+        }
+        content_type = mime_normalizer.get(content_type, content_type)
+        # If still octet-stream (unknown extension), try extension lookup anyway
         if content_type == "application/octet-stream" and ext in ext_to_mime:
             content_type = ext_to_mime[ext]
 
