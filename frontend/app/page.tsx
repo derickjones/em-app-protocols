@@ -78,6 +78,7 @@ interface EnterpriseData {
 
 export default function Home() {
   const [question, setQuestion] = useState("");
+  const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -509,6 +510,7 @@ export default function Home() {
 
     // Capture the question and clear the input immediately
     const submittedQuestion = question.trim();
+    setSubmittedQuestion(submittedQuestion);
     setQuestion("");
     
     setLoading(true);
@@ -713,6 +715,7 @@ export default function Home() {
 
   const loadConversation = (conversation: Conversation) => {
     setQuestion(conversation.question);
+    setSubmittedQuestion(conversation.question);
     setResponse(conversation.response);
     setProtocolCards(conversation.protocolCards || []);
     setHasSearched(true);
@@ -1713,8 +1716,14 @@ export default function Home() {
             )}
           </div>
 
-          {/* Right: Spacer for balance */}
-          <div className="w-10"></div>
+          {/* Right: Question bubble */}
+          <div className="flex-shrink-0 max-w-[200px]">
+            {hasSearched && submittedQuestion && (
+              <div className={`px-3 py-1.5 rounded-full text-xs truncate ${darkMode ? 'bg-neutral-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                {submittedQuestion}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1950,7 +1959,7 @@ export default function Home() {
             {/* User Question */}
             <div className="flex justify-end">
               <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-blue-50 border border-blue-100'}`}>
-                <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{question}</p>
+                <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{submittedQuestion}</p>
               </div>
             </div>
 

@@ -531,7 +531,10 @@ export default function AdminPage() {
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    const pdfFiles = Array.from(files).filter(file => file.type === "application/pdf");
+    // Check both MIME type and file extension — some browsers report empty or wrong MIME types
+    const pdfFiles = Array.from(files).filter(file => 
+      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+    );
     
     if (pdfFiles.length === 0) {
       setUploadStatus({ status: "error", message: "Please upload PDF files only" });
