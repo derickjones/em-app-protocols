@@ -77,10 +77,9 @@ class RAGService:
         }
         
         payload = {
-            "query": {"text": query, "similarityTopK": top_k},
+            "query": {"text": query},
             "vertex_rag_store": {
-                "rag_corpora": [corpus_name],
-                "similarityTopK": top_k
+                "rag_corpora": [corpus_name]
             }
         }
         
