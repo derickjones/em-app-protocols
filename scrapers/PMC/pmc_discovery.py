@@ -37,18 +37,50 @@ if not Entrez.email:
     print("   export ENTREZ_EMAIL='your@email.com'")
 
 JOURNALS = [
+    # ── Emergency Medicine (existing) ────────────────────────────────────────
     "Annals of Emergency Medicine",
-    "Acad Emerg Med",                                           # Academic Emergency Medicine (NCBI abbreviation)
+    "Acad Emerg Med",                                           # Academic Emergency Medicine
     "Journal of the American College of Emergency Physicians Open",
     "The American Journal of Emergency Medicine",
     "The Journal of Emergency Medicine",
     "The Western Journal of Emergency Medicine",
     "Advanced Journal of Emergency Medicine",
-    "Eur J Emerg Med",                                          # European Journal of Emergency Medicine (NCBI abbreviation)
+    "Eur J Emerg Med",                                          # European Journal of Emergency Medicine
     "Prehospital Emergency Care",
     "Air Medical Journal",
     "Pediatric Emergency Care",
+    "CJEM",                                                     # Canadian Journal of Emergency Medicine (EMA-20)
 
+    # ── Critical Care / Resuscitation (EMA-21 to EMA-27) ────────────────────
+    "Crit Care Med",                                            # Critical Care Medicine (SCCM) — EMA-21
+    "J Intensive Care Med",                                     # Journal of Intensive Care Medicine — EMA-22
+    "Resuscitation",                                            # Resuscitation — EMA-23
+    "Resuscitation Plus",                                       # Resuscitation Plus (open access) — EMA-24
+    "Shock",                                                    # Shock — EMA-25
+    "Chest",                                                    # CHEST — EMA-26
+    "Am J Respir Crit Care Med",                                # AJRCCM (ATS) — EMA-27
+
+    # ── JAMA Family (EMA-6 to EMA-15) ───────────────────────────────────────
+    "JAMA",                                                     # JAMA — EMA-6
+    "JAMA Netw Open",                                           # JAMA Network Open — EMA-7
+    "JAMA Intern Med",                                          # JAMA Internal Medicine — EMA-8
+    "JAMA Pediatr",                                             # JAMA Pediatrics — EMA-9
+    "JAMA Cardiol",                                             # JAMA Cardiology — EMA-10
+    "JAMA Surg",                                                # JAMA Surgery — EMA-11
+    "JAMA Neurol",                                              # JAMA Neurology — EMA-12
+    "JAMA Oncol",                                               # JAMA Oncology — EMA-13
+    "JAMA Ophthalmol",                                          # JAMA Ophthalmology — EMA-14
+    "JAMA Otolaryngol Head Neck Surg",                          # JAMA Otolaryngology — EMA-15
+
+    # ── High-Impact General (EMA-5, EMA-16 to EMA-19) ───────────────────────
+    "N Engl J Med",                                             # NEJM — EMA-5
+    "Lancet",                                                   # The Lancet — EMA-16
+    "Lancet Neurol",                                            # The Lancet Neurology — EMA-16
+    "Lancet Infect Dis",                                        # The Lancet Infectious Diseases — EMA-16
+    "Lancet Respir Med",                                        # The Lancet Respiratory Medicine — EMA-16
+    "BMJ",                                                      # BMJ — EMA-17
+    "Ann Intern Med",                                           # Annals of Internal Medicine — EMA-18
+    "Mayo Clin Proc",                                           # Mayo Clinic Proceedings — EMA-19
 ]
 
 DATE_FILTER = "2015/01/01:3000/12/31[PDAT]"  # 2015 to present

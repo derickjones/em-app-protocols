@@ -53,7 +53,7 @@ GCS_BUCKET_NAME = f"{PROJECT_ID}-pmc"
 GCS_PROCESSED_PREFIX = "processed/"
 
 CORPUS_DISPLAY_NAME = "pmc-em-literature"
-CORPUS_DESCRIPTION = "Emergency medicine literature from PubMed Central (11 EM journals, 2015-present)"
+CORPUS_DESCRIPTION = "Emergency medicine and critical care literature from PubMed Central (39 journals including EM, critical care, JAMA family, NEJM, Lancet, BMJ, 2015-present)"
 
 CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 200
