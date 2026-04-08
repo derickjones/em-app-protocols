@@ -46,7 +46,7 @@ export default function ModeSelector({ mode, onChange, darkMode }: ModeSelectorP
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
           darkMode
-            ? "bg-neutral-700 hover:bg-neutral-600 text-gray-200"
+            ? "bg-[#2A2A2A] hover:bg-[#3A3A3A] text-gray-200"
             : "bg-gray-200 hover:bg-gray-300 text-gray-700"
         }`}
         aria-haspopup="listbox"
@@ -62,7 +62,7 @@ export default function ModeSelector({ mode, onChange, darkMode }: ModeSelectorP
         <div
           className={`absolute right-0 bottom-full mb-2 w-60 rounded-xl shadow-xl z-50 overflow-hidden border ${
             darkMode
-              ? "bg-neutral-800 border-neutral-700"
+              ? "bg-[#1E1E1E] border-[#2A2A2A]"
               : "bg-white border-gray-200"
           }`}
         >
@@ -74,8 +74,8 @@ export default function ModeSelector({ mode, onChange, darkMode }: ModeSelectorP
                 setOpen(false);
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                darkMode ? "hover:bg-neutral-700" : "hover:bg-gray-50"
-              } ${mode === m.key ? (darkMode ? "bg-neutral-700/50" : "bg-gray-50") : ""}`}
+                darkMode ? "hover:bg-[#2A2A2A]" : "hover:bg-gray-50"
+              } ${mode === m.key ? (darkMode ? "bg-[#2A2A2A]/50" : "bg-gray-50") : ""}`}
             >
               <div className="flex-1 min-w-0">
                 <div

@@ -35,8 +35,8 @@ export default function ProtocolCard({ card, darkMode, compact = false, isStarre
     <div
       className={`rounded-2xl overflow-hidden shadow-sm transition-all duration-200 ${
         darkMode
-          ? "bg-neutral-900 border border-neutral-800"
-          : "bg-white border border-gray-200"
+          ? "bg-[#141414] border border-[#2A2A2A] hover:border-[#3A3A3A]"
+          : "bg-white border border-gray-200 hover:border-gray-300"
       }`}
     >
       {/* Image Carousel */}
@@ -101,7 +101,7 @@ export default function ProtocolCard({ card, darkMode, compact = false, isStarre
                 isStarred
                   ? 'text-yellow-400 hover:text-yellow-300'
                   : darkMode
-                    ? 'text-neutral-600 hover:text-yellow-400'
+                    ? 'text-[#3A3A3A] hover:text-yellow-400'
                     : 'text-gray-300 hover:text-yellow-400'
               }`}
             >

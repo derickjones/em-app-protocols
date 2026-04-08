@@ -243,9 +243,9 @@ export default function PersonalPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-white/80 dark:bg-neutral-900/80 backdrop-blur border-gray-200 dark:border-neutral-800">
+      <header className="sticky top-0 z-40 border-b bg-white/80 dark:bg-[#141414]/80 backdrop-blur border-gray-200 dark:border-[#2A2A2A]">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-4">
-          <button onClick={() => router.push("/")} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
+          <button onClick={() => router.push("/")} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1E1E1E] transition-colors">
             <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
           <div className="flex items-center gap-2">
@@ -288,24 +288,24 @@ export default function PersonalPage() {
         {/* Quota Bar */}
         {quota && (
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800">
+            <div className="p-4 rounded-xl border bg-white dark:bg-[#141414] border-gray-200 dark:border-[#2A2A2A]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Files</span>
                 <span className="text-xs tabular-nums text-gray-600 dark:text-gray-300">{quota.file_count} / {quota.file_limit}</span>
               </div>
-              <div className="h-2 rounded-full bg-gray-100 dark:bg-neutral-800 overflow-hidden">
+              <div className="h-2 rounded-full bg-gray-100 dark:bg-[#1E1E1E] overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${quotaPct > 80 ? 'bg-red-500' : 'bg-violet-500'}`}
                   style={{ width: `${quotaPct}%` }}
                 />
               </div>
             </div>
-            <div className="p-4 rounded-xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800">
+            <div className="p-4 rounded-xl border bg-white dark:bg-[#141414] border-gray-200 dark:border-[#2A2A2A]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Storage</span>
                 <span className="text-xs tabular-nums text-gray-600 dark:text-gray-300">{formatBytes(quota.bytes_used)} / {formatBytes(quota.bytes_limit)}</span>
               </div>
-              <div className="h-2 rounded-full bg-gray-100 dark:bg-neutral-800 overflow-hidden">
+              <div className="h-2 rounded-full bg-gray-100 dark:bg-[#1E1E1E] overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${storagePct > 80 ? 'bg-red-500' : 'bg-violet-500'}`}
                   style={{ width: `${storagePct}%` }}
@@ -320,7 +320,7 @@ export default function PersonalPage() {
           className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${
             dragOver
               ? "border-violet-500 bg-violet-50 dark:bg-violet-900/20"
-              : "border-gray-300 dark:border-neutral-700 hover:border-violet-400 dark:hover:border-violet-600"
+              : "border-gray-300 dark:border-[#2A2A2A] hover:border-violet-400 dark:hover:border-violet-600"
           }`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -386,7 +386,7 @@ export default function PersonalPage() {
             {files.map((f) => (
               <div
                 key={f.file_id}
-                className="flex items-center gap-3 p-4 rounded-xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800"
+                className="flex items-center gap-3 p-4 rounded-xl border bg-white dark:bg-[#141414] border-gray-200 dark:border-[#2A2A2A]"
               >
                 {fileIcon(f.content_type)}
                 <div className="flex-1 min-w-0">

@@ -1,18 +1,24 @@
 import type { Metadata } from "next";
-import { Orbitron, Roboto } from "next/font/google";
+import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 
-const orbitron = Orbitron({
-  variable: "--font-orbitron",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-title",
   subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const roboto = Roboto({
-  variable: "--font-roboto",
+const inter = Inter({
+  variable: "--font-body",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
+  weight: ["300", "400", "500", "600", "700"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
@@ -26,11 +32,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <script type="text/javascript" src="https://js.live.net/v7.2/OneDrive.js" async defer></script>
       </head>
-      <body className={`${orbitron.variable} ${roboto.variable} antialiased`}>
+      <body className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}>
         <AuthProvider>
           {children}
         </AuthProvider>

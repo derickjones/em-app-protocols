@@ -55,20 +55,20 @@ export default function LoginPage() {
   const displayError = localError || authError;
 
   return (
-    <div className="min-h-screen bg-[#131314] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="font-title font-bold text-3xl text-white lowercase tracking-wide">
             emergency medicine app
           </h1>
-          <p className="text-gray-400 mt-2">
+          <p className="text-gray-400 mt-2 font-body">
             Sign in to continue
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-[#1e1f20] rounded-2xl p-8 border border-white/10">
+        <div className="bg-[#141414] rounded-2xl p-8 border border-[#2A2A2A]">
           {/* Error Display */}
           {displayError && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
