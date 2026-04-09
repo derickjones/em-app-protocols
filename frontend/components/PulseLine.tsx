@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * PulseLine — animated ECG that rotates through real cardiac rhythms:
@@ -143,6 +143,47 @@ function torsadesRhythm(): [number, number][] {
   return pts;
 }
 
+function flatline(): [number, number][] {
+  return [[0, 0.5], [1, 0.5]];
+}
+
+function recoveryRhythm(): [number, number][] {
+  // NSR but first 2 beats at reduced amplitude, slightly wider spacing
+  const pts: [number, number][] = [];
+  const beats = [
+    { start: 0.0, scale: 0.4, width: 0.38 },   // first beat — weak
+    { start: 0.38, scale: 0.65, width: 0.32 },  // second beat — recovering
+    { start: 0.70, scale: 1.0, width: 0.30 },   // third beat — normal
+  ];
+  for (const b of beats) {
+    const o = b.start;
+    const s = b.width;
+    const amp = b.scale;
+    pts.push([o, 0.5]);
+    // P wave
+    pts.push([o + s * 0.12, 0.5]);
+    pts.push([o + s * 0.16, 0.5 - 0.08 * amp]);
+    pts.push([o + s * 0.20, 0.5]);
+    // PR
+    pts.push([o + s * 0.25, 0.5]);
+    // QRS
+    pts.push([o + s * 0.28, 0.5 + 0.05 * amp]);
+    pts.push([o + s * 0.30, 0.5 - 0.38 * amp]);  // R peak
+    pts.push([o + s * 0.33, 0.5 + 0.25 * amp]);   // S wave
+    pts.push([o + s * 0.35, 0.5]);
+    // ST
+    pts.push([o + s * 0.45, 0.5]);
+    // T wave
+    pts.push([o + s * 0.52, 0.5 - 0.12 * amp]);
+    pts.push([o + s * 0.58, 0.5]);
+    pts.push([o + s * 0.90, 0.5]);
+  }
+  pts.push([1, 0.5]);
+  return pts;
+}
+
+const TORSADES_IDX = 4;
+
 const RHYTHMS = [
   { name: "Normal Sinus Rhythm", gen: sinusRhythm, dur: 5000 },
   { name: "Atrial Fibrillation", gen: afibRhythm, dur: 5000 },
@@ -150,6 +191,15 @@ const RHYTHMS = [
   { name: "SVT", gen: svtRhythm, dur: 4000 },
   { name: "Torsades de Pointes", gen: torsadesRhythm, dur: 5000 },
 ];
+
+// Shock sequence phases (durations in ms)
+const SHOCK_PHASES = {
+  preFlat: 400,     // flatline before shock
+  artifact: 350,    // shock spike + flash
+  postFlat: 1400,   // asystole after shock
+  recovery: 2500,   // slow return beats
+} as const;
+const SHOCK_TOTAL = SHOCK_PHASES.preFlat + SHOCK_PHASES.artifact + SHOCK_PHASES.postFlat + SHOCK_PHASES.recovery;
 
 function interpolatePoints(pts: [number, number][], t: number): { x: number; y: number } {
   if (pts.length === 0) return { x: 0, y: 0.5 };
@@ -166,6 +216,7 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const raf = useRef<number>(0);
   const dimRef = useRef(dimmed);
+  const [screenFlash, setScreenFlash] = useState(0);
 
   // Keep ref in sync with prop
   useEffect(() => {
@@ -195,8 +246,15 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
     let rhythmStart = performance.now();
     let transitioning = false;
 
-    const SWEEP_SPEED = 0.4; // full sweeps per second
-    const CROSSFADE_DUR = 1200; // ms for rhythm transition
+    // Shock sequence state
+    type ShockPhase = "none" | "preFlat" | "artifact" | "postFlat" | "recovery";
+    let shockPhase: ShockPhase = "none";
+    let shockStart = 0;
+    let shockFlashAlpha = 0;
+    let recoveryPts: [number, number][] = [];
+
+    const SWEEP_SPEED = 0.4;
+    const CROSSFADE_DUR = 1200;
     let crossfadeStart = 0;
 
     // Fade alpha — smoothly lerps toward 0 when dimmed, 1 when not
@@ -207,25 +265,112 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
       sweepT += dt * SWEEP_SPEED;
       if (sweepT > 1) sweepT -= 1;
 
-      // Check if time to transition
-      const elapsed = now - rhythmStart;
-      const currentDur = RHYTHMS[rhythmIdx].dur;
-      if (!transitioning && elapsed > currentDur) {
-        transitioning = true;
-        crossfadeStart = now;
-        const nextIdx = (rhythmIdx + 1) % RHYTHMS.length;
-        nextPts = RHYTHMS[nextIdx].gen();
-      }
+      // --- Determine current phase & points to draw ---
+      let drawLabel = RHYTHMS[rhythmIdx].name;
+      let drawLabelAlpha = 0.3;
 
-      if (transitioning) {
-        crossfade = Math.min(1, (now - crossfadeStart) / CROSSFADE_DUR);
-        if (crossfade >= 1) {
-          rhythmIdx = (rhythmIdx + 1) % RHYTHMS.length;
-          currentPts = nextPts;
-          crossfade = 0;
+      if (shockPhase !== "none") {
+        const shockElapsed = now - shockStart;
+
+        if (shockPhase === "preFlat") {
+          // Crossfade from torsades to flatline
+          const t = Math.min(1, shockElapsed / SHOCK_PHASES.preFlat);
+          const flatPts = flatline();
+          crossfade = t;
+          nextPts = flatPts;
+          transitioning = true;
+          drawLabel = "V-FIB";
+          drawLabelAlpha = 0.4;
+          if (shockElapsed >= SHOCK_PHASES.preFlat) {
+            shockPhase = "artifact";
+            shockStart = now;
+            currentPts = flatPts;
+            crossfade = 0;
+            transitioning = false;
+          }
+        } else if (shockPhase === "artifact") {
+          currentPts = flatline();
           transitioning = false;
-          rhythmStart = now;
+          crossfade = 0;
+          shockFlashAlpha = Math.max(0, 1 - shockElapsed / SHOCK_PHASES.artifact);
+          // Drive the full-screen flash overlay
+          setScreenFlash(Math.pow(shockFlashAlpha, 0.4));
+          drawLabel = "⚡ SHOCK";
+          drawLabelAlpha = 0.7;
+          if (shockElapsed >= SHOCK_PHASES.artifact) {
+            shockPhase = "postFlat";
+            shockStart = now;
+            setScreenFlash(0);
+            shockFlashAlpha = 0;
+          }
+        } else if (shockPhase === "postFlat") {
+          currentPts = flatline();
+          transitioning = false;
+          crossfade = 0;
+          drawLabel = "";
+          if (shockElapsed >= SHOCK_PHASES.postFlat) {
+            shockPhase = "recovery";
+            shockStart = now;
+            recoveryPts = recoveryRhythm();
+            currentPts = flatline();
+            nextPts = recoveryPts;
+            crossfadeStart = now;
+            transitioning = true;
+          }
+        } else if (shockPhase === "recovery") {
+          const t = Math.min(1, shockElapsed / 800); // crossfade into recovery over 800ms
+          crossfade = t;
+          transitioning = t < 1;
+          if (t >= 1) {
+            currentPts = recoveryPts;
+            crossfade = 0;
+            transitioning = false;
+          }
+          drawLabel = "ROSC";
+          drawLabelAlpha = 0.4;
+          if (shockElapsed >= SHOCK_PHASES.recovery) {
+            // Transition complete — move to NSR
+            shockPhase = "none";
+            rhythmIdx = 0;
+            currentPts = RHYTHMS[0].gen();
+            crossfade = 0;
+            transitioning = false;
+            rhythmStart = now;
+          }
         }
+      } else {
+        // Normal rhythm rotation
+        const elapsed = now - rhythmStart;
+        const currentDur = RHYTHMS[rhythmIdx].dur;
+        if (!transitioning && elapsed > currentDur) {
+          // Check if transitioning FROM torsades → trigger shock sequence
+          if (rhythmIdx === TORSADES_IDX) {
+            shockPhase = "preFlat";
+            shockStart = now;
+            shockFlashAlpha = 0;
+          } else {
+            transitioning = true;
+            crossfadeStart = now;
+            const nextIdx = (rhythmIdx + 1) % RHYTHMS.length;
+            nextPts = RHYTHMS[nextIdx].gen();
+          }
+        }
+
+        if (transitioning && shockPhase === "none") {
+          crossfade = Math.min(1, (now - crossfadeStart) / CROSSFADE_DUR);
+          if (crossfade >= 1) {
+            rhythmIdx = (rhythmIdx + 1) % RHYTHMS.length;
+            currentPts = nextPts;
+            crossfade = 0;
+            transitioning = false;
+            rhythmStart = now;
+          }
+        }
+
+        drawLabel = transitioning
+          ? RHYTHMS[(rhythmIdx + 1) % RHYTHMS.length].name
+          : RHYTHMS[rhythmIdx].name;
+        drawLabelAlpha = transitioning ? crossfade * 0.3 : 0.3;
       }
 
       ctx.clearRect(0, 0, W, H);
@@ -298,24 +443,76 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
 
       // Leading dot
       if (dotX > 0) {
+        const dotRadius = shockPhase === "artifact" ? 6 : 3;
+        const dotColor = shockPhase === "artifact"
+          ? `rgba(255,255,255,${0.6 + shockFlashAlpha * 0.4})`
+          : "rgba(248,113,113,0.95)";
+        const dotGlow = shockPhase === "artifact"
+          ? "rgba(255,255,255,0.9)"
+          : "rgba(239,68,68,0.8)";
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(248,113,113,0.95)";
-        ctx.shadowColor = "rgba(239,68,68,0.8)";
-        ctx.shadowBlur = 12;
+        ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+        ctx.fillStyle = dotColor;
+        ctx.shadowColor = dotGlow;
+        ctx.shadowBlur = shockPhase === "artifact" ? 20 : 12;
         ctx.fill();
         ctx.shadowBlur = 0;
       }
 
-      // Rhythm label (subtle)
-      const label = transitioning
-        ? RHYTHMS[(rhythmIdx + 1) % RHYTHMS.length].name
-        : RHYTHMS[rhythmIdx].name;
-      const labelAlpha = transitioning ? crossfade * 0.3 : 0.3;
-      ctx.font = "9px 'JetBrains Mono', monospace";
-      ctx.fillStyle = `rgba(248,113,113,${labelAlpha})`;
-      ctx.textAlign = "right";
-      ctx.fillText(label, W - margin, H - 2);
+      // Shock artifact — full-canvas flash + vertical spike
+      if (shockPhase === "artifact" && shockFlashAlpha > 0) {
+        // Full canvas white flash — brightest at start, fades fast
+        const flashIntensity = Math.pow(shockFlashAlpha, 0.5); // fast decay curve
+        ctx.fillStyle = `rgba(255,255,255,${flashIntensity * 0.35})`;
+        ctx.fillRect(0, 0, W, H);
+
+        // Main spike — thick white vertical line
+        const spikePx = margin + sweepT * drawW;
+        ctx.beginPath();
+        ctx.moveTo(spikePx, oY + drawH * 0.95);
+        ctx.lineTo(spikePx, oY + drawH * 0.05);
+        ctx.strokeStyle = `rgba(255,255,255,${shockFlashAlpha * 0.95})`;
+        ctx.lineWidth = 4;
+        ctx.shadowColor = `rgba(255,255,255,${shockFlashAlpha * 0.8})`;
+        ctx.shadowBlur = 25;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Secondary spike offset
+        ctx.beginPath();
+        ctx.moveTo(spikePx + 3, oY + drawH * 0.9);
+        ctx.lineTo(spikePx + 3, oY + drawH * 0.1);
+        ctx.strokeStyle = `rgba(248,113,113,${shockFlashAlpha * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Horizontal scatter lines (defibrillation artifact noise)
+        if (shockFlashAlpha > 0.5) {
+          for (let j = 0; j < 5; j++) {
+            const ly = oY + drawH * (0.2 + j * 0.15);
+            const lx1 = spikePx - 30 - Math.random() * 20;
+            const lx2 = spikePx + 30 + Math.random() * 20;
+            ctx.beginPath();
+            ctx.moveTo(lx1, ly + (Math.random() - 0.5) * 4);
+            ctx.lineTo(lx2, ly + (Math.random() - 0.5) * 4);
+            ctx.strokeStyle = `rgba(255,255,255,${(shockFlashAlpha - 0.5) * 0.4})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Rhythm label (dynamic from state machine)
+      if (drawLabel) {
+        ctx.font = "9px 'JetBrains Mono', monospace";
+        const isShockLabel = drawLabel === "⚡ SHOCK" || drawLabel === "ROSC" || drawLabel === "V-FIB";
+        const labelColor = isShockLabel
+          ? `rgba(255,255,255,${drawLabelAlpha})`
+          : `rgba(248,113,113,${drawLabelAlpha})`;
+        ctx.fillStyle = labelColor;
+        ctx.textAlign = "right";
+        ctx.fillText(drawLabel, W - margin, H - 2);
+      }
 
       raf.current = requestAnimationFrame(draw);
     };
@@ -326,13 +523,26 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
   }, []);
 
   return (
-    <div className={`relative w-full max-w-xl mx-auto overflow-hidden ${className}`}>
-      <canvas
-        ref={canvasRef}
-        className="w-full h-auto"
-        style={{ width: 600, height: 60, maxWidth: "100%" }}
-      />
-    </div>
+    <>
+      {/* Full-screen defibrillation flash overlay */}
+      {screenFlash > 0 && (
+        <div
+          className="fixed inset-0 pointer-events-none"
+          style={{
+            zIndex: 9999,
+            backgroundColor: `rgba(255,255,255,${screenFlash * 0.25})`,
+            boxShadow: `inset 0 0 200px rgba(255,255,255,${screenFlash * 0.3})`,
+          }}
+        />
+      )}
+      <div className={`relative w-full max-w-xl mx-auto overflow-hidden ${className}`}>
+        <canvas
+          ref={canvasRef}
+          className="w-full h-auto"
+          style={{ width: 600, height: 60, maxWidth: "100%" }}
+        />
+      </div>
+    </>
   );
 }
 
