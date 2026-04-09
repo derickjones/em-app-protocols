@@ -2,11 +2,15 @@
 Analytics Service — Firestore event logging and aggregation for owner dashboard.
 Tracks: queries, sessions (daily active users), protocol clicks.
 Reads: aggregated trends by day/week/month, per-user breakdowns, feedback.
+
+NOTE: Read queries use single-field filters only (date range) and filter type in
+Python to avoid needing Firestore composite indexes.
 """
 
 from datetime import datetime, timedelta
 from collections import defaultdict
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 db = firestore.Client(project="clinical-assistant-457902")
 
@@ -109,53 +113,64 @@ def _auto_granularity(range_str: str) -> str:
         return "month"
 
 
+# ============================================================================
+# HELPER: fetch analytics_events for a date range, filter type in Python
+# ============================================================================
+
+def _fetch_events(start: str, end: str, event_type: str = None) -> list:
+    """Fetch analytics_events within date range, optionally filter by type in Python."""
+    docs = db.collection("analytics_events") \
+        .where(filter=FieldFilter("date", ">=", start)) \
+        .where(filter=FieldFilter("date", "<=", end)) \
+        .stream()
+    results = []
+    for doc in docs:
+        d = doc.to_dict()
+        if event_type and d.get("type") != event_type:
+            continue
+        results.append(d)
+    return results
+
+
+def _fetch_sessions(start: str, end: str) -> list:
+    """Fetch analytics_sessions within date range."""
+    docs = db.collection("analytics_sessions") \
+        .where(filter=FieldFilter("date", ">=", start)) \
+        .where(filter=FieldFilter("date", "<=", end)) \
+        .stream()
+    return [doc.to_dict() for doc in docs]
+
+
+def _fetch_feedback(start: str, end: str) -> list:
+    """Fetch feedback within date range."""
+    docs = db.collection("feedback") \
+        .where(filter=FieldFilter("date", ">=", start)) \
+        .where(filter=FieldFilter("date", "<=", end)) \
+        .stream()
+    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
+
 def get_summary(range_str: str = "7d") -> dict:
     """Get top-line summary stats for a range."""
     start, end = _date_range(range_str)
 
     # Count queries
-    query_docs = db.collection("analytics_events") \
-        .where("type", "==", "query") \
-        .where("date", ">=", start) \
-        .where("date", "<=", end) \
-        .stream()
-    
-    query_count = 0
+    query_events = _fetch_events(start, end, "query")
+    query_count = len(query_events)
     user_queries = defaultdict(int)
-    for doc in query_docs:
-        d = doc.to_dict()
-        query_count += 1
+    for d in query_events:
         user_queries[d.get("userId", "unknown")] += 1
 
     # Count unique sessions
-    session_docs = db.collection("analytics_sessions") \
-        .where("date", ">=", start) \
-        .where("date", "<=", end) \
-        .stream()
-    
-    unique_users = set()
-    for doc in session_docs:
-        d = doc.to_dict()
-        unique_users.add(d.get("userId", "unknown"))
-    
+    session_docs = _fetch_sessions(start, end)
+    unique_users = set(d.get("userId", "unknown") for d in session_docs)
     user_count = len(unique_users)
     avg_per_user = round(query_count / user_count, 1) if user_count > 0 else 0
 
     # Feedback stats
-    feedback_query = db.collection("feedback") \
-        .where("date", ">=", start) \
-        .where("date", "<=", end) \
-        .stream()
-    
-    up_count = 0
-    down_count = 0
-    for doc in feedback_query:
-        d = doc.to_dict()
-        if d.get("rating") == "up":
-            up_count += 1
-        elif d.get("rating") == "down":
-            down_count += 1
-    
+    feedback_docs = _fetch_feedback(start, end)
+    up_count = sum(1 for d in feedback_docs if d.get("rating") == "up")
+    down_count = sum(1 for d in feedback_docs if d.get("rating") == "down")
     total_feedback = up_count + down_count
     feedback_score = round(up_count / total_feedback * 100) if total_feedback > 0 else 0
 
@@ -166,22 +181,9 @@ def get_summary(range_str: str = "7d") -> dict:
     prev_start = prev_start_dt.strftime("%Y-%m-%d")
     prev_end = prev_end_dt.strftime("%Y-%m-%d")
 
-    prev_queries = 0
-    for doc in db.collection("analytics_events") \
-            .where("type", "==", "query") \
-            .where("date", ">=", prev_start) \
-            .where("date", "<=", prev_end) \
-            .stream():
-        prev_queries += 1
-
-    prev_sessions = set()
-    for doc in db.collection("analytics_sessions") \
-            .where("date", ">=", prev_start) \
-            .where("date", "<=", prev_end) \
-            .stream():
-        prev_sessions.add(doc.to_dict().get("userId", ""))
-
-    prev_user_count = len(prev_sessions)
+    prev_queries = len(_fetch_events(prev_start, prev_end, "query"))
+    prev_sessions = _fetch_sessions(prev_start, prev_end)
+    prev_user_count = len(set(d.get("userId", "") for d in prev_sessions))
 
     def pct_change(current, previous):
         if previous == 0:
@@ -207,35 +209,26 @@ def get_trend(range_str: str = "7d") -> dict:
     start, end = _date_range(range_str)
     granularity = _auto_granularity(range_str)
 
+    query_events = _fetch_events(start, end, "query")
+    session_docs = _fetch_sessions(start, end)
+    feedback_docs = _fetch_feedback(start, end)
+
     # Query events bucketed
     query_buckets = defaultdict(int)
-    for doc in db.collection("analytics_events") \
-            .where("type", "==", "query") \
-            .where("date", ">=", start) \
-            .where("date", "<=", end) \
-            .stream():
-        d = doc.to_dict()
+    for d in query_events:
         bucket = _bucket_key(d.get("date", start), granularity)
         query_buckets[bucket] += 1
 
     # Session events bucketed
     user_buckets = defaultdict(set)
-    for doc in db.collection("analytics_sessions") \
-            .where("date", ">=", start) \
-            .where("date", "<=", end) \
-            .stream():
-        d = doc.to_dict()
+    for d in session_docs:
         bucket = _bucket_key(d.get("date", start), granularity)
         user_buckets[bucket].add(d.get("userId", ""))
 
     # Feedback bucketed
     feedback_up_buckets = defaultdict(int)
     feedback_down_buckets = defaultdict(int)
-    for doc in db.collection("feedback") \
-            .where("date", ">=", start) \
-            .where("date", "<=", end) \
-            .stream():
-        d = doc.to_dict()
+    for d in feedback_docs:
         bucket = _bucket_key(d.get("date", start), granularity)
         if d.get("rating") == "up":
             feedback_up_buckets[bucket] += 1
@@ -266,15 +259,13 @@ def get_users_breakdown(range_str: str = "7d") -> list:
     """Per-user stats for the range."""
     start, end = _date_range(range_str)
 
+    query_events = _fetch_events(start, end, "query")
+    feedback_docs = _fetch_feedback(start, end)
+
     # Queries per user
     user_stats = defaultdict(lambda: {"email": "", "queries": 0, "lastActive": "", "feedbackUp": 0, "feedbackDown": 0})
     
-    for doc in db.collection("analytics_events") \
-            .where("type", "==", "query") \
-            .where("date", ">=", start) \
-            .where("date", "<=", end) \
-            .stream():
-        d = doc.to_dict()
+    for d in query_events:
         uid = d.get("userId", "unknown")
         user_stats[uid]["email"] = d.get("userEmail", "")
         user_stats[uid]["queries"] += 1
@@ -283,13 +274,8 @@ def get_users_breakdown(range_str: str = "7d") -> list:
             user_stats[uid]["lastActive"] = date
 
     # Feedback per user
-    for doc in db.collection("feedback") \
-            .where("date", ">=", start) \
-            .where("date", "<=", end) \
-            .stream():
-        d = doc.to_dict()
+    for d in feedback_docs:
         email = d.get("user_email", "anonymous")
-        # Find by email match
         for uid, stats in user_stats.items():
             if stats["email"] == email:
                 if d.get("rating") == "up":
@@ -317,23 +303,17 @@ def get_feedback_list(range_str: str = "7d", rating_filter: str = "all", page: i
     """Paginated feedback list."""
     start, end = _date_range(range_str)
 
-    query = db.collection("feedback") \
-        .where("date", ">=", start) \
-        .where("date", "<=", end) \
-        .order_by("date", direction=firestore.Query.DESCENDING)
+    feedback_docs = _fetch_feedback(start, end)
+    # Sort by date descending
+    feedback_docs.sort(key=lambda x: x.get("date", ""), reverse=True)
     
-    all_docs = []
-    for doc in query.stream():
-        d = doc.to_dict()
-        d["id"] = doc.id
-        if rating_filter != "all" and d.get("rating") != rating_filter:
-            continue
-        all_docs.append(d)
+    if rating_filter != "all":
+        feedback_docs = [d for d in feedback_docs if d.get("rating") == rating_filter]
 
-    total = len(all_docs)
+    total = len(feedback_docs)
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
-    page_docs = all_docs[start_idx:end_idx]
+    page_docs = feedback_docs[start_idx:end_idx]
 
     return {
         "feedback": page_docs,
@@ -348,14 +328,10 @@ def get_protocol_clicks(range_str: str = "7d") -> list:
     """Top clicked protocols for the range."""
     start, end = _date_range(range_str)
 
+    click_events = _fetch_events(start, end, "protocol_click")
     click_stats = defaultdict(lambda: {"title": "", "enterpriseId": "", "clicks": 0, "uniqueUsers": set()})
     
-    for doc in db.collection("analytics_events") \
-            .where("type", "==", "protocol_click") \
-            .where("date", ">=", start) \
-            .where("date", "<=", end) \
-            .stream():
-        d = doc.to_dict()
+    for d in click_events:
         pid = d.get("protocolId", "unknown")
         click_stats[pid]["title"] = d.get("protocolTitle", pid)
         click_stats[pid]["enterpriseId"] = d.get("enterpriseId", "")
