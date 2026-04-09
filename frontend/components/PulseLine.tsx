@@ -217,6 +217,7 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
   const raf = useRef<number>(0);
   const dimRef = useRef(dimmed);
   const [screenFlash, setScreenFlash] = useState(0);
+  const screenFlashActive = useRef(false);
 
   // Keep ref in sync with prop
   useEffect(() => {
@@ -293,14 +294,18 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
           transitioning = false;
           crossfade = 0;
           shockFlashAlpha = Math.max(0, 1 - shockElapsed / SHOCK_PHASES.artifact);
-          // Drive the full-screen flash overlay
-          setScreenFlash(Math.pow(shockFlashAlpha, 0.4));
+          // Drive the full-screen flash overlay (only when not dimmed)
+          if (!dimRef.current) {
+            setScreenFlash(Math.pow(shockFlashAlpha, 0.4));
+            screenFlashActive.current = true;
+          }
           drawLabel = "⚡ SHOCK";
           drawLabelAlpha = 0.7;
           if (shockElapsed >= SHOCK_PHASES.artifact) {
             shockPhase = "postFlat";
             shockStart = now;
             setScreenFlash(0);
+            screenFlashActive.current = false;
             shockFlashAlpha = 0;
           }
         } else if (shockPhase === "postFlat") {
@@ -378,6 +383,10 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
       // Smooth fade when dimmed (search input focused)
       const target = dimRef.current ? 0 : 1;
       fadeAlpha += (target - fadeAlpha) * 0.06;
+      // When dimmed, suppress screen flash and skip drawing
+      if (dimRef.current) {
+        if (screenFlashActive.current) { setScreenFlash(0); screenFlashActive.current = false; }
+      }
       if (fadeAlpha < 0.01 && target === 0) { raf.current = requestAnimationFrame(draw); return; }
       ctx.globalAlpha = fadeAlpha;
 
