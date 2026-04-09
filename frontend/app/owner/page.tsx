@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Users, Building2, FolderOpen, FileText, Shield, Crown, Mail, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Check, X, Database, MapPin, Palette, Clock, Bell, UserCheck, UserX } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Users, Building2, FolderOpen, FileText, Shield, Crown, Mail, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Check, X, Database, MapPin, Palette, Clock, Bell, UserCheck, UserX, BarChart3, TrendingUp, TrendingDown, ThumbsUp, ThumbsDown, Activity, Search, MousePointerClick } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
@@ -69,7 +70,7 @@ export default function OwnerDashboard() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
   
-  const [view, setView] = useState<"admins" | "hierarchy" | "requests">("hierarchy");
+  const [view, setView] = useState<"admins" | "hierarchy" | "requests" | "analytics">("hierarchy");
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseData[]>([]);
   const [expandedEnterprises, setExpandedEnterprises] = useState<Set<string>>(new Set());
@@ -99,6 +100,27 @@ export default function OwnerDashboard() {
   // Notifications state
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Analytics state
+  const [analyticsRange, setAnalyticsRange] = useState("7d");
+  const [analyticsSummary, setAnalyticsSummary] = useState<{
+    users: number;
+    usersChange: number;
+    queries: number;
+    queriesChange: number;
+    avgPerUser: number;
+    feedbackUp: number;
+    feedbackDown: number;
+    feedbackScore: number;
+    totalFeedback: number;
+  } | null>(null);
+  const [analyticsTrend, setAnalyticsTrend] = useState<{ period: string; users: number; queries: number }[]>([]);
+  const [analyticsUsers, setAnalyticsUsers] = useState<{ email: string; queries: number; lastActive: string; feedbackUp: number; feedbackDown: number }[]>([]);
+  const [analyticsFeedback, setAnalyticsFeedback] = useState<{ feedback: { id: string; query: string; rating: string; reasons: string[]; comment: string; user_email: string; date: string }[]; total: number; page: number; pageSize: number; totalPages: number }>({ feedback: [], total: 0, page: 1, pageSize: 20, totalPages: 0 });
+  const [analyticsProtocolClicks, setAnalyticsProtocolClicks] = useState<{ protocolId: string; title: string; clicks: number }[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [feedbackFilter, setFeedbackFilter] = useState<"all" | "up" | "down">("all");
+  const [feedbackPage, setFeedbackPage] = useState(1);
 
   // Create modals
   const [showCreateEnterprise, setShowCreateEnterprise] = useState(false);
@@ -233,6 +255,38 @@ export default function OwnerDashboard() {
       console.error("Failed to fetch notifications:", err);
     }
   };
+
+  // Fetch analytics data
+  const fetchAnalytics = useCallback(async (range: string) => {
+    setAnalyticsLoading(true);
+    try {
+      const token = await user?.getIdToken();
+      const headers = { Authorization: `Bearer ${token}` };
+      const [summaryRes, trendRes, usersRes, feedbackRes, clicksRes] = await Promise.all([
+        fetch(`${API_URL}/analytics/summary?range=${range}`, { headers }),
+        fetch(`${API_URL}/analytics/trend?range=${range}`, { headers }),
+        fetch(`${API_URL}/analytics/users?range=${range}`, { headers }),
+        fetch(`${API_URL}/analytics/feedback?range=${range}&rating=${feedbackFilter}&page=${feedbackPage}`, { headers }),
+        fetch(`${API_URL}/analytics/protocol-clicks?range=${range}`, { headers }),
+      ]);
+      if (summaryRes.ok) setAnalyticsSummary(await summaryRes.json());
+      if (trendRes.ok) setAnalyticsTrend((await trendRes.json()).data || []);
+      if (usersRes.ok) setAnalyticsUsers((await usersRes.json()).users || []);
+      if (feedbackRes.ok) setAnalyticsFeedback(await feedbackRes.json());
+      if (clicksRes.ok) setAnalyticsProtocolClicks((await clicksRes.json()).protocols || []);
+    } catch (err) {
+      console.error("Failed to fetch analytics:", err);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [user, feedbackFilter, feedbackPage]);
+
+  // Reload analytics when range, filter, or page changes
+  useEffect(() => {
+    if (view === "analytics" && userProfile?.role === "super_admin") {
+      fetchAnalytics(analyticsRange);
+    }
+  }, [view, analyticsRange, feedbackFilter, feedbackPage, fetchAnalytics, userProfile]);
 
   // Handle approve/deny access request
   const handleAccessRequestAction = async (requestId: string, action: "approve" | "deny") => {
@@ -585,6 +639,17 @@ export default function OwnerDashboard() {
             >
               <Users className="w-4 h-4" />
               Admin Users
+            </button>
+            <button
+              onClick={() => setView("analytics")}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 ${
+                view === "analytics"
+                  ? "bg-[#8ab4f8] text-[#131314]"
+                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              Analytics
             </button>
           </div>
         </div>
@@ -1418,6 +1483,308 @@ export default function OwnerDashboard() {
                       ))}
                     </ul>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== Analytics View ===== */}
+            {view === "analytics" && (
+              <div className="space-y-6">
+                {/* Range Selector */}
+                <div className="flex items-center gap-2">
+                  {[
+                    { label: "Today", value: "today" },
+                    { label: "7 Days", value: "7d" },
+                    { label: "30 Days", value: "30d" },
+                    { label: "90 Days", value: "90d" },
+                    { label: "1 Year", value: "1y" },
+                    { label: "All Time", value: "all" },
+                  ].map((r) => (
+                    <button
+                      key={r.value}
+                      onClick={() => setAnalyticsRange(r.value)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        analyticsRange === r.value
+                          ? "bg-[#8ab4f8] text-[#131314]"
+                          : "text-[#9aa0a6] hover:text-white hover:bg-white/10 border border-[#3c4043]"
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => fetchAnalytics(analyticsRange)}
+                    disabled={analyticsLoading}
+                    className="ml-auto p-2 text-[#9aa0a6] hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${analyticsLoading ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+
+                {analyticsLoading && !analyticsSummary ? (
+                  <div className="flex items-center justify-center py-20">
+                    <RefreshCw className="w-8 h-8 animate-spin text-[#8ab4f8]" />
+                  </div>
+                ) : (
+                  <>
+                    {/* Stat Cards */}
+                    {analyticsSummary && (
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {[
+                          {
+                            label: "Active Users",
+                            value: analyticsSummary.users,
+                            change: analyticsSummary.usersChange,
+                            icon: <Users className="w-5 h-5 text-[#8ab4f8]" />,
+                          },
+                          {
+                            label: "Total Queries",
+                            value: analyticsSummary.queries,
+                            change: analyticsSummary.queriesChange,
+                            icon: <Search className="w-5 h-5 text-purple-400" />,
+                          },
+                          {
+                            label: "Queries / User",
+                            value: analyticsSummary.avgPerUser,
+                            change: 0,
+                            icon: <Activity className="w-5 h-5 text-cyan-400" />,
+                            decimals: 1,
+                          },
+                          {
+                            label: "Feedback Score",
+                            value: analyticsSummary.feedbackScore,
+                            change: 0,
+                            icon: <ThumbsUp className="w-5 h-5 text-emerald-400" />,
+                            suffix: "%",
+                            detail: `${analyticsSummary.feedbackUp}↑ ${analyticsSummary.feedbackDown}↓`,
+                          },
+                        ].map((card) => {
+                          const isPositive = card.change >= 0;
+                          return (
+                            <div
+                              key={card.label}
+                              className="bg-[#1e1f20] rounded-2xl border border-[#3c4043] p-5"
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs text-[#9aa0a6] uppercase tracking-wider">{card.label}</span>
+                                {card.icon}
+                              </div>
+                              <div className="flex items-end gap-2">
+                                <span className="text-3xl font-semibold text-white font-[family-name:var(--font-mono)]">
+                                  {card.decimals
+                                    ? card.value.toFixed(card.decimals)
+                                    : card.value.toLocaleString()}
+                                  {card.suffix || ""}
+                                </span>
+                                {analyticsRange !== "all" && card.change !== 0 && (
+                                  <span
+                                    className={`text-xs font-medium flex items-center gap-0.5 mb-1 ${
+                                      isPositive ? "text-emerald-400" : "text-red-400"
+                                    }`}
+                                  >
+                                    {isPositive ? (
+                                      <TrendingUp className="w-3 h-3" />
+                                    ) : (
+                                      <TrendingDown className="w-3 h-3" />
+                                    )}
+                                    {Math.abs(card.change).toFixed(0)}%
+                                  </span>
+                                )}
+                              </div>
+                              {card.detail && (
+                                <span className="text-xs text-[#9aa0a6] mt-1 block">{card.detail}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Trend Chart */}
+                    {analyticsTrend.length > 0 && (
+                      <div className="bg-[#1e1f20] rounded-2xl border border-[#3c4043] p-5">
+                        <h3 className="text-sm font-medium text-white mb-4 flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-[#8ab4f8]" />
+                          Usage Trend
+                        </h3>
+                        <div className="h-72">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={analyticsTrend}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#3c4043" />
+                              <XAxis
+                                dataKey="period"
+                                stroke="#9aa0a6"
+                                tick={{ fontSize: 11 }}
+                                tickFormatter={(v) => {
+                                  if (v.length === 10) return v.slice(5); // MM-DD
+                                  return v;
+                                }}
+                              />
+                              <YAxis stroke="#9aa0a6" tick={{ fontSize: 11 }} />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: "#1e1f20",
+                                  border: "1px solid #3c4043",
+                                  borderRadius: "12px",
+                                  color: "#fff",
+                                  fontSize: 12,
+                                }}
+                              />
+                              <Legend />
+                              <Line type="monotone" dataKey="queries" stroke="#a78bfa" strokeWidth={2} dot={false} name="Queries" />
+                              <Line type="monotone" dataKey="users" stroke="#8ab4f8" strokeWidth={2} dot={false} name="Users" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Two-column: Users & Protocol Clicks */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Users Table */}
+                      <div className="bg-[#1e1f20] rounded-2xl border border-[#3c4043] overflow-hidden">
+                        <div className="p-4 border-b border-[#3c4043]">
+                          <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                            <Users className="w-4 h-4 text-[#8ab4f8]" />
+                            Top Users
+                          </h3>
+                        </div>
+                        {analyticsUsers.length === 0 ? (
+                          <div className="p-8 text-center text-[#9aa0a6] text-sm">No user data yet</div>
+                        ) : (
+                          <div className="divide-y divide-[#3c4043] max-h-80 overflow-auto">
+                            {/* Header row */}
+                            <div className="grid grid-cols-[1fr_60px_80px] gap-2 px-4 py-2 text-xs text-[#9aa0a6] uppercase tracking-wider">
+                              <span>Email</span>
+                              <span className="text-right">Queries</span>
+                              <span className="text-right">Last Active</span>
+                            </div>
+                            {analyticsUsers.slice(0, 20).map((u) => (
+                              <div key={u.email} className="grid grid-cols-[1fr_60px_80px] gap-2 px-4 py-3 hover:bg-[#2c2d2e] transition-colors items-center">
+                                <span className="text-sm text-white truncate">{u.email}</span>
+                                <span className="text-sm text-[#8ab4f8] text-right font-[family-name:var(--font-mono)]">{u.queries}</span>
+                                <span className="text-xs text-[#9aa0a6] text-right">{u.lastActive}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Protocol Clicks */}
+                      <div className="bg-[#1e1f20] rounded-2xl border border-[#3c4043] overflow-hidden">
+                        <div className="p-4 border-b border-[#3c4043]">
+                          <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                            <MousePointerClick className="w-4 h-4 text-purple-400" />
+                            Top Protocol Clicks
+                          </h3>
+                        </div>
+                        {analyticsProtocolClicks.length === 0 ? (
+                          <div className="p-8 text-center text-[#9aa0a6] text-sm">No click data yet</div>
+                        ) : (
+                          <div className="divide-y divide-[#3c4043] max-h-80 overflow-auto">
+                            {analyticsProtocolClicks.map((p, i) => (
+                              <div key={p.protocolId} className="flex items-center gap-3 px-4 py-3 hover:bg-[#2c2d2e] transition-colors">
+                                <span className="text-xs text-[#9aa0a6] w-5 text-right">{i + 1}.</span>
+                                <span className="text-sm text-white flex-1 truncate">{p.title}</span>
+                                <span className="text-sm text-purple-400 font-[family-name:var(--font-mono)]">{p.clicks}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Feedback Feed */}
+                    <div className="bg-[#1e1f20] rounded-2xl border border-[#3c4043] overflow-hidden">
+                      <div className="flex items-center justify-between p-4 border-b border-[#3c4043]">
+                        <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                          <ThumbsUp className="w-4 h-4 text-emerald-400" />
+                          Feedback ({analyticsFeedback.total})
+                        </h3>
+                        <div className="flex gap-1">
+                          {(["all", "up", "down"] as const).map((f) => (
+                            <button
+                              key={f}
+                              onClick={() => { setFeedbackFilter(f); setFeedbackPage(1); }}
+                              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                                feedbackFilter === f
+                                  ? "bg-[#8ab4f8] text-[#131314]"
+                                  : "text-[#9aa0a6] hover:text-white hover:bg-white/10"
+                              }`}
+                            >
+                              {f === "all" ? "All" : f === "up" ? "👍 Up" : "👎 Down"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {analyticsFeedback.feedback.length === 0 ? (
+                        <div className="p-8 text-center text-[#9aa0a6] text-sm">No feedback yet</div>
+                      ) : (
+                        <div className="divide-y divide-[#3c4043]">
+                          {analyticsFeedback.feedback.map((fb: { id: string; query: string; rating: string; reasons: string[]; comment: string; user_email: string; date: string }) => (
+                            <div
+                              key={fb.id}
+                              className={`px-5 py-4 border-l-4 ${
+                                fb.rating === "up"
+                                  ? "border-l-emerald-500/60"
+                                  : "border-l-red-500/60"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-white mb-1 line-clamp-2">
+                                    <span className="text-[#9aa0a6]">Q:</span> {fb.query}
+                                  </p>
+                                  {fb.reasons && fb.reasons.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mb-1">
+                                      {fb.reasons.map((r) => (
+                                        <span
+                                          key={r}
+                                          className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-[#9aa0a6]"
+                                        >
+                                          {r}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {fb.comment && (
+                                    <p className="text-xs text-[#9aa0a6] italic mt-1">&ldquo;{fb.comment}&rdquo;</p>
+                                  )}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="text-lg">{fb.rating === "up" ? "👍" : "👎"}</span>
+                                  <p className="text-[10px] text-[#9aa0a6] mt-0.5">{fb.user_email}</p>
+                                  <p className="text-[10px] text-[#5f6368]">{fb.date}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Pagination */}
+                      {analyticsFeedback.total > analyticsFeedback.pageSize && (
+                        <div className="flex items-center justify-center gap-2 p-3 border-t border-[#3c4043]">
+                          <button
+                            onClick={() => setFeedbackPage((p) => Math.max(1, p - 1))}
+                            disabled={feedbackPage <= 1}
+                            className="px-3 py-1 text-xs rounded-full text-[#9aa0a6] hover:text-white hover:bg-white/10 disabled:opacity-30 transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          <span className="text-xs text-[#9aa0a6]">
+                            Page {analyticsFeedback.page} of {analyticsFeedback.totalPages}
+                          </span>
+                          <button
+                            onClick={() => setFeedbackPage((p) => p + 1)}
+                            disabled={feedbackPage >= analyticsFeedback.totalPages}
+                            className="px-3 py-1 text-xs rounded-full text-[#9aa0a6] hover:text-white hover:bg-white/10 disabled:opacity-30 transition-colors"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             )}

@@ -760,6 +760,28 @@ export default function Home() {
     setShowUserMenu(false);
   };
 
+  // ───── Protocol click tracking ─────
+  const trackProtocolClick = async (card: ProtocolCardData) => {
+    try {
+      const token = await user?.getIdToken();
+      if (!token) return;
+      fetch(`${API_URL}/analytics/protocol-click`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          protocol_id: card.protocol_id,
+          title: card.protocol_id.replace(/_/g, " ").replace(/\.pdf$/i, ""),
+          enterprise_id: card.enterprise_id || "",
+        }),
+      }).catch(() => {}); // fire-and-forget
+    } catch {
+      // never block user navigation
+    }
+  };
+
   // ───── Feedback submission ─────
   const FEEDBACK_REASONS = [
     "Incorrect information",
@@ -2062,6 +2084,7 @@ export default function Home() {
                               compact
                               isStarred={isFavorited(card.protocol_id)}
                               onToggleStar={toggleFavorite}
+                              onClickProtocol={trackProtocolClick}
                             />
                           </div>
                         ))}

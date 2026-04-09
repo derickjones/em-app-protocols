@@ -20,9 +20,10 @@ interface ProtocolCardProps {
   compact?: boolean; // compact mode for carousel embedding
   isStarred?: boolean;
   onToggleStar?: (card: ProtocolCardData) => void;
+  onClickProtocol?: (card: ProtocolCardData) => void;
 }
 
-export default function ProtocolCard({ card, darkMode, compact = false, isStarred = false, onToggleStar }: ProtocolCardProps) {
+export default function ProtocolCard({ card, darkMode, compact = false, isStarred = false, onToggleStar, onClickProtocol }: ProtocolCardProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const images = card.images || [];
 
@@ -122,6 +123,7 @@ export default function ProtocolCard({ card, darkMode, compact = false, isStarre
           href={card.pdf_url}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => onClickProtocol?.(card)}
           className="inline-flex items-center gap-1.5 mt-4 text-sm text-blue-500 hover:text-blue-400 transition-colors"
         >
           <svg

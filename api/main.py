@@ -22,6 +22,7 @@ from rag_service import RAGService
 from protocol_service import ProtocolService
 from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_ed_access, require_admin, verify_firebase_token, check_email_verified
 from personal_service import PersonalService
+import analytics_service
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 
@@ -977,6 +978,18 @@ async def query_protocols(
                         except Exception as rank_err:
                             print(f"Image ranking error (using original order): {rank_err}")
                     yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'images': images, 'query_time_ms': event['query_time_ms']})}\n\n"
+                    # Log query event for analytics
+                    try:
+                        if user:
+                            analytics_service.log_query_event(
+                                user_id=user.uid,
+                                user_email=user.email,
+                                query=request.query,
+                                sources=request.sources or [],
+                                response_time_ms=event.get("query_time_ms", 0),
+                            )
+                    except Exception:
+                        pass  # Never fail the stream over analytics
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
@@ -2395,6 +2408,7 @@ class FeedbackRequest(BaseModel):
 async def submit_feedback(req: FeedbackRequest):
     """Store pilot feedback in Firestore for AIA reporting."""
     try:
+        from datetime import datetime
         doc_ref = db.collection("feedback").document()
         doc_ref.set({
             "query": req.query,
@@ -2402,11 +2416,115 @@ async def submit_feedback(req: FeedbackRequest):
             "reasons": req.reasons,
             "comment": req.comment,
             "user_email": req.user_email,
+            "date": datetime.utcnow().strftime("%Y-%m-%d"),
             "timestamp": firestore.SERVER_TIMESTAMP,
         })
         return {"status": "ok", "id": doc_ref.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to store feedback: {str(e)}")
+
+
+# ============================================================================
+# ANALYTICS ENDPOINTS
+# ============================================================================
+
+class ProtocolClickRequest(BaseModel):
+    protocol_id: str
+    title: str
+    enterprise_id: Optional[str] = None
+
+@app.post("/analytics/protocol-click")
+async def track_protocol_click(req: ProtocolClickRequest, user: UserProfile = Depends(get_verified_user)):
+    """Track when a user clicks/opens a protocol."""
+    try:
+        analytics_service.log_protocol_click(
+            user_id=user.uid,
+            user_email=user.email or "",
+            protocol_id=req.protocol_id,
+            protocol_title=req.title,
+            enterprise_id=req.enterprise_id or user.enterprise_id or "",
+        )
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to log click: {str(e)}")
+
+
+@app.get("/analytics/summary")
+async def analytics_summary(
+    range: str = Query("7d", description="Time range: today, 7d, 30d, 90d, 1y, all"),
+    user: UserProfile = Depends(get_verified_user),
+):
+    """Get high-level analytics summary (owner only)."""
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Owner access required")
+    try:
+        data = analytics_service.get_summary(range)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
+
+
+@app.get("/analytics/trend")
+async def analytics_trend(
+    range: str = Query("7d", description="Time range: today, 7d, 30d, 90d, 1y, all"),
+    user: UserProfile = Depends(get_verified_user),
+):
+    """Get trend data for charting (owner only)."""
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Owner access required")
+    try:
+        data = analytics_service.get_trend(range)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
+
+
+@app.get("/analytics/users")
+async def analytics_users(
+    range: str = Query("7d", description="Time range: today, 7d, 30d, 90d, 1y, all"),
+    user: UserProfile = Depends(get_verified_user),
+):
+    """Get per-user breakdown (owner only)."""
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Owner access required")
+    try:
+        data = analytics_service.get_users_breakdown(range)
+        return {"users": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
+
+
+@app.get("/analytics/feedback")
+async def analytics_feedback(
+    range: str = Query("30d", description="Time range: today, 7d, 30d, 90d, 1y, all"),
+    rating: str = Query("all", description="Filter: up, down, all"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: UserProfile = Depends(get_verified_user),
+):
+    """Get feedback entries for review (owner only)."""
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Owner access required")
+    try:
+        data = analytics_service.get_feedback_list(range, rating, page, page_size)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
+
+
+@app.get("/analytics/protocol-clicks")
+async def analytics_protocol_clicks(
+    range: str = Query("30d", description="Time range: today, 7d, 30d, 90d, 1y, all"),
+    user: UserProfile = Depends(get_verified_user),
+):
+    """Get top clicked protocols (owner only)."""
+    if user.role not in ["super_admin"]:
+        raise HTTPException(status_code=403, detail="Owner access required")
+    try:
+        data = analytics_service.get_protocol_clicks(range)
+        return {"protocols": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics error: {str(e)}")
 
 
 # ============================================================================

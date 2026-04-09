@@ -313,6 +313,13 @@ async def get_verified_user(
     
     user = get_or_create_user(decoded)
     
+    # Log daily session for analytics (fire-and-forget, deduplicated by userId+date)
+    try:
+        import analytics_service
+        analytics_service.log_session_event(user.uid, user.email)
+    except Exception:
+        pass  # Never fail auth over analytics
+    
     return user
 
 
