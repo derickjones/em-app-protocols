@@ -64,8 +64,17 @@ class RAGService:
         credentials.refresh(auth_req)
         return credentials.token
     
-    def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5) -> List[Dict]:
-        """Retrieve relevant contexts from a RAG corpus"""
+    def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5,
+                            vector_distance_threshold: float = 0.3) -> List[Dict]:
+        """Retrieve relevant contexts from a RAG corpus.
+        
+        Args:
+            query: Search query text
+            corpus_name: RAG corpus resource name
+            top_k: Maximum number of results to return
+            vector_distance_threshold: Max cosine distance (0-1). Lower = stricter.
+                0.3 rejects chunks that are less than ~70% similar to the query.
+        """
         if corpus_name is None:
             corpus_name = self.corpus_name
             
@@ -79,7 +88,8 @@ class RAGService:
         payload = {
             "query": {"text": query},
             "vertex_rag_store": {
-                "rag_corpora": [corpus_name]
+                "rag_corpora": [corpus_name],
+                "vector_distance_threshold": vector_distance_threshold
             }
         }
         
@@ -146,54 +156,67 @@ class RAGService:
             return source
 
     def _filter_by_relevance(self, contexts: List[Dict], min_results: int = 5,
-                              max_results: int = 10, score_multiplier: float = 4.0) -> List[Dict]:
+                              max_results: int = 15, score_multiplier: float = 4.0) -> List[Dict]:
         """
-        Filter contexts using an adaptive relevance threshold.
-        
-        Uses the best score as an anchor and keeps contexts within
-        score_multiplier × best_score. Deduplicates by source key,
-        but allows up to LOCAL_MAX_CHUNKS chunks from local/personal sources
-        so multi-page protocols are properly represented.
-        Returns between min_results and max_results unique sources.
-        
+        Slot-based relevance filter.
+
+        Priority slots (up to 8 chunks): local & personal sources get first pick
+        so institutional protocols always surface. Each local/personal source
+        may contribute up to LOCAL_MAX_CHUNKS chunks.
+
+        Remaining slots (up to max_results total): filled by the best external
+        results (wikem, pmc, litfl, rebelem, aliem) using an adaptive cutoff
+        of best_external_score × 3.0 (floor 0.10).
+
         Contexts must already be sorted by score ascending (lower = better).
         """
         if not contexts:
             return []
 
-        LOCAL_MAX_CHUNKS = 3  # allow up to 3 chunks per local/personal source
-
+        LOCAL_MAX_CHUNKS = 3
+        PRIORITY_CAP = 8          # max chunks reserved for local/personal
         from collections import OrderedDict
-        best_score = contexts[0].get("score", 0)
-        # Guard against near-zero scores — use a floor so the cutoff isn't too tight
-        cutoff = max(best_score * score_multiplier, 0.05)
 
-        seen_keys: OrderedDict = OrderedDict()   # key → chunk count
-        result = []
+        # --- Pass 1: priority slots for local / personal ---
+        priority = []
+        priority_keys: OrderedDict = OrderedDict()
         for ctx in contexts:
-            key = self._get_source_key(ctx)
+            if len(priority) >= PRIORITY_CAP:
+                break
             source_type = ctx.get("source_type", "local")
-            is_local = source_type in ("local", "personal")
-            chunk_limit = LOCAL_MAX_CHUNKS if is_local else 1
+            if source_type not in ("local", "personal"):
+                continue
+            key = self._get_source_key(ctx)
+            cnt = priority_keys.get(key, 0)
+            if cnt >= LOCAL_MAX_CHUNKS:
+                continue
+            priority_keys[key] = cnt + 1
+            priority.append(ctx)
 
-            existing_count = seen_keys.get(key, 0)
-            if existing_count >= chunk_limit:
-                continue  # already have enough chunks from this source
+        # --- Pass 2: fill remaining slots with external results ---
+        remaining_slots = max_results - len(priority)
+        external = [c for c in contexts if c.get("source_type", "local") not in ("local", "personal")]
 
-            # Always include up to min_results unique sources (by key)
-            unique_sources = len(seen_keys)
-            if unique_sources < min_results or existing_count == 0:
-                # still building up the minimum set OR adding more chunks for an existing local source
-                pass
-            elif ctx.get("score", 1) > cutoff or len(result) >= max_results:
+        best_ext = external[0].get("score", 0) if external else 0
+        ext_cutoff = max(best_ext * 3.0, 0.10)
+
+        ext_result = []
+        ext_keys: OrderedDict = OrderedDict()
+        for ctx in external:
+            if len(ext_result) >= remaining_slots:
                 break
-
-            seen_keys[key] = existing_count + 1
-            result.append(ctx)
-
-            if len(result) >= max_results:
+            key = self._get_source_key(ctx)
+            if key in ext_keys:
+                continue  # 1 chunk per external source
+            score = ctx.get("score", 1)
+            unique_ext = len(ext_keys)
+            if unique_ext >= min_results and score > ext_cutoff:
                 break
+            ext_keys[key] = 1
+            ext_result.append(ctx)
 
+        # Combine: priority first, then external (both already score-sorted)
+        result = priority + ext_result
         return result
 
     def _build_prompt_and_context(self, query: str, contexts: List[Dict]) -> tuple[str, str]:
@@ -823,8 +846,6 @@ ANSWER:"""
                 contexts = self._retrieve_contexts(query, self.corpus_name, top_k=10)
                 for ctx in contexts:
                     ctx["source_type"] = "local"
-                    # Boost local protocol relevance: halve score so local ranks ahead of external
-                    ctx["score"] = ctx.get("score", 0) * 0.5
                 return contexts
             except Exception as e:
                 print(f"Local corpus query failed: {e}")
@@ -843,7 +864,7 @@ ANSWER:"""
         def fetch_pmc():
             try:
                 if self.pmc_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.pmc_corpus_name)
+                    contexts = self._retrieve_contexts(query, self.pmc_corpus_name, top_k=10)
                     for ctx in contexts:
                         ctx["source_type"] = "pmc"
                     return contexts
@@ -897,14 +918,13 @@ ANSWER:"""
                     user_contexts = [c for c in contexts if c.get("source", "").startswith(user_prefix)]
                     for ctx in user_contexts:
                         ctx["source_type"] = "personal"
-                        # Boost personal file relevance same as local protocols
-                        ctx["score"] = ctx.get("score", 0) * 0.5
                     return user_contexts[:5]
                 return []
             except Exception as e:
                 print(f"Personal corpus query failed: {e}")
                 return []
         
+        import time as _time
         with ThreadPoolExecutor(max_workers=7) as executor:
             futures = {}
             if "local" in sources:
@@ -922,12 +942,16 @@ ANSWER:"""
             if "personal" in sources and personal_user_id:
                 futures["personal"] = executor.submit(fetch_personal)
             
+            t0 = _time.time()
             for key, future in futures.items():
                 try:
                     results = future.result(timeout=30)
+                    elapsed = _time.time() - t0
+                    print(f"[rag-timing] {key}: {len(results)} results in {elapsed:.2f}s")
                     all_contexts.extend(results)
                 except Exception as e:
-                    print(f"Failed to get {key} results: {type(e).__name__}: {e}")
+                    elapsed = _time.time() - t0
+                    print(f"[rag-timing] {key}: FAILED in {elapsed:.2f}s — {type(e).__name__}: {e}")
         
         # Sort by score (lower = more relevant in Vertex AI RAG)
         all_contexts.sort(key=lambda x: x.get("score", 1))
