@@ -65,7 +65,7 @@ class RAGService:
         return credentials.token
     
     def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5,
-                            vector_distance_threshold: float = 0.3) -> List[Dict]:
+                            vector_distance_threshold: float = None) -> List[Dict]:
         """Retrieve relevant contexts from a RAG corpus.
         
         Args:
@@ -73,7 +73,8 @@ class RAGService:
             corpus_name: RAG corpus resource name
             top_k: Maximum number of results to return
             vector_distance_threshold: Max cosine distance (0-1). Lower = stricter.
-                0.3 rejects chunks that are less than ~70% similar to the query.
+                None = no server-side filtering. 0.3 works well for PMC/external corpora.
+                Local protocols have coarser embeddings (~0.37+) so should use None.
         """
         if corpus_name is None:
             corpus_name = self.corpus_name
@@ -85,12 +86,13 @@ class RAGService:
             "Content-Type": "application/json"
         }
         
+        rag_store = {"rag_corpora": [corpus_name]}
+        if vector_distance_threshold is not None:
+            rag_store["vector_distance_threshold"] = vector_distance_threshold
+        
         payload = {
             "query": {"text": query},
-            "vertex_rag_store": {
-                "rag_corpora": [corpus_name],
-                "vector_distance_threshold": vector_distance_threshold
-            }
+            "vertex_rag_store": rag_store
         }
         
         response = requests.post(url, headers=headers, json=payload)
@@ -853,7 +855,7 @@ ANSWER:"""
         
         def fetch_wikem():
             try:
-                contexts = self._retrieve_contexts(query, self.wikem_corpus_name)
+                contexts = self._retrieve_contexts(query, self.wikem_corpus_name, vector_distance_threshold=0.3)
                 for ctx in contexts:
                     ctx["source_type"] = "wikem"
                 return contexts
@@ -864,7 +866,7 @@ ANSWER:"""
         def fetch_pmc():
             try:
                 if self.pmc_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.pmc_corpus_name, top_k=10)
+                    contexts = self._retrieve_contexts(query, self.pmc_corpus_name, top_k=10, vector_distance_threshold=0.3)
                     for ctx in contexts:
                         ctx["source_type"] = "pmc"
                     return contexts
@@ -876,7 +878,7 @@ ANSWER:"""
         def fetch_litfl():
             try:
                 if self.litfl_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.litfl_corpus_name)
+                    contexts = self._retrieve_contexts(query, self.litfl_corpus_name, vector_distance_threshold=0.3)
                     for ctx in contexts:
                         ctx["source_type"] = "litfl"
                     return contexts
@@ -888,7 +890,7 @@ ANSWER:"""
         def fetch_rebelem():
             try:
                 if self.rebelem_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.rebelem_corpus_name)
+                    contexts = self._retrieve_contexts(query, self.rebelem_corpus_name, vector_distance_threshold=0.3)
                     for ctx in contexts:
                         ctx["source_type"] = "rebelem"
                     return contexts
@@ -900,7 +902,7 @@ ANSWER:"""
         def fetch_aliem():
             try:
                 if self.aliem_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.aliem_corpus_name)
+                    contexts = self._retrieve_contexts(query, self.aliem_corpus_name, vector_distance_threshold=0.3)
                     for ctx in contexts:
                         ctx["source_type"] = "aliem"
                     return contexts
