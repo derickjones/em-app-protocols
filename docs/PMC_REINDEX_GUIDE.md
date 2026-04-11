@@ -1,21 +1,21 @@
 # PMC Corpus: Scrape, Upload & Re-Index Guide
 
-> **Last updated:** February 2026
+> **Last updated:** April 2026
 > **Frequency:** Every ~6 months or as needed
-> **Time required:** ~45 minutes total (mostly automated)
+> **Time required:** ~3 hours total (mostly automated)
 
 ---
 
 ## Overview
 
-The PMC corpus provides peer-reviewed emergency medicine literature from [PubMed Central](https://www.ncbi.nlm.nih.gov/pmc/) (~6,600 articles from 11 EM journals, 2015–present). It powers the **Globe 🌐** search source alongside WikEM.
+The PMC corpus provides peer-reviewed medical literature from [PubMed Central](https://www.ncbi.nlm.nih.gov/pmc/) (~56,000 articles from 37 journals, 2015–present). It powers the **Globe 🌐** search source alongside WikEM, LITFL, REBEL EM, and ALiEM.
 
 The pipeline has 3 stages:
 
 ```
 1. DISCOVER  →  2. SCRAPE  →  3. INDEX
 PubMed API       PMC OA API    Vertex AI RAG corpus
-(~2 min)         (~33 min)     (~8 min)
+(~3 min)         (~2.5 hrs)    (~15 min)
 ```
 
 ### What lives where
@@ -27,11 +27,17 @@ PubMed API       PMC OA API    Vertex AI RAG corpus
 | Metadata JSON | `scrapers/PMC/output/processed/` (local) + `gs://clinical-assistant-457902-pmc/metadata/` |
 | Article images | `gs://clinical-assistant-457902-pmc/images/{PMCID}/` |
 | RAG corpus config | `scrapers/PMC/pmc_rag_config.json` |
-| Cloud Run env var | `PMC_CORPUS_ID` on `em-api` |
+| Cloud Run env var | `PMC_CORPUS_ID` hardcoded default in `api/rag_service.py` |
 
-### Journals covered
+### Journals covered (37 journals, 4 categories)
 
-Annals of Emergency Medicine, Academic Emergency Medicine, Journal of Emergency Medicine, Emergency Medicine Journal, American Journal of Emergency Medicine, Western Journal of Emergency Medicine, CJEM, Emergency Medicine Australasia, European Journal of Emergency Medicine, World Journal of Emergency Medicine, International Journal of Emergency Medicine
+**Emergency Medicine (12):** Annals of Emergency Medicine, Academic Emergency Medicine, JACEP Open, American Journal of Emergency Medicine, Journal of Emergency Medicine, Western Journal of Emergency Medicine, Pediatric Emergency Care, CJEM, Advanced Journal of Emergency Medicine, Prehospital Emergency Care, European Journal of Emergency Medicine, Air Medical Journal
+
+**Critical Care & Resuscitation (7):** AJRCCM, CHEST, Critical Care Medicine, Resuscitation, Resuscitation Plus, Shock, Journal of Intensive Care Medicine
+
+**JAMA Family (10):** JAMA, JAMA Network Open, JAMA Internal Medicine, JAMA Surgery, JAMA Neurology, JAMA Pediatrics, JAMA Cardiology, JAMA Oncology, JAMA Ophthalmology, JAMA Otolaryngology
+
+**High-Impact General (8):** NEJM, The Lancet, Lancet Infectious Diseases, Lancet Respiratory Medicine, Lancet Neurology, BMJ, Annals of Internal Medicine, Mayo Clinic Proceedings
 
 ---
 
@@ -82,7 +88,7 @@ python3 pmc_bulk_scrape.py --workers 20 --force
 - Downloads article figures to GCS
 - Saves `.md` (content) and `.json` (metadata) locally
 
-**Expected:** ~6,600 articles in ~33 min, ~94% full-text, ~6% abstract-only
+**Expected:** ~56,000 articles in ~2.5 hrs with 20 workers, ~66% full-text, ~34% abstract-only
 
 ### Step 3: Re-index into Vertex AI
 
@@ -103,18 +109,24 @@ python3 pmc_reindex.py
 4. Batch-imports all files from GCS
 5. Updates `pmc_rag_config.json` with new corpus ID
 
-**Expected:** ~8 min for the full rebuild
+**Expected:** ~15 min for the full rebuild (56K files)
 
-### Step 4: Update Cloud Run
+### Step 4: Update Cloud Run / API defaults
 
-The reindex script prints the command, but it's:
+The corpus ID is hardcoded as the default in `api/rag_service.py`. After re-indexing, either:
 
-```bash
-gcloud run services update em-api \
-  --region us-west1 \
-  --project clinical-assistant-457902 \
-  --set-env-vars "PMC_CORPUS_ID=<NEW_CORPUS_ID>"
-```
+1. **Update the hardcoded default** in `api/rag_service.py` and redeploy:
+   ```python
+   PMC_CORPUS_ID = os.environ.get("PMC_CORPUS_ID", "<NEW_CORPUS_ID>")
+   ```
+
+2. **Or set it as a Cloud Run env var** (overrides the default):
+   ```bash
+   gcloud run services update em-protocol-api \
+     --region us-central1 \
+     --project clinical-assistant-457902 \
+     --set-env-vars "PMC_CORPUS_ID=<NEW_CORPUS_ID>"
+   ```
 
 ---
 
@@ -134,8 +146,12 @@ python3 pmc_reindex.py
 
 ## Current Corpus
 
-- **Corpus ID:** `6838716034162098176`
-- **Articles:** 6,604
+- **Corpus ID:** `6838716034162098176` ⚠️ **STALE — still indexes the old 6,598-article EM-only corpus**
+- **Articles indexed:** 6,598 (from Feb 2026 build)
+- **Articles scraped locally:** 56,158 (from Apr 2026 scrape — **needs re-index**)
 - **GCS bucket:** `gs://clinical-assistant-457902-pmc/`
+- **GCS processed/:** 6,604 files ⚠️ **needs upload of ~50K new .md files**
+- **GCS metadata/:** 56,156 files ✅ (already uploaded during scrape)
+- **RAG location:** `us-west4`
 - **Embedding model:** `text-embedding-005`
-- **Cost:** ~$2.63 one-time embedding, ~$0.69–2.31/month ongoing
+- **Cloud Run service:** `em-protocol-api` in `us-central1`

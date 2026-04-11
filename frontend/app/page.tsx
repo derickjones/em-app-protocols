@@ -19,21 +19,77 @@ const UNIVERSE_KEY = "em-protocol-ed-universe";
 const FAVORITES_KEY = "em-protocol-favorites";
 
 // PMC Journal registry — key is the exact string stored in GCS metadata
-const PMC_JOURNALS: { key: string; label: string; count: number }[] = [
-  { key: "The Western Journal of Emergency Medicine", label: "Western J EM", count: 2023 },
-  { key: "Journal of the American College of Emergency Physicians Open", label: "JACEP Open", count: 1561 },
-  { key: "The American Journal of Emergency Medicine", label: "Am J Emerg Med", count: 867 },
-  { key: "Annals of Emergency Medicine", label: "Annals of EM", count: 664 },
-  { key: "Acad Emerg Med", label: "Academic EM", count: 548 },
-  { key: "The Journal of Emergency Medicine", label: "J Emerg Med", count: 258 },
-  { key: "Pediatric Emergency Care", label: "Peds Emerg Care", count: 238 },
-  { key: "Advanced Journal of Emergency Medicine", label: "Adv J Emerg Med", count: 145 },
-  { key: "Eur J Emerg Med", label: "Eur J Emerg Med", count: 107 },
-  { key: "Prehospital Emergency Care", label: "Prehosp Emerg Care", count: 107 },
-  { key: "Air Medical Journal", label: "Air Med Journal", count: 86 },
+// Organized into groups for the UI; counts from April 2026 scrape
+interface PmcJournal { key: string; label: string; count: number }
+interface PmcJournalGroup { group: string; journals: PmcJournal[] }
+
+const PMC_JOURNAL_GROUPS: PmcJournalGroup[] = [
+  {
+    group: "Emergency Medicine",
+    journals: [
+      { key: "The Western Journal of Emergency Medicine", label: "Western J EM", count: 2066 },
+      { key: "Journal of the American College of Emergency Physicians Open", label: "JACEP Open", count: 1587 },
+      { key: "The American Journal of Emergency Medicine", label: "Am J Emerg Med", count: 877 },
+      { key: "Annals of Emergency Medicine", label: "Annals of EM", count: 674 },
+      { key: "Acad Emerg Med", label: "Academic EM", count: 590 },
+      { key: "The Journal of Emergency Medicine", label: "J Emerg Med", count: 259 },
+      { key: "Pediatric Emergency Care", label: "Peds Emerg Care", count: 246 },
+      { key: "CJEM", label: "CJEM", count: 212 },
+      { key: "Advanced Journal of Emergency Medicine", label: "Adv J Emerg Med", count: 146 },
+      { key: "Prehospital Emergency Care", label: "Prehosp Emerg Care", count: 111 },
+      { key: "Eur J Emerg Med", label: "Eur J Emerg Med", count: 108 },
+      { key: "Air Medical Journal", label: "Air Med Journal", count: 86 },
+    ],
+  },
+  {
+    group: "Critical Care & Resuscitation",
+    journals: [
+      { key: "Am J Respir Crit Care Med", label: "AJRCCM", count: 4464 },
+      { key: "Chest", label: "CHEST", count: 2838 },
+      { key: "Crit Care Med", label: "Crit Care Med", count: 1469 },
+      { key: "Resuscitation Plus", label: "Resuscitation Plus", count: 1205 },
+      { key: "Shock", label: "Shock", count: 691 },
+      { key: "Resuscitation", label: "Resuscitation", count: 525 },
+      { key: "J Intensive Care Med", label: "J Intensive Care Med", count: 244 },
+    ],
+  },
+  {
+    group: "JAMA Family",
+    journals: [
+      { key: "JAMA Netw Open", label: "JAMA Network Open", count: 9943 },
+      { key: "JAMA", label: "JAMA", count: 3284 },
+      { key: "JAMA Intern Med", label: "JAMA Internal Med", count: 2149 },
+      { key: "JAMA Oncol", label: "JAMA Oncology", count: 1881 },
+      { key: "JAMA Pediatr", label: "JAMA Pediatrics", count: 1827 },
+      { key: "JAMA Surg", label: "JAMA Surgery", count: 1551 },
+      { key: "JAMA Neurol", label: "JAMA Neurology", count: 1511 },
+      { key: "JAMA Ophthalmol", label: "JAMA Ophthalmology", count: 1458 },
+      { key: "JAMA Cardiol", label: "JAMA Cardiology", count: 1335 },
+      { key: "JAMA Otolaryngol Head Neck Surg", label: "JAMA Otolaryngology", count: 1169 },
+    ],
+  },
+  {
+    group: "High-Impact General",
+    journals: [
+      { key: "Lancet", label: "The Lancet", count: 2667 },
+      { key: "BMJ", label: "BMJ", count: 2598 },
+      { key: "N Engl J Med", label: "NEJM", count: 1822 },
+      { key: "Lancet Infect Dis", label: "Lancet Infect Dis", count: 1619 },
+      { key: "Ann Intern Med", label: "Ann Internal Med", count: 1046 },
+      { key: "Lancet Respir Med", label: "Lancet Respir Med", count: 821 },
+      { key: "Mayo Clin Proc", label: "Mayo Clinic Proc", count: 719 },
+      { key: "Lancet Neurol", label: "Lancet Neurology", count: 360 },
+    ],
+  },
 ];
+
+// Flat list + derived constants (backward-compatible)
+const PMC_JOURNALS: PmcJournal[] = PMC_JOURNAL_GROUPS.flatMap(g => g.journals);
 const ALL_PMC_JOURNAL_KEYS = PMC_JOURNALS.map(j => j.key);
 const TOTAL_PMC_COUNT = PMC_JOURNALS.reduce((sum, j) => sum + j.count, 0);
+
+// Helper: get all keys for a group
+const getGroupKeys = (group: PmcJournalGroup): string[] => group.journals.map(j => j.key);
 
 interface QueryResponse {
   answer: string;
@@ -209,6 +265,33 @@ export default function Home() {
       return next;
     });
     setUniverseDirty(true);
+  };
+
+  // Toggle an entire PMC journal group
+  const toggleGroup = (group: PmcJournalGroup) => {
+    const keys = getGroupKeys(group);
+    setSelectedJournals(prev => {
+      const next = new Set(prev);
+      const allSelected = keys.every(k => next.has(k));
+      if (allSelected) {
+        keys.forEach(k => next.delete(k));
+      } else {
+        keys.forEach(k => next.add(k));
+      }
+      return next;
+    });
+    setUniverseDirty(true);
+  };
+
+  // Track which PMC groups are expanded in the UI
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroupExpanded = (groupName: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
   };
 
   const { user, userProfile, loading: authLoading, isSignedIn, hasAccess, signOut, getIdToken, submitAccessRequest, refreshProfile } = useAuth();
@@ -1295,36 +1378,92 @@ export default function Home() {
                         Clear
                       </button>
                     </div>
-                    {/* Journal list */}
-                    <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                      {PMC_JOURNALS.map((j) => {
-                        const isChecked = selectedJournals.has(j.key);
+                    {/* Grouped journal list */}
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {PMC_JOURNAL_GROUPS.map((group) => {
+                        const groupKeys = getGroupKeys(group);
+                        const selectedInGroup = groupKeys.filter(k => selectedJournals.has(k)).length;
+                        const allInGroupSelected = selectedInGroup === groupKeys.length;
+                        const someInGroupSelected = selectedInGroup > 0 && !allInGroupSelected;
+                        const isExpanded = expandedGroups.has(group.group);
+                        const groupCount = group.journals.reduce((s, j) => s + j.count, 0);
                         return (
-                          <button
-                            key={j.key}
-                            onClick={() => toggleJournal(j.key)}
-                            className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
-                              darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
-                            }`}
-                          >
-                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
-                              isChecked
-                                ? 'bg-purple-500 border-purple-500'
-                                : darkMode ? 'border-[#3A3A3A]' : 'border-gray-300'
-                            }`}>
-                              {isChecked && <Check className="w-2.5 h-2.5 text-white" />}
-                            </div>
-                            <span className={`flex-1 text-left ${
-                              isChecked
-                                ? darkMode ? 'text-gray-300' : 'text-gray-700'
-                                : darkMode ? 'text-gray-500' : 'text-gray-400'
-                            }`}>
-                              {j.label}
-                            </span>
-                            <span className={`text-xs font-data tabular-nums ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                              {j.count.toLocaleString()}
-                            </span>
-                          </button>
+                          <div key={group.group}>
+                            {/* Group header row */}
+                            <button
+                              onClick={() => toggleGroupExpanded(group.group)}
+                              className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+                                darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                              }`}
+                            >
+                              <div
+                                onClick={(e) => { e.stopPropagation(); toggleGroup(group); }}
+                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${
+                                  allInGroupSelected
+                                    ? 'bg-purple-500 border-purple-500'
+                                    : someInGroupSelected
+                                      ? 'bg-purple-500/40 border-purple-500'
+                                      : darkMode ? 'border-[#3A3A3A]' : 'border-gray-300'
+                                }`}
+                              >
+                                {allInGroupSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                                {someInGroupSelected && <div className="w-1.5 h-0.5 bg-white rounded-full" />}
+                              </div>
+                              <span className={`flex-1 text-left ${
+                                selectedInGroup > 0
+                                  ? darkMode ? 'text-gray-200' : 'text-gray-700'
+                                  : darkMode ? 'text-gray-500' : 'text-gray-400'
+                              }`}>
+                                {group.group}
+                              </span>
+                              <span className={`text-xs font-data tabular-nums ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                {selectedInGroup === groupKeys.length
+                                  ? groupCount.toLocaleString()
+                                  : `${selectedInGroup}/${groupKeys.length}`
+                                }
+                              </span>
+                              {isExpanded ? (
+                                <ChevronDown className={`w-3 h-3 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                              ) : (
+                                <ChevronRight className={`w-3 h-3 ${darkMode ? 'text-gray-600' : 'text-gray-400'}`} />
+                              )}
+                            </button>
+                            {/* Individual journals within group */}
+                            {isExpanded && (
+                              <div className="ml-4 space-y-0">
+                                {group.journals.map((j) => {
+                                  const isChecked = selectedJournals.has(j.key);
+                                  return (
+                                    <button
+                                      key={j.key}
+                                      onClick={() => toggleJournal(j.key)}
+                                      className={`w-full flex items-center gap-2 px-2 py-0.5 rounded-md text-xs transition-colors ${
+                                        darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                                      }`}
+                                    >
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${
+                                        isChecked
+                                          ? 'bg-purple-500 border-purple-500'
+                                          : darkMode ? 'border-[#3A3A3A]' : 'border-gray-300'
+                                      }`}>
+                                        {isChecked && <Check className="w-2 h-2 text-white" />}
+                                      </div>
+                                      <span className={`flex-1 text-left ${
+                                        isChecked
+                                          ? darkMode ? 'text-gray-300' : 'text-gray-700'
+                                          : darkMode ? 'text-gray-500' : 'text-gray-400'
+                                      }`}>
+                                        {j.label}
+                                      </span>
+                                      <span className={`text-xs font-data tabular-nums ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                        {j.count.toLocaleString()}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>

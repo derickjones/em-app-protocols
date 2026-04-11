@@ -271,57 +271,151 @@ def create_corpus(dry_run: bool = False) -> tuple[str, str]:
     return ("", "")
 
 
+def _reorganize_gcs_into_batches(bucket, batch_size: int = 10_000) -> list[str]:
+    """
+    Move flat processed/*.md blobs into sub-folders (processed/batch_01/, etc.)
+    so each sub-folder has ≤ batch_size files. Returns list of GCS prefix URIs.
+
+    Vertex AI RAG limits: 10K files per import, 25 URIs per call.
+    Using sub-folder prefixes lets us pass one URI per import call and
+    stay within both limits.
+    """
+    log.info(f"Listing blobs in gs://{GCS_BUCKET_NAME}/{GCS_PROCESSED_PREFIX}...")
+    blobs = [
+        blob.name for blob in bucket.list_blobs(prefix=GCS_PROCESSED_PREFIX)
+        if blob.name.endswith(".md") and blob.name.count("/") == 1  # only top-level processed/*.md
+    ]
+    log.info(f"  Found {len(blobs):,} .md files at top level of processed/")
+
+    if not blobs:
+        # Check if already batched
+        batched = sorted({
+            blob.name.split("/")[1]
+            for blob in bucket.list_blobs(prefix=GCS_PROCESSED_PREFIX, delimiter="/")
+            if blob.name.endswith(".md") and blob.name.count("/") == 2
+        })
+        if not batched:
+            # Just check for any batch_XX prefixes
+            prefixes = set()
+            for blob in bucket.list_blobs(prefix=GCS_PROCESSED_PREFIX):
+                if blob.name.endswith(".md"):
+                    parts = blob.name.split("/")
+                    if len(parts) >= 3 and parts[1].startswith("batch_"):
+                        prefixes.add(f"gs://{GCS_BUCKET_NAME}/{parts[0]}/{parts[1]}/")
+            if prefixes:
+                prefixes_sorted = sorted(prefixes)
+                log.info(f"  Files already organized into {len(prefixes_sorted)} batches")
+                return prefixes_sorted
+
+        log.error("No .md files found in GCS")
+        return []
+
+    num_batches = (len(blobs) + batch_size - 1) // batch_size
+    log.info(f"  Reorganizing into {num_batches} sub-folders of ≤{batch_size:,} files...")
+
+    batch_prefixes = []
+    for batch_idx in range(num_batches):
+        batch_blobs = blobs[batch_idx * batch_size : (batch_idx + 1) * batch_size]
+        batch_prefix = f"{GCS_PROCESSED_PREFIX}batch_{batch_idx + 1:02d}/"
+        batch_uri = f"gs://{GCS_BUCKET_NAME}/{batch_prefix}"
+        batch_prefixes.append(batch_uri)
+
+        log.info(f"  Moving {len(batch_blobs):,} files → {batch_prefix}")
+
+        def _copy_and_delete(blob_name: str):
+            src_blob = bucket.blob(blob_name)
+            dst_name = f"{batch_prefix}{blob_name.split('/')[-1]}"
+            bucket.copy_blob(src_blob, bucket, dst_name)
+            src_blob.delete()
+
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            futures = [pool.submit(_copy_and_delete, b) for b in batch_blobs]
+            done = 0
+            for future in as_completed(futures):
+                future.result()  # raise on error
+                done += 1
+                if done % 2000 == 0:
+                    log.info(f"    {done}/{len(batch_blobs)} moved")
+
+        log.info(f"    ✅ {batch_prefix} — {len(batch_blobs):,} files")
+
+    return batch_prefixes
+
+
 def import_gcs_to_corpus(corpus_name: str, dry_run: bool = False) -> bool:
     """
     Batch import all .md files from GCS into the RAG corpus.
-    Uses a single wildcard GCS URI to import the entire processed/ prefix.
-    """
-    gcs_uri = f"gs://{GCS_BUCKET_NAME}/{GCS_PROCESSED_PREFIX}"
 
+    Vertex AI RAG has two limits:
+      - Max 10,000 files per ImportRagFiles call
+      - Max 25 GCS URIs per call
+
+    Strategy: organise files into sub-folders of ≤10K, then import
+    each sub-folder as a single GCS prefix URI (one import call each).
+    """
     if dry_run:
-        log.info(f"[DRY RUN] Would import {gcs_uri}*.md into {corpus_name}")
+        log.info(f"[DRY RUN] Would import gs://{GCS_BUCKET_NAME}/{GCS_PROCESSED_PREFIX}*.md into {corpus_name}")
         return True
 
-    log.info(f"Importing from {gcs_uri} into corpus...")
+    client = gcs.Client(project=PROJECT_ID)
+    bucket = client.get_bucket(GCS_BUCKET_NAME)
 
-    url = f"{BASE_URL}/{corpus_name}/ragFiles:import"
-
-    payload = {
-        "importRagFilesConfig": {
-            "gcsSource": {
-                "uris": [gcs_uri]
-            },
-            "ragFileChunkingConfig": {
-                "chunkSize": CHUNK_SIZE,
-                "chunkOverlap": CHUNK_OVERLAP,
-            },
-        }
-    }
-
-    resp = http_requests.post(url, headers=api_headers(), json=payload)
-
-    if resp.status_code not in (200, 201):
-        log.error(f"Import failed: {resp.status_code} - {resp.text}")
+    # Step A: Organize files into sub-folders of ≤ 10K
+    batch_prefixes = _reorganize_gcs_into_batches(bucket)
+    if not batch_prefixes:
         return False
 
-    result = resp.json()
-    op_name = result.get("name", "")
+    log.info(f"  Importing {len(batch_prefixes)} batch(es) into corpus...")
 
-    if op_name:
-        log.info(f"  Import operation started: {op_name.split('/')[-1]}")
-        import_result = _poll_operation(op_name, description="import files", max_wait=3600)
-        if import_result:
-            metadata = import_result.get("metadata", {})
-            if metadata:
-                log.info(f"  Import metadata: {json.dumps(metadata, indent=2)}")
-            log.info("  ✅ Batch import complete")
-            return True
+    url = f"{BASE_URL}/{corpus_name}/ragFiles:import"
+    all_success = True
+
+    for batch_num, gcs_prefix_uri in enumerate(batch_prefixes, 1):
+        log.info(f"  Batch {batch_num}/{len(batch_prefixes)}: importing {gcs_prefix_uri}")
+
+        payload = {
+            "importRagFilesConfig": {
+                "gcsSource": {
+                    "uris": [gcs_prefix_uri]
+                },
+                "ragFileChunkingConfig": {
+                    "chunkSize": CHUNK_SIZE,
+                    "chunkOverlap": CHUNK_OVERLAP,
+                },
+            }
+        }
+
+        resp = http_requests.post(url, headers=api_headers(), json=payload)
+
+        if resp.status_code not in (200, 201):
+            log.error(f"  Batch {batch_num} import failed: {resp.status_code} - {resp.text}")
+            all_success = False
+            continue
+
+        result = resp.json()
+        op_name = result.get("name", "")
+
+        if op_name:
+            log.info(f"    Import operation started: {op_name.split('/')[-1]}")
+            import_result = _poll_operation(op_name, description=f"import batch {batch_num}/{len(batch_prefixes)}", max_wait=3600)
+            if import_result:
+                metadata = import_result.get("metadata", {})
+                if metadata:
+                    log.info(f"    Import metadata: {json.dumps(metadata, indent=2)}")
+                log.info(f"  ✅ Batch {batch_num}/{len(batch_prefixes)} complete")
+            else:
+                log.error(f"  ❌ Batch {batch_num}/{len(batch_prefixes)} failed or timed out")
+                all_success = False
         else:
-            log.error("  Import operation failed or timed out")
-            return False
+            log.warning(f"  No operation returned for batch {batch_num} — may have failed")
+            all_success = False
 
-    log.warning("No operation returned — import may have failed")
-    return False
+    if all_success:
+        log.info(f"✅ All {len(batch_prefixes)} import batch(es) complete")
+    else:
+        log.error("⚠️  Some import batches failed — check logs above")
+
+    return all_success
 
 
 # ---------------------------------------------------------------------------
@@ -528,10 +622,11 @@ def reindex(
         print("⚠️  UPDATE Cloud Run env var with new corpus ID:")
         print(f"  gcloud run services update em-protocol-api \\")
         print(f"    --region us-central1 \\")
+        print(f"    --project {PROJECT_ID} \\")
         print(f"    --update-env-vars PMC_CORPUS_ID={corpus_id}")
         print()
-        print("  Or set it in the Cloud Console:")
-        print(f"  PMC_CORPUS_ID = {corpus_id}")
+        print("  Or update the hardcoded default in api/rag_service.py and redeploy:")
+        print(f"  PMC_CORPUS_ID = os.environ.get(\"PMC_CORPUS_ID\", \"{corpus_id}\")")
         print()
 
 

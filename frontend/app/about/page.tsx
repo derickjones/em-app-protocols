@@ -84,7 +84,7 @@ export default function AboutPage() {
           </p>
           <ul className="text-sm text-gray-700 dark:text-gray-300 space-y-1.5 ml-4 list-disc">
             <li><strong>WikEM</strong> — ~5,000 emergency medicine topic pages</li>
-            <li><strong>PMC Open Access</strong> — ~18,000 peer-reviewed EM journal articles from 11 journals</li>
+            <li><strong>PMC Open Access</strong> — ~56,000 peer-reviewed articles from 37 journals spanning emergency medicine, critical care, JAMA family, NEJM, Lancet, and BMJ</li>
             <li><strong>LITFL</strong> — ~7,900 pages covering EM, critical care, toxicology, and ECG education</li>
             <li><strong>REBEL EM</strong> — ~1,350 evidence-based EM reviews</li>
             <li><strong>ALiEM</strong> — ~260 PV clinical reference cards and MEdIC case discussions</li>
