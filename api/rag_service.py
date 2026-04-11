@@ -924,10 +924,10 @@ ANSWER:"""
             
             for key, future in futures.items():
                 try:
-                    results = future.result(timeout=10)
+                    results = future.result(timeout=30)
                     all_contexts.extend(results)
                 except Exception as e:
-                    print(f"Failed to get {key} results: {e}")
+                    print(f"Failed to get {key} results: {type(e).__name__}: {e}")
         
         # Sort by score (lower = more relevant in Vertex AI RAG)
         all_contexts.sort(key=lambda x: x.get("score", 1))
