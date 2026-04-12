@@ -64,17 +64,13 @@ class RAGService:
         credentials.refresh(auth_req)
         return credentials.token
     
-    def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5,
-                            vector_distance_threshold: float = None) -> List[Dict]:
+    def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5) -> List[Dict]:
         """Retrieve relevant contexts from a RAG corpus.
         
         Args:
             query: Search query text
             corpus_name: RAG corpus resource name
-            top_k: Maximum number of results to return
-            vector_distance_threshold: Max cosine distance (0-1). Lower = stricter.
-                None = no server-side filtering. 0.3 works well for PMC/external corpora.
-                Local protocols have coarser embeddings (~0.37+) so should use None.
+            top_k: Maximum number of results to return (sent as similarityTopK)
         """
         if corpus_name is None:
             corpus_name = self.corpus_name
@@ -86,13 +82,9 @@ class RAGService:
             "Content-Type": "application/json"
         }
         
-        rag_store = {"rag_corpora": [corpus_name]}
-        if vector_distance_threshold is not None:
-            rag_store["vector_distance_threshold"] = vector_distance_threshold
-        
         payload = {
-            "query": {"text": query},
-            "vertex_rag_store": rag_store
+            "query": {"text": query, "similarityTopK": top_k},
+            "vertex_rag_store": {"rag_corpora": [corpus_name]}
         }
         
         response = requests.post(url, headers=headers, json=payload)
@@ -157,68 +149,98 @@ class RAGService:
                 return parts[3]  # protocol_id in legacy format
             return source
 
-    def _filter_by_relevance(self, contexts: List[Dict], min_results: int = 5,
-                              max_results: int = 15, score_multiplier: float = 4.0) -> List[Dict]:
+    def _allocate_slots(self, contexts: List[Dict], max_total: int = 15) -> List[Dict]:
         """
-        Slot-based relevance filter.
+        Category-aware slot allocator.
 
-        Priority slots (up to 8 chunks): local & personal sources get first pick
-        so institutional protocols always surface. Each local/personal source
-        may contribute up to LOCAL_MAX_CHUNKS chunks.
+        Buckets contexts into 4 categories (local, personal, foam, literature),
+        allocates slots proportionally based on which categories have results,
+        then returns contexts ordered by category priority (local → personal →
+        foam → literature), with best-scoring results first within each category.
 
-        Remaining slots (up to max_results total): filled by the best external
-        results (wikem, pmc, litfl, rebelem, aliem) using an adaptive cutoff
-        of best_external_score × 3.0 (floor 0.10).
+        Per-source chunk caps:
+          - local / personal: up to 3 chunks per unique source
+          - foam / literature: 1 chunk per unique article
 
         Contexts must already be sorted by score ascending (lower = better).
         """
         if not contexts:
             return []
 
-        LOCAL_MAX_CHUNKS = 3
-        PRIORITY_CAP = 8          # max chunks reserved for local/personal
         from collections import OrderedDict
+        import math
 
-        # --- Pass 1: priority slots for local / personal ---
-        priority = []
-        priority_keys: OrderedDict = OrderedDict()
+        # --- Category definitions ---
+        FOAM_TYPES = {"wikem", "litfl", "rebelem", "aliem"}
+        CATEGORY_ORDER = ["local", "personal", "foam", "literature"]
+        BASE_WEIGHTS = {"local": 5, "personal": 3, "foam": 5, "literature": 5}
+        MAX_CHUNKS_PER_SOURCE = {"local": 3, "personal": 3, "foam": 1, "literature": 1}
+
+        def _category(ctx):
+            st = ctx.get("source_type", "local")
+            if st in FOAM_TYPES:
+                return "foam"
+            if st == "pmc":
+                return "literature"
+            if st == "personal":
+                return "personal"
+            return "local"
+
+        # --- Bucket contexts by category ---
+        buckets = {cat: [] for cat in CATEGORY_ORDER}
         for ctx in contexts:
-            if len(priority) >= PRIORITY_CAP:
-                break
-            source_type = ctx.get("source_type", "local")
-            if source_type not in ("local", "personal"):
-                continue
-            key = self._get_source_key(ctx)
-            cnt = priority_keys.get(key, 0)
-            if cnt >= LOCAL_MAX_CHUNKS:
-                continue
-            priority_keys[key] = cnt + 1
-            priority.append(ctx)
+            buckets[_category(ctx)].append(ctx)
 
-        # --- Pass 2: fill remaining slots with external results ---
-        remaining_slots = max_results - len(priority)
-        external = [c for c in contexts if c.get("source_type", "local") not in ("local", "personal")]
+        # --- Deduplicate within each bucket (best chunks per unique source) ---
+        def _pick_best(bucket_contexts, chunk_cap):
+            """Pick best unique-source chunks, up to chunk_cap per source."""
+            picked = []
+            source_counts: OrderedDict = OrderedDict()
+            for ctx in bucket_contexts:          # already score-sorted
+                key = self._get_source_key(ctx)
+                cnt = source_counts.get(key, 0)
+                if cnt >= chunk_cap:
+                    continue
+                source_counts[key] = cnt + 1
+                picked.append(ctx)
+            return picked
 
-        best_ext = external[0].get("score", 0) if external else 0
-        ext_cutoff = max(best_ext * 3.0, 0.10)
+        deduped = {}
+        for cat in CATEGORY_ORDER:
+            deduped[cat] = _pick_best(buckets[cat], MAX_CHUNKS_PER_SOURCE[cat])
 
-        ext_result = []
-        ext_keys: OrderedDict = OrderedDict()
-        for ctx in external:
-            if len(ext_result) >= remaining_slots:
-                break
-            key = self._get_source_key(ctx)
-            if key in ext_keys:
-                continue  # 1 chunk per external source
-            score = ctx.get("score", 1)
-            unique_ext = len(ext_keys)
-            if unique_ext >= min_results and score > ext_cutoff:
-                break
-            ext_keys[key] = 1
-            ext_result.append(ctx)
+        # --- Compute proportional slot budgets ---
+        active_cats = [cat for cat in CATEGORY_ORDER if deduped[cat]]
+        if not active_cats:
+            return []
 
-        # Combine: priority first, then external (both already score-sorted)
-        result = priority + ext_result
+        active_weight = sum(BASE_WEIGHTS[cat] for cat in active_cats)
+        budgets = {}
+        allocated = 0
+        for i, cat in enumerate(active_cats):
+            if i == len(active_cats) - 1:
+                # Last category gets remainder to avoid rounding drift
+                budgets[cat] = max_total - allocated
+            else:
+                budgets[cat] = math.floor(BASE_WEIGHTS[cat] / active_weight * max_total)
+                allocated += budgets[cat]
+
+        # --- Fill slots per category (capped at budget or available) ---
+        result = []
+        for cat in CATEGORY_ORDER:
+            budget = budgets.get(cat, 0)
+            chosen = deduped[cat][:budget]
+            result.extend(chosen)
+
+        # --- Log allocation for debugging ---
+        parts = []
+        for cat in CATEGORY_ORDER:
+            budget = budgets.get(cat, 0)
+            used = len([c for c in result if _category(c) == cat])
+            if budget > 0 or used > 0:
+                parts.append(f"{cat}={used}/{budget}")
+        print(f"[rag-slots] {' '.join(parts)} total={len(result)}/{max_total}")
+
         return result
 
     def _build_prompt_and_context(self, query: str, contexts: List[Dict]) -> tuple[str, str]:
@@ -845,7 +867,7 @@ ANSWER:"""
         
         def fetch_local():
             try:
-                contexts = self._retrieve_contexts(query, self.corpus_name, top_k=10)
+                contexts = self._retrieve_contexts(query, self.corpus_name, top_k=5)
                 for ctx in contexts:
                     ctx["source_type"] = "local"
                 return contexts
@@ -855,7 +877,7 @@ ANSWER:"""
         
         def fetch_wikem():
             try:
-                contexts = self._retrieve_contexts(query, self.wikem_corpus_name, vector_distance_threshold=0.3)
+                contexts = self._retrieve_contexts(query, self.wikem_corpus_name, top_k=5)
                 for ctx in contexts:
                     ctx["source_type"] = "wikem"
                 return contexts
@@ -866,7 +888,7 @@ ANSWER:"""
         def fetch_pmc():
             try:
                 if self.pmc_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.pmc_corpus_name, top_k=10, vector_distance_threshold=0.3)
+                    contexts = self._retrieve_contexts(query, self.pmc_corpus_name, top_k=5)
                     for ctx in contexts:
                         ctx["source_type"] = "pmc"
                     return contexts
@@ -878,7 +900,7 @@ ANSWER:"""
         def fetch_litfl():
             try:
                 if self.litfl_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.litfl_corpus_name, vector_distance_threshold=0.3)
+                    contexts = self._retrieve_contexts(query, self.litfl_corpus_name, top_k=5)
                     for ctx in contexts:
                         ctx["source_type"] = "litfl"
                     return contexts
@@ -890,7 +912,7 @@ ANSWER:"""
         def fetch_rebelem():
             try:
                 if self.rebelem_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.rebelem_corpus_name, vector_distance_threshold=0.3)
+                    contexts = self._retrieve_contexts(query, self.rebelem_corpus_name, top_k=5)
                     for ctx in contexts:
                         ctx["source_type"] = "rebelem"
                     return contexts
@@ -902,7 +924,7 @@ ANSWER:"""
         def fetch_aliem():
             try:
                 if self.aliem_corpus_name:
-                    contexts = self._retrieve_contexts(query, self.aliem_corpus_name, vector_distance_threshold=0.3)
+                    contexts = self._retrieve_contexts(query, self.aliem_corpus_name, top_k=5)
                     for ctx in contexts:
                         ctx["source_type"] = "aliem"
                     return contexts
@@ -914,7 +936,7 @@ ANSWER:"""
         def fetch_personal():
             try:
                 if self.personal_corpus_name and personal_user_id:
-                    contexts = self._retrieve_contexts(query, self.personal_corpus_name, top_k=15)
+                    contexts = self._retrieve_contexts(query, self.personal_corpus_name, top_k=10)
                     # Filter to only this user's files
                     user_prefix = f"gs://{PERSONAL_BUCKET}/{personal_user_id}/"
                     user_contexts = [c for c in contexts if c.get("source", "").startswith(user_prefix)]
@@ -1033,9 +1055,9 @@ ANSWER:"""
                     "citations": []
                 }
         
-        # Step 1.6: Apply adaptive relevance filter (min 5, max 10 unique sources)
+        # Step 1.6: Allocate slots per category (local/personal/foam/literature)
         all_contexts = list(contexts)  # preserve pre-dedup for personal page collection
-        contexts = self._filter_by_relevance(contexts)
+        contexts = self._allocate_slots(contexts)
 
         # Step 2: Generate answer with Gemini (fast, no grounding overhead)
         answer = self._generate_answer(query, contexts)
@@ -1045,7 +1067,7 @@ ANSWER:"""
         if include_images:
             images = self._get_images_from_contexts(contexts, all_contexts=all_contexts)
         
-        # Step 4: Build citations (contexts already filtered + deduplicated)
+        # Step 4: Build citations (order matches context order: local → personal → foam → literature)
         citations = [
             {
                 "source": ctx["source"],
@@ -1121,9 +1143,9 @@ ANSWER:"""
                 yield {"type": "done", "citations": [], "images": [], "query_time_ms": int((_time.time() - start) * 1000)}
                 return
 
-        # Step 1.6: Apply adaptive relevance filter (min 5, max 10 unique sources)
+        # Step 1.6: Allocate slots per category (local/personal/foam/literature)
         all_contexts = list(contexts)  # preserve pre-dedup for personal page collection
-        contexts = self._filter_by_relevance(contexts)
+        contexts = self._allocate_slots(contexts)
 
         # Step 2: Stream answer from Gemini
         for text_chunk in self.generate_answer_stream(query, contexts):
@@ -1134,7 +1156,7 @@ ANSWER:"""
         if include_images:
             images = self._get_images_from_contexts(contexts, all_contexts=all_contexts)
 
-        # Step 4: Build citations (contexts already filtered + deduplicated)
+        # Step 4: Build citations (order matches context order: local → personal → foam → literature)
         citations = [
             {
                 "source": ctx["source"],
