@@ -19,9 +19,11 @@ import google.auth.transport.requests
 from google.cloud import storage
 
 from rag_service import RAGService
+from gemini_search_service import GeminiSearchService
 from protocol_service import ProtocolService
 from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_ed_access, require_admin, verify_firebase_token, check_email_verified
 from personal_service import PersonalService
+from query_router import route_query
 import analytics_service
 import firebase_admin
 from firebase_admin import auth as firebase_auth
@@ -37,6 +39,13 @@ FIREBASE_API_KEY = os.environ.get("FIREBASE_API_KEY", "AIzaSyB5zFvhhcLVAJ4aYgJT3
 PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
 RAG_LOCATION = os.environ.get("RAG_LOCATION", "us-west4")
 CORPUS_ID = os.environ.get("CORPUS_ID", "2305843009213693952")
+GEMINI_SEARCH_EXPERIMENT_ENABLED = os.environ.get("GEMINI_SEARCH_EXPERIMENT_ENABLED", "false").lower() == "true"
+GEMINI_SEARCH_MODEL = os.environ.get("GEMINI_SEARCH_MODEL", "gemini-2.5-flash")
+GEMINI_SEARCH_PILOT_EMAILS = {
+    email.strip().lower()
+    for email in os.environ.get("GEMINI_SEARCH_PILOT_EMAILS", "").split(",")
+    if email.strip()
+}
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -56,6 +65,7 @@ app.add_middleware(
 
 # Initialize services
 rag_service = RAGService()
+gemini_search_service = GeminiSearchService()
 protocol_service = ProtocolService()
 personal_service = PersonalService()
 
@@ -69,6 +79,13 @@ def get_access_token():
     auth_req = google.auth.transport.requests.Request()
     credentials.refresh(auth_req)
     return credentials.token
+
+
+def is_gemini_search_pilot(user: Optional[UserProfile]) -> bool:
+    """Return True when the experiment is enabled for this signed-in pilot user."""
+    if not GEMINI_SEARCH_EXPERIMENT_ENABLED or not user or not user.email:
+        return False
+    return user.email.lower() in GEMINI_SEARCH_PILOT_EMAILS
 
 
 def delete_from_rag_corpus(org_id: str, protocol_id: str) -> bool:
@@ -943,14 +960,48 @@ async def query_protocols(
     if user and user.role == "super_admin" and not enterprise_id and request.enterprise_id:
         enterprise_id = request.enterprise_id
 
-    personal_user_id = user.uid if user and "personal" in request.sources else None
+    query_route = "standard"
+    effective_sources = request.sources
+    response_model = None
+    grounded = False
+
+    if is_gemini_search_pilot(user):
+        query_route = route_query(request.query)
+        if query_route == "local_protocol":
+            effective_sources = ["local"]
+        elif query_route == "personal" and user:
+            effective_sources = ["personal"]
+
+    personal_user_id = user.uid if user and "personal" in effective_sources else None
 
     def event_stream():
         try:
+            if query_route == "general_clinical" and is_gemini_search_pilot(user):
+                try:
+                    for event in gemini_search_service.query_stream(request.query):
+                        if event["type"] == "chunk":
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
+                        elif event["type"] == "done":
+                            yield f"data: {json.dumps({'type': 'done', 'citations': event.get('citations', []), 'images': [], 'query_time_ms': event['query_time_ms'], 'route': query_route, 'sources': ['web'], 'model': event.get('model'), 'grounded': event.get('grounded', False), 'search_suggestion_html': event.get('search_suggestion_html'), 'search_queries': event.get('search_queries', [])})}\n\n"
+                            try:
+                                if user:
+                                    analytics_service.log_query_event(
+                                        user_id=user.uid,
+                                        user_email=user.email,
+                                        query=request.query,
+                                        sources=['web'],
+                                        response_time_ms=event.get("query_time_ms", 0),
+                                    )
+                            except Exception:
+                                pass
+                    return
+                except Exception as search_err:
+                    print(f"Gemini grounded search failed, falling back to RAG: {search_err}")
+
             for event in rag_service.query_stream(
                 query=request.query,
                 include_images=request.include_images,
-                sources=request.sources,
+                sources=effective_sources,
                 pmc_journals=request.pmc_journals,
                 enterprise_id=enterprise_id,
                 ed_ids=ed_ids,
@@ -977,7 +1028,7 @@ async def query_protocols(
                             images.sort(key=lambda i: click_counts.get(f"{i['protocol_id']}__page{i['page']}", 0), reverse=True)
                         except Exception as rank_err:
                             print(f"Image ranking error (using original order): {rank_err}")
-                    yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'images': images, 'query_time_ms': event['query_time_ms']})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'images': images, 'query_time_ms': event['query_time_ms'], 'route': query_route, 'sources': effective_sources, 'model': response_model, 'grounded': grounded})}\n\n"
                     # Log query event for analytics
                     try:
                         if user:
@@ -985,7 +1036,7 @@ async def query_protocols(
                                 user_id=user.uid,
                                 user_email=user.email,
                                 query=request.query,
-                                sources=request.sources or [],
+                                sources=effective_sources or [],
                                 response_time_ms=event.get("query_time_ms", 0),
                             )
                     except Exception:

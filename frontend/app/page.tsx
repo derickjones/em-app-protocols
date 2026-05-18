@@ -94,8 +94,22 @@ const getGroupKeys = (group: PmcJournalGroup): string[] => group.journals.map(j 
 interface QueryResponse {
   answer: string;
   images: { page: number; url: string; protocol_id: string }[];
-  citations: { protocol_id: string; source_uri: string; relevance_score: number; source_type: string }[];
+  citations: {
+    protocol_id: string;
+    source_uri: string;
+    relevance_score: number;
+    source_type: string;
+    source_grade?: string;
+    source_grade_label?: string;
+    source_domain?: string;
+    is_preferred_em_source?: boolean;
+  }[];
   query_time_ms: number;
+  route?: string;
+  model?: string | null;
+  grounded?: boolean;
+  search_suggestion_html?: string | null;
+  search_queries?: string[];
 }
 
 interface Conversation {
@@ -733,7 +747,12 @@ export default function Home() {
                 answer: fullAnswer,
                 images: event.images || [],
                 citations: event.citations || [],
-                query_time_ms: event.query_time_ms || 0
+                query_time_ms: event.query_time_ms || 0,
+                route: event.route,
+                model: event.model,
+                grounded: event.grounded,
+                search_suggestion_html: event.search_suggestion_html,
+                search_queries: event.search_queries || [],
               };
             } else if (event.type === "error") {
               throw new Error(event.message);
@@ -2156,9 +2175,24 @@ export default function Home() {
               <div className="space-y-6">
                 {/* Query Time — only after stream finishes */}
                 {response && (
-                  <div className={`flex items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <div className={`flex flex-wrap items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     <Sparkles className="w-3 h-3 text-blue-500" />
                     <span>{response.query_time_ms}ms</span>
+                    {response.route && (
+                      <span className={`px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-[#1E1E1E] text-gray-300 border border-[#2A2A2A]' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                        {response.route === "general_clinical" ? "Grounded Clinical Search" : response.route === "local_protocol" ? "Local Protocol RAG" : response.route === "personal" ? "Personal RAG" : response.route}
+                      </span>
+                    )}
+                    {response.model && (
+                      <span className={`px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-sky-950/50 text-sky-300 border border-sky-900/50' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>
+                        {response.model}
+                      </span>
+                    )}
+                    {response.grounded && (
+                      <span className={`px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-900/50' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                        Grounded
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -2237,6 +2271,33 @@ export default function Home() {
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
+
+                  {response?.search_suggestion_html && (
+                    <div className={`mt-4 rounded-xl overflow-hidden border ${darkMode ? 'border-[#2A2A2A] bg-[#0F0F0F]' : 'border-gray-200 bg-gray-50'}`}>
+                      <div className={`px-4 pt-3 text-[11px] font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Google Search suggestions
+                      </div>
+                      <iframe
+                        title="Google Search suggestions"
+                        srcDoc={response.search_suggestion_html}
+                        sandbox="allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+                        className="w-full h-24 border-0"
+                      />
+                    </div>
+                  )}
+
+                  {response?.search_queries && response.search_queries.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {response.search_queries.slice(0, 3).map((query) => (
+                        <span
+                          key={query}
+                          className={`px-2 py-1 rounded-full text-[11px] ${darkMode ? 'bg-[#1E1E1E] text-gray-400 border border-[#2A2A2A]' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}
+                        >
+                          {query}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Feedback thumbs — bottom-right of answer card */}
                   {response && !isStreaming && (
@@ -2431,6 +2492,57 @@ export default function Home() {
                         const isREBELEM = cite.source_type === "rebelem";
                         const isALiEM = cite.source_type === "aliem";
                         const isPersonal = cite.source_type === "personal";
+                        const isWeb = cite.source_type === "web";
+                        const citationLinkClass = isPersonal
+                          ? `cursor-pointer hover:opacity-80 ${darkMode ? 'text-violet-400 bg-[#1E1E1E]/50 hover:bg-[#2A2A2A]/50' : 'text-violet-600 bg-violet-50/50 hover:bg-violet-100/50'}`
+                          : isWeb
+                            ? (darkMode ? 'text-sky-300 hover:bg-[#1E1E1E]' : 'text-sky-700 hover:bg-white hover:shadow-sm')
+                            : (darkMode ? 'text-blue-400 hover:bg-[#1E1E1E]' : 'text-blue-600 hover:bg-white hover:shadow-sm');
+                        const citationBadgeClass = isPersonal
+                          ? (darkMode ? 'bg-violet-900/50 text-violet-300' : 'bg-violet-100 text-violet-700')
+                          : isWeb
+                            ? (darkMode ? 'bg-sky-900/50 text-sky-300' : 'bg-sky-100 text-sky-700')
+                            : isPMC
+                              ? (darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
+                              : isLITFL
+                                ? (darkMode ? 'bg-orange-900/50 text-orange-300' : 'bg-orange-100 text-orange-700')
+                                : isREBELEM
+                                  ? (darkMode ? 'bg-rose-900/50 text-rose-300' : 'bg-rose-100 text-rose-700')
+                                  : isALiEM
+                                    ? (darkMode ? 'bg-cyan-900/50 text-cyan-300' : 'bg-cyan-100 text-cyan-700')
+                                    : isWikEM
+                                      ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                                      : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700');
+                        const citationPillClass = isPersonal
+                          ? (darkMode ? 'bg-violet-900/50 text-violet-400' : 'bg-violet-100 text-violet-700')
+                          : isWeb
+                            ? (darkMode ? 'bg-sky-900/50 text-sky-400' : 'bg-sky-100 text-sky-700')
+                            : isPMC
+                              ? (darkMode ? 'bg-purple-900/50 text-purple-400' : 'bg-purple-100 text-purple-700')
+                              : isLITFL
+                                ? (darkMode ? 'bg-orange-900/50 text-orange-400' : 'bg-orange-100 text-orange-700')
+                                : isREBELEM
+                                  ? (darkMode ? 'bg-rose-900/50 text-rose-400' : 'bg-rose-100 text-rose-700')
+                                  : isALiEM
+                                    ? (darkMode ? 'bg-cyan-900/50 text-cyan-400' : 'bg-cyan-100 text-cyan-700')
+                                    : isWikEM
+                                      ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
+                                      : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700');
+                        const citationSourceLabel = isPersonal
+                          ? 'My File'
+                          : isWeb
+                            ? (cite.source_grade_label || 'Web')
+                            : isPMC
+                              ? 'PMC'
+                              : isLITFL
+                                ? 'LITFL'
+                                : isREBELEM
+                                  ? 'REBEL'
+                                  : isALiEM
+                                    ? 'ALiEM'
+                                    : isWikEM
+                                      ? 'WikEM'
+                                      : 'Local';
 
                         const handlePersonalClick = async (e: React.MouseEvent) => {
                           if (!isPersonal || !cite.source_uri) return;
@@ -2458,40 +2570,20 @@ export default function Home() {
                             rel={isPersonal ? undefined : "noopener noreferrer"}
                             onClick={isPersonal ? handlePersonalClick : undefined}
                             style={isPersonal ? { cursor: "pointer" } : undefined}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm w-full text-left ${isPersonal ? `cursor-pointer hover:opacity-80 ${darkMode ? 'text-violet-400 bg-[#1E1E1E]/50 hover:bg-[#2A2A2A]/50' : 'text-violet-600 bg-violet-50/50 hover:bg-violet-100/50'}` : (darkMode ? 'text-blue-400 hover:bg-[#1E1E1E]' : 'text-blue-600 hover:bg-white hover:shadow-sm')}`}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm w-full text-left ${citationLinkClass}`}
                           >
-                            <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${
-                              isPersonal
-                                ? (darkMode ? 'bg-violet-900/50 text-violet-300' : 'bg-violet-100 text-violet-700')
-                                : isPMC
-                                ? (darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-700')
-                                : isLITFL
-                                  ? (darkMode ? 'bg-orange-900/50 text-orange-300' : 'bg-orange-100 text-orange-700')
-                                  : isREBELEM
-                                    ? (darkMode ? 'bg-rose-900/50 text-rose-300' : 'bg-rose-100 text-rose-700')
-                                    : isALiEM
-                                      ? (darkMode ? 'bg-cyan-900/50 text-cyan-300' : 'bg-cyan-100 text-cyan-700')
-                                      : isWikEM 
-                                        ? (darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
-                                        : (darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700')
-                            }`}>{idx + 1}</span>
-                            <span className="flex-1 truncate">{cite.protocol_id.replace(/_/g, " ")}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${
-                              isPersonal
-                                ? (darkMode ? 'bg-violet-900/50 text-violet-400' : 'bg-violet-100 text-violet-700')
-                                : isPMC
-                                ? (darkMode ? 'bg-purple-900/50 text-purple-400' : 'bg-purple-100 text-purple-700')
-                                : isLITFL
-                                  ? (darkMode ? 'bg-orange-900/50 text-orange-400' : 'bg-orange-100 text-orange-700')
-                                  : isREBELEM
-                                    ? (darkMode ? 'bg-rose-900/50 text-rose-400' : 'bg-rose-100 text-rose-700')
-                                    : isALiEM
-                                      ? (darkMode ? 'bg-cyan-900/50 text-cyan-400' : 'bg-cyan-100 text-cyan-700')
-                                      : isWikEM
-                                        ? (darkMode ? 'bg-emerald-900/50 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
-                                        : (darkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-100 text-blue-700')
-                            }`}>
-                              {isPersonal ? '📁 My File' : isPMC ? '📚 PMC' : isLITFL ? '⚡ LITFL' : isREBELEM ? '🔥 REBEL' : isALiEM ? '🎓 ALiEM' : isWikEM ? 'WikEM' : 'Local'}
+                            <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-medium ${citationBadgeClass}`}>{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="block truncate">{cite.protocol_id.replace(/_/g, " ")}</span>
+                              {cite.source_domain && (
+                                <span className={`block truncate text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                  {cite.source_domain}
+                                  {cite.is_preferred_em_source ? ' · preferred EM source' : ''}
+                                </span>
+                              )}
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${citationPillClass}`}>
+                              {citationSourceLabel}
                             </span>
                             {isPersonal ? (
                               <svg className="w-4 h-4 text-violet-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2529,6 +2621,11 @@ export default function Home() {
                     {response.citations.some(c => c.source_type === "aliem") && (
                       <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                         ALiEM content from <a href="https://www.aliem.com" target="_blank" rel="noopener noreferrer" className="underline">aliem.com</a> under CC BY-NC-ND 3.0 — PV Cards &amp; MEdIC Series
+                      </p>
+                    )}
+                    {response.citations.some(c => c.source_type === "web") && (
+                      <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        Web citations are grounded search sources returned by Gemini for this answer. Direct links are normalized when possible and sorted by trust priority: guideline, EM journal, PubMed / PMC, preferred FOAM, drug reference, then general web.
                       </p>
                     )}
                   </div>
