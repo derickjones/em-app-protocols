@@ -1,4 +1,4 @@
-"""Deterministic query routing for the Gemini search pilot."""
+"""Deterministic query routing for local protocol and personal content."""
 
 from typing import Literal
 

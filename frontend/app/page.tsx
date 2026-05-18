@@ -106,10 +106,6 @@ interface QueryResponse {
   }[];
   query_time_ms: number;
   route?: string;
-  model?: string | null;
-  grounded?: boolean;
-  search_suggestion_html?: string | null;
-  search_queries?: string[];
 }
 
 interface Conversation {
@@ -749,10 +745,6 @@ export default function Home() {
                 citations: event.citations || [],
                 query_time_ms: event.query_time_ms || 0,
                 route: event.route,
-                model: event.model,
-                grounded: event.grounded,
-                search_suggestion_html: event.search_suggestion_html,
-                search_queries: event.search_queries || [],
               };
             } else if (event.type === "error") {
               throw new Error(event.message);
@@ -2180,17 +2172,7 @@ export default function Home() {
                     <span>{response.query_time_ms}ms</span>
                     {response.route && (
                       <span className={`px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-[#1E1E1E] text-gray-300 border border-[#2A2A2A]' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                        {response.route === "general_clinical" ? "Grounded Clinical Search" : response.route === "local_protocol" ? "Local Protocol RAG" : response.route === "personal" ? "Personal RAG" : response.route}
-                      </span>
-                    )}
-                    {response.model && (
-                      <span className={`px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-sky-950/50 text-sky-300 border border-sky-900/50' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>
-                        {response.model}
-                      </span>
-                    )}
-                    {response.grounded && (
-                      <span className={`px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-900/50' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-                        Grounded
+                        {response.route === "general_clinical" ? "General RAG" : response.route === "local_protocol" ? "Local Protocol RAG" : response.route === "personal" ? "Personal RAG" : response.route}
                       </span>
                     )}
                   </div>
@@ -2271,33 +2253,6 @@ export default function Home() {
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
-
-                  {response?.search_suggestion_html && (
-                    <div className={`mt-4 rounded-xl overflow-hidden border ${darkMode ? 'border-[#2A2A2A] bg-[#0F0F0F]' : 'border-gray-200 bg-gray-50'}`}>
-                      <div className={`px-4 pt-3 text-[11px] font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Google Search suggestions
-                      </div>
-                      <iframe
-                        title="Google Search suggestions"
-                        srcDoc={response.search_suggestion_html}
-                        sandbox="allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-                        className="w-full h-24 border-0"
-                      />
-                    </div>
-                  )}
-
-                  {response?.search_queries && response.search_queries.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {response.search_queries.slice(0, 3).map((query) => (
-                        <span
-                          key={query}
-                          className={`px-2 py-1 rounded-full text-[11px] ${darkMode ? 'bg-[#1E1E1E] text-gray-400 border border-[#2A2A2A]' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}
-                        >
-                          {query}
-                        </span>
-                      ))}
-                    </div>
-                  )}
 
                   {/* Feedback thumbs — bottom-right of answer card */}
                   {response && !isStreaming && (
@@ -2625,7 +2580,7 @@ export default function Home() {
                     )}
                     {response.citations.some(c => c.source_type === "web") && (
                       <p className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                        Web citations are grounded search sources returned by Gemini for this answer. Direct links are normalized when possible and sorted by trust priority: guideline, EM journal, PubMed / PMC, preferred FOAM, drug reference, then general web.
+                        Web citations are external sources returned by the current search path for this answer.
                       </p>
                     )}
                   </div>
