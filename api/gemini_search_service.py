@@ -273,6 +273,16 @@ QUESTION: {query}
             return []
         return grounding_metadata.get("webSearchQueries", [])
 
+    def _extract_text_delta(self, payload: Dict, previous_text: str) -> tuple[str, str]:
+        current_text = "".join(self._extract_text(payload))
+        if not current_text:
+            return "", previous_text
+
+        if current_text.startswith(previous_text):
+            return current_text[len(previous_text):], current_text
+
+        return current_text, current_text
+
     def query_stream(self, query: str) -> Generator[Dict, None, None]:
         start = time.time()
         url = (
@@ -295,6 +305,7 @@ QUESTION: {query}
             raise Exception(f"Gemini grounded search failed: {response.status_code} - {response.text}")
 
         latest_grounding: Optional[Dict] = None
+        previous_text = ""
         for raw_line in response.iter_lines():
             if not raw_line:
                 continue
@@ -316,8 +327,9 @@ QUESTION: {query}
                 grounding_metadata = self._extract_grounding_metadata(payload)
                 if grounding_metadata:
                     latest_grounding = grounding_metadata
-                for text in self._extract_text(payload):
-                    yield {"type": "chunk", "text": text}
+                delta_text, previous_text = self._extract_text_delta(payload, previous_text)
+                if delta_text:
+                    yield {"type": "chunk", "text": delta_text}
 
         citations = self._extract_citations(latest_grounding)
         yield {
