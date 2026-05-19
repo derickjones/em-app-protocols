@@ -144,6 +144,46 @@ interface EnterpriseData {
   allEnterprises?: { id: string; name: string; eds: EDData[] }[];
 }
 
+const QUERY_EXAMPLES = [
+  {
+    label: "Department protocols",
+    prompt: "What does our sepsis protocol say?",
+  },
+  {
+    label: "Your uploaded files",
+    prompt: "Summarize my uploaded asthma PDF",
+  },
+  {
+    label: "General clinical questions",
+    prompt: "How do I manage hyperkalemia with ECG changes?",
+  },
+] as const;
+
+function getRouteDisplay(route?: string) {
+  if (route === "local_protocol") {
+    return {
+      label: "Department protocols",
+      detail: "Searched your local protocol library only.",
+    };
+  }
+
+  if (route === "personal") {
+    return {
+      label: "Your uploaded files",
+      detail: "Searched your personal files only.",
+    };
+  }
+
+  if (route === "general_clinical") {
+    return {
+      label: "General clinical references",
+      detail: "Searched the broader clinical reference set.",
+    };
+  }
+
+  return null;
+}
+
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [submittedQuestion, setSubmittedQuestion] = useState("");
@@ -314,6 +354,8 @@ export default function Home() {
   const [requestSuccess, setRequestSuccess] = useState<string | null>(null);
   const [requestLoading, setRequestLoading] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
+
+  const routeDisplay = getRouteDisplay(response?.route);
 
   // Load theme from localStorage on mount
   useEffect(() => {
@@ -1941,6 +1983,28 @@ export default function Home() {
                   }`}
                 />
 
+                <div className="px-4 pb-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`text-[11px] uppercase tracking-[0.18em] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      How to ask
+                    </span>
+                    {QUERY_EXAMPLES.map((example) => (
+                      <button
+                        key={example.label}
+                        type="button"
+                        onClick={() => setQuestion(example.prompt)}
+                        className={`rounded-full border px-3 py-1 text-xs transition-all duration-200 ${
+                          darkMode
+                            ? 'border-[#2A2A2A] bg-[#141414] text-gray-300 hover:border-blue-500/40 hover:text-blue-300'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600'
+                        }`}
+                      >
+                        {example.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Bottom bar inside search box */}
                 <div className={`flex items-center justify-between px-4 pb-3 pt-0`}>
                   {/* Source toggles + ED filters - left side */}
@@ -2170,11 +2234,20 @@ export default function Home() {
                   <div className={`flex flex-wrap items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     <Sparkles className="w-3 h-3 text-blue-500" />
                     <span>{response.query_time_ms}ms</span>
-                    {response.route && (
+                    {routeDisplay && (
                       <span className={`px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-[#1E1E1E] text-gray-300 border border-[#2A2A2A]' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                        {response.route === "general_clinical" ? "General RAG" : response.route === "local_protocol" ? "Local Protocol RAG" : response.route === "personal" ? "Personal RAG" : response.route}
+                        Searched: {routeDisplay.label}
                       </span>
                     )}
+                  </div>
+                )}
+
+                {routeDisplay && (
+                  <div className={`-mt-2 rounded-2xl px-4 py-3 text-sm ${darkMode ? 'bg-[#111827]/40 border border-[#1F2937] text-gray-300' : 'bg-blue-50 border border-blue-100 text-gray-700'}`}>
+                    <span className={`font-medium ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                      Searched: {routeDisplay.label}
+                    </span>
+                    <span className="ml-2">{routeDisplay.detail}</span>
                   </div>
                 )}
 
