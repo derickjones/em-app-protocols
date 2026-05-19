@@ -117,13 +117,16 @@ def route_query(query: str) -> QueryRoute:
     ):
         return "personal"
 
+    if "protocol" in normalized:
+        return "local_protocol"
+
     has_protocol_term = any(term in normalized for term in _PROTOCOL_TERMS)
     has_local_context = any(phrase in normalized for phrase in _LOCAL_CONTEXT_PHRASES)
 
     if has_protocol_term and has_local_context:
         return "local_protocol"
 
-    if has_protocol_term and any(token in normalized for token in ("our", "local", "mayo", "here")):
+    if has_protocol_term and any(token in normalized for token in ("our", "local", "mayo", "here", "my")):
         return "local_protocol"
 
     if any(
