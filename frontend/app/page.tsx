@@ -2793,7 +2793,7 @@ export default function Home() {
       <footer className={`mt-auto w-full py-2 text-center text-xs ${
         darkMode ? 'text-gray-600' : 'text-gray-400'
       }`}>
-        <p className="mb-1">AI-generated content may contain errors — always verify with primary sources and clinical judgment.</p>
+        <p className="mb-1">Pilot: AI-generated content may contain errors and may change as we evaluate the tool. Always verify with primary sources and clinical judgment.</p>
         <a href="/legal" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>Legal</a>
         <span className="mx-2">·</span>
         <a href="/about" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>About</a>
