@@ -1983,24 +1983,22 @@ export default function Home() {
                   }`}
                 />
 
-                <div className="px-4 pb-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`text-[11px] uppercase tracking-[0.18em] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                      How to ask
-                    </span>
-                    {QUERY_EXAMPLES.map((example) => (
-                      <button
-                        key={example.label}
-                        type="button"
-                        onClick={() => setQuestion(example.prompt)}
-                        className={`rounded-full border px-3 py-1 text-xs transition-all duration-200 ${
-                          darkMode
-                            ? 'border-[#2A2A2A] bg-[#141414] text-gray-300 hover:border-blue-500/40 hover:text-blue-300'
-                            : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600'
-                        }`}
-                      >
-                        {example.label}
-                      </button>
+                <div className="px-5 pb-2">
+                  <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <span>Try:</span>
+                    {QUERY_EXAMPLES.map((example, index) => (
+                      <React.Fragment key={example.label}>
+                        {index > 0 && <span className={darkMode ? 'text-gray-700' : 'text-gray-300'}>·</span>}
+                        <button
+                          type="button"
+                          onClick={() => setQuestion(example.prompt)}
+                          className={`transition-colors duration-200 ${
+                            darkMode ? 'hover:text-blue-300' : 'hover:text-blue-600'
+                          }`}
+                        >
+                          {example.label}
+                        </button>
+                      </React.Fragment>
                     ))}
                   </div>
                 </div>
