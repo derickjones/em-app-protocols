@@ -203,7 +203,7 @@ class PersonalService:
 
         b64 = base64.b64encode(img_bytes).decode("utf-8")
 
-        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/us-central1/publishers/google/models/gemini-3.5-flash:generateContent"
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
         headers = {
             "Authorization": f"Bearer {self._get_access_token()}",
             "Content-Type": "application/json",

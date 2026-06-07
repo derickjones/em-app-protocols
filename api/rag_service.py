@@ -320,7 +320,7 @@ ANSWER:"""
         """Generate answer using Gemini (non-streaming)."""
         prompt, _ = self._build_prompt_and_context(query, contexts)
         
-        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-3.5-flash:generateContent"
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
         
         headers = {
             "Authorization": f"Bearer {self._get_access_token()}",
@@ -347,7 +347,7 @@ ANSWER:"""
         """Generate answer using Gemini with streaming. Yields text chunks."""
         prompt, _ = self._build_prompt_and_context(query, contexts)
         
-        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-3.5-flash:streamGenerateContent?alt=sse"
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
         
         headers = {
             "Authorization": f"Bearer {self._get_access_token()}",
@@ -1318,7 +1318,7 @@ Write a concise 2-3 sentence summary of what this protocol covers and how it rel
 
     def _generate_summary(self, prompt: str) -> str:
         """Generate a short summary with Gemini (non-streaming, low token count)."""
-        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-3.5-flash:generateContent"
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
 
         headers = {
             "Authorization": f"Bearer {self._get_access_token()}",
