@@ -1967,7 +1967,7 @@ export default function Home() {
                   <img
                     src="/logos/ema_logo.png"
                     alt="EMA - Emergency Medicine Protocol Assistant"
-                    className="h-32 w-auto mb-4"
+                    className="h-48 w-auto mb-6"
                   />
                 </div>
               ) : (
