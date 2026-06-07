@@ -160,6 +160,7 @@ body {
   font-size: 0.875rem;
   line-height: 1.5;
   display: table;
+  table-layout: auto;
 }
 
 .prose thead {
@@ -182,12 +183,14 @@ body {
   font-weight: 600;
   color: var(--foreground);
   white-space: nowrap;
+  border-bottom: 2px solid #3b82f6;
 }
 
 .prose td {
   display: table-cell;
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
+  vertical-align: top;
 }
 
 .prose tbody tr:hover {
@@ -198,6 +201,7 @@ body {
 .dark .prose th,
 .prose-invert th {
   color: #ffffff;
+  border-bottom-color: #3b82f6;
 }
 
 .dark .prose td,
