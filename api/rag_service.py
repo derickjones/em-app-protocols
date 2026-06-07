@@ -308,6 +308,7 @@ FORMATTING RULES:
 - Use blank lines between sections for readability
 - Be concise — only expand when clinical complexity demands it. A simple question gets a short answer.
 - Keep the total answer under 1500 words. Prioritize the most critical information.
+- IMPORTANT: When using markdown tables, ALWAYS include the header separator line (e.g., |---|---|---|---|) immediately after the header row, and ensure ALL table rows are complete. Never truncate or omit table cells.
 
 CONTEXT:
 {context_text}
