@@ -159,13 +159,24 @@ body {
   margin: 1rem 0;
   font-size: 0.875rem;
   line-height: 1.5;
+  display: table;
 }
 
 .prose thead {
+  display: table-header-group;
   border-bottom: 2px solid #3b82f6;
 }
 
+.prose tbody {
+  display: table-row-group;
+}
+
+.prose tr {
+  display: table-row;
+}
+
 .prose th {
+  display: table-cell;
   padding: 0.5rem 0.75rem;
   text-align: left;
   font-weight: 600;
@@ -174,6 +185,7 @@ body {
 }
 
 .prose td {
+  display: table-cell;
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
 }
