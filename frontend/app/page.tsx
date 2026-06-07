@@ -1962,21 +1962,23 @@ export default function Home() {
 
             {/* Center: Title */}
             <div className="flex-1 flex flex-col items-center text-center">
-              <h1
-                onClick={resetSearch}
-                className={`font-title font-extrabold transition-all duration-300 cursor-pointer ${
-                  hasSearched ? "text-xl tracking-wide" : "text-5xl tracking-tight"
-                }`}
-                style={darkMode && !hasSearched ? { textShadow: '0 0 60px rgba(37,99,235,0.25), 0 0 120px rgba(37,99,235,0.1)' } : {}}
-              >
-              emergency medicine app
-            </h1>
-            {!hasSearched && (
-              <p className={`text-sm font-data mt-3 tracking-wider uppercase ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                AI-powered clinical decision support
-              </p>
-            )}
-          </div>
+              {!hasSearched ? (
+                <div className="flex flex-col items-center">
+                  <img
+                    src="/logos/ema_logo.png"
+                    alt="EMA - Emergency Medicine Protocol Assistant"
+                    className="h-32 w-auto mb-4"
+                  />
+                </div>
+              ) : (
+                <h1
+                  onClick={resetSearch}
+                  className="font-title font-extrabold text-xl tracking-wide cursor-pointer"
+                >
+                  emergency medicine app
+                </h1>
+              )}
+            </div>
 
           {/* Right: Question bubble */}
           <div className="flex-shrink-0 max-w-[200px]">
