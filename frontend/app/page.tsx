@@ -1977,11 +1977,7 @@ export default function Home() {
 
           {/* Right: Question bubble */}
           <div className="flex-shrink-0 max-w-[200px]">
-            {hasSearched && submittedQuestion && (
-              <div className={`px-3 py-1.5 rounded-full text-xs truncate ${darkMode ? 'bg-[#1E1E1E] text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                {submittedQuestion}
-              </div>
-            )}
+            {/* Question display removed - was redundant with main content */}
           </div>
         </div>
       </div>
