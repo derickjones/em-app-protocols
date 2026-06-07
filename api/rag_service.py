@@ -303,10 +303,11 @@ Then use the structure that best fits the question — pick from these as needed
 
 FORMATTING RULES:
 - Use **bold** for drug names, critical values, and section headers
-- Use markdown tables (| col1 | col2 |) for dosing, scoring, and side-by-side comparisons — always include a header row and separator row
+- Use markdown tables for dosing, scoring, and side-by-side comparisons. Keep tables compact with short column widths.
 - Use bullet lists for criteria, differentials, and contraindications
 - Use blank lines between sections for readability
 - Be concise — only expand when clinical complexity demands it. A simple question gets a short answer.
+- Keep the total answer under 1500 words. Prioritize the most critical information.
 
 CONTEXT:
 {context_text}
@@ -331,7 +332,7 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 8192
+                "maxOutputTokens": 4096
             }
         }
         
@@ -358,7 +359,7 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 8192
+                "maxOutputTokens": 4096
             }
         }
         
