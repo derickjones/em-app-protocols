@@ -308,7 +308,11 @@ FORMATTING RULES:
 - Use blank lines between sections for readability
 - Be concise — only expand when clinical complexity demands it. A simple question gets a short answer.
 - Keep the total answer under 1500 words. Prioritize the most critical information.
-- IMPORTANT: When using markdown tables, ALWAYS include the header separator line (e.g., |---|---|---|---|) immediately after the header row, and ensure ALL table rows are complete. Never truncate or omit table cells.
+- IMPORTANT: When using markdown tables, use EXACTLY this format with single dashes:
+  | Drug | Dose | Route | Notes |
+  |------|------|-------|-------|
+  | Calcium Chloride | 1g IV | IV | Fast onset |
+  Do NOT use extra dashes, spaces, or long separator lines. Keep separators minimal.
 
 CONTEXT:
 {context_text}
