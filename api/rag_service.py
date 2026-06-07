@@ -332,24 +332,24 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 4096
+                "maxOutputTokens": 8192
             }
         }
-        
+
         response = requests.post(url, headers=headers, json=payload)
-        
+
         if response.status_code != 200:
             raise Exception(f"Gemini generation failed: {response.status_code} - {response.text}")
-        
+
         result = response.json()
         return result["candidates"][0]["content"]["parts"][0]["text"]
 
     def generate_answer_stream(self, query: str, contexts: List[Dict]):
         """Generate answer using Gemini with streaming. Yields text chunks."""
         prompt, _ = self._build_prompt_and_context(query, contexts)
-        
+
         url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
-        
+
         headers = {
             "Authorization": f"Bearer {self._get_access_token()}",
             "Content-Type": "application/json"
@@ -359,7 +359,7 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 4096
+                "maxOutputTokens": 8192
             }
         }
         
