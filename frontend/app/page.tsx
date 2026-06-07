@@ -7,7 +7,6 @@ import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
 import ProtocolCard, { ProtocolCardData } from "@/components/ProtocolCard";
-import GravityGrid from "@/components/GravityGrid";
 import PulseLine from "@/components/PulseLine";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
@@ -1105,8 +1104,6 @@ export default function Home() {
 
   return (
     <div className={`min-h-screen font-body flex relative overflow-hidden ${darkMode ? 'bg-[#0A0A0A] text-gray-100' : 'bg-[#F8F9FA] text-gray-900'}`}>
-      {/* Gravity-well dot grid */}
-      {darkMode && <GravityGrid />}
       {/* Sidebar Overlay - mobile only */}
       {sidebarOpen && (
         <div 
