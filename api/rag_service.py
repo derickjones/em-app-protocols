@@ -331,7 +331,7 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 2000
+                "maxOutputTokens": 8192
             }
         }
         
@@ -358,7 +358,7 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 2000
+                "maxOutputTokens": 8192
             }
         }
         
