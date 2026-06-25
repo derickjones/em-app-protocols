@@ -1988,9 +1988,6 @@ export default function Home() {
           /* Initial Search View */
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="w-full max-w-3xl px-4">
-              {/* Pulse line divider */}
-              {darkMode && <PulseLine className="mb-8 opacity-80" dimmed={searchFocused} />}
-
               {/* Input Box - Gemini style with source icons inside */}
               <div className={`relative mt-2 border-2 rounded-3xl transition-all duration-200 ${
                 darkMode 
@@ -2101,6 +2098,13 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              {/* Full-width ECG strip below search box */}
+              {darkMode && (
+                <div className="relative w-screen left-1/2 -translate-x-1/2 mt-4">
+                  <PulseLine className="opacity-80" dimmed={searchFocused} />
+                </div>
+              )}
 
               {/* Pinned Protocols — combined highlighted + favorites */}
               {(highlightedProtocols.length > 0 || favoriteProtocols.length > 0) && (

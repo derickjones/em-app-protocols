@@ -231,11 +231,11 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
     if (!ctx) return;
 
     const DPR = window.devicePixelRatio || 1;
-    const W = 600;
+    const W = canvas.parentElement?.clientWidth || window.innerWidth || 1200;
     const H = 60;
     canvas.width = W * DPR;
     canvas.height = H * DPR;
-    canvas.style.width = `${W}px`;
+    canvas.style.width = '100%';
     canvas.style.height = `${H}px`;
     ctx.scale(DPR, DPR);
 
@@ -544,11 +544,11 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
           }}
         />
       )}
-      <div className={`relative w-full max-w-xl mx-auto overflow-hidden ${className}`}>
+      <div className={`relative w-full overflow-hidden ${className}`}>
         <canvas
           ref={canvasRef}
-          className="w-full h-auto"
-          style={{ width: 600, height: 60, maxWidth: "100%" }}
+          className="w-full"
+          style={{ height: 60 }}
         />
       </div>
     </>

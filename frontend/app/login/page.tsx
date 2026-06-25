@@ -7,7 +7,7 @@
  * Non-mayo users see a "Request Access" form under the Mayo Bundle section.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
@@ -47,10 +47,11 @@ export default function LoginPage() {
   };
 
   // If user is signed in (Google or corporate), redirect to home
-  if ((user || userProfile) && userProfile) {
-    router.push("/");
-    return null;
-  }
+  useEffect(() => {
+    if ((user || userProfile) && userProfile) {
+      router.push("/");
+    }
+  }, [user, userProfile, router]);
 
   const displayError = localError || authError;
 
