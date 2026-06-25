@@ -11,10 +11,10 @@ import { useEffect, useRef, useState } from "react";
 // Each rhythm is an array of [x, y] points normalized 0–1
 // y=0.5 is baseline, y=0 is top, y=1 is bottom
 
-function sinusRhythm(): [number, number][] {
+function sinusRhythm(scale = 1): [number, number][] {
   // Classic NSR: flat → P wave → flat → QRS → flat → T wave → flat (repeated)
   const pts: [number, number][] = [];
-  const cycles = 3;
+  const cycles = Math.max(1, Math.round(3 * scale));
   for (let c = 0; c < cycles; c++) {
     const o = c / cycles;
     const s = 1 / cycles;
@@ -42,53 +42,67 @@ function sinusRhythm(): [number, number][] {
   return pts;
 }
 
-function afibRhythm(): [number, number][] {
+function afibRhythm(scale = 1): [number, number][] {
   // AFib: irregular fibrillatory baseline + irregular QRS complexes
   const pts: [number, number][] = [];
-  const beats = [0.0, 0.18, 0.42, 0.55, 0.78]; // irregular spacing
+  const u = 1 / scale; // morphology unit — keeps QRS pixel-width constant
+  // Generate irregular beat positions scaled to canvas width
+  const irregularOffsets = [0, 0.06, -0.02, 0.04, -0.05, 0.03, -0.03, 0.05, 0, 0.02, -0.04, 0.06];
+  const beats: number[] = [];
+  let bx = 0;
+  let i = 0;
+  while (bx < 0.88) {
+    beats.push(bx);
+    bx += (0.18 + irregularOffsets[i % irregularOffsets.length]) * u;
+    i++;
+  }
+  const rHeights = [0.15, 0.18, 0.13, 0.20, 0.16, 0.14, 0.19, 0.12, 0.17, 0.15, 0.21, 0.13];
   let x = 0;
-  for (let i = 0; i < beats.length; i++) {
-    const bx = beats[i];
-    // Fibrillatory baseline between beats
-    while (x < bx) {
-      pts.push([x, 0.5 + (Math.sin(x * 80) * 0.03) + (Math.cos(x * 120) * 0.02)]);
-      x += 0.008;
+  for (let j = 0; j < beats.length; j++) {
+    const beat = beats[j];
+    while (x < beat) {
+      pts.push([x, 0.5 + Math.sin(x * 80 * scale) * 0.03 + Math.cos(x * 120 * scale) * 0.02]);
+      x += 0.008 * u;
     }
     // Narrow QRS (no P wave)
-    pts.push([bx, 0.5]);
-    pts.push([bx + 0.01, 0.55]);
-    pts.push([bx + 0.02, 0.15 + Math.random() * 0.1]); // R peak, variable height
-    pts.push([bx + 0.035, 0.7]);
-    pts.push([bx + 0.045, 0.5]);
-    x = bx + 0.06;
-    // Small T wave
+    pts.push([beat, 0.5]);
+    pts.push([beat + 0.01 * u, 0.55]);
+    pts.push([beat + 0.02 * u, rHeights[j % rHeights.length]]);
+    pts.push([beat + 0.035 * u, 0.7]);
+    pts.push([beat + 0.045 * u, 0.5]);
+    x = beat + 0.06 * u;
     pts.push([x, 0.5]);
-    pts.push([x + 0.02, 0.42]);
-    pts.push([x + 0.04, 0.5]);
-    x += 0.05;
+    pts.push([x + 0.02 * u, 0.42]);
+    pts.push([x + 0.04 * u, 0.5]);
+    x += 0.05 * u;
   }
   while (x <= 1) {
-    pts.push([x, 0.5 + Math.sin(x * 80) * 0.03]);
-    x += 0.008;
+    pts.push([x, 0.5 + Math.sin(x * 80 * scale) * 0.03]);
+    x += 0.008 * u;
   }
   return pts;
 }
 
-function flutterRhythm(): [number, number][] {
+function flutterRhythm(scale = 1): [number, number][] {
   // Atrial Flutter: sawtooth F waves at ~300bpm with periodic QRS
   const pts: [number, number][] = [];
-  const qrsPositions = [0.22, 0.52, 0.82]; // regular ventricular response
+  const u = 1 / scale;
+  const numQrs = Math.max(2, Math.round(3 * scale));
+  // Evenly spread QRS positions across the canvas
+  const qrsPositions = Array.from({ length: numQrs }, (_, i) =>
+    0.1 + (i * 0.82 / Math.max(1, numQrs - 1))
+  );
+  const qrsW = 0.04 * u; // constant pixel-width QRS
+  const fWavePeriod = 0.055 * u; // constant pixel-width F waves
   let x = 0;
-  const fWavePeriod = 0.055; // ~300bpm sawtooth
   while (x <= 1) {
-    // Check if QRS here
-    const nearQRS = qrsPositions.find(q => x >= q && x < q + 0.04);
+    const nearQRS = qrsPositions.find(q => x >= q && x < q + qrsW);
     if (nearQRS !== undefined) {
       const dx = x - nearQRS;
-      if (dx < 0.01) pts.push([x, 0.5]);
-      else if (dx < 0.015) pts.push([x, 0.55]);
-      else if (dx < 0.02) pts.push([x, 0.12]);
-      else if (dx < 0.03) pts.push([x, 0.72]);
+      if (dx < qrsW * 0.25) pts.push([x, 0.5]);
+      else if (dx < qrsW * 0.375) pts.push([x, 0.55]);
+      else if (dx < qrsW * 0.5) pts.push([x, 0.12]);
+      else if (dx < qrsW * 0.75) pts.push([x, 0.72]);
       else pts.push([x, 0.5]);
     } else {
       // Sawtooth F waves
@@ -96,15 +110,15 @@ function flutterRhythm(): [number, number][] {
       const y = phase < 0.7 ? 0.5 - phase * 0.12 : 0.5 - 0.084 + (phase - 0.7) * 0.28;
       pts.push([x, y]);
     }
-    x += 0.003;
+    x += 0.003 * u;
   }
   return pts;
 }
 
-function svtRhythm(): [number, number][] {
+function svtRhythm(scale = 1): [number, number][] {
   // SVT: regular narrow complex tachycardia ~180bpm, no visible P waves
   const pts: [number, number][] = [];
-  const cycles = 6; // fast rate
+  const cycles = Math.max(3, Math.round(6 * scale)); // fast rate
   for (let c = 0; c < cycles; c++) {
     const o = c / cycles;
     const s = 1 / cycles;
@@ -125,10 +139,10 @@ function svtRhythm(): [number, number][] {
   return pts;
 }
 
-function torsadesRhythm(): [number, number][] {
+function torsadesRhythm(scale = 1): [number, number][] {
   // Torsades de Pointes: wide complex with "twisting" amplitude modulation
   const pts: [number, number][] = [];
-  const totalCycles = 10;
+  const totalCycles = Math.max(5, Math.round(10 * scale));
   for (let i = 0; i <= 300; i++) {
     const x = i / 300;
     // Sinusoidal QRS-like oscillation
@@ -147,38 +161,53 @@ function flatline(): [number, number][] {
   return [[0, 0.5], [1, 0.5]];
 }
 
-function recoveryRhythm(): [number, number][] {
-  // NSR but first 2 beats at reduced amplitude, slightly wider spacing
+function recoveryRhythm(scale = 1): [number, number][] {
+  // NSR but first 2 beats at reduced amplitude, then fills canvas with normal beats
   const pts: [number, number][] = [];
+  const u = 1 / scale;
   const beats = [
-    { start: 0.0, scale: 0.4, width: 0.38 },   // first beat — weak
-    { start: 0.38, scale: 0.65, width: 0.32 },  // second beat — recovering
-    { start: 0.70, scale: 1.0, width: 0.30 },   // third beat — normal
+    { start: 0.0,        amp: 0.4,  width: 0.38 * u },
+    { start: 0.38 * u,   amp: 0.65, width: 0.32 * u },
+    { start: 0.70 * u,   amp: 1.0,  width: 0.30 * u },
   ];
   for (const b of beats) {
     const o = b.start;
     const s = b.width;
-    const amp = b.scale;
+    const amp = b.amp;
     pts.push([o, 0.5]);
-    // P wave
     pts.push([o + s * 0.12, 0.5]);
     pts.push([o + s * 0.16, 0.5 - 0.08 * amp]);
     pts.push([o + s * 0.20, 0.5]);
-    // PR
     pts.push([o + s * 0.25, 0.5]);
-    // QRS
     pts.push([o + s * 0.28, 0.5 + 0.05 * amp]);
-    pts.push([o + s * 0.30, 0.5 - 0.38 * amp]);  // R peak
-    pts.push([o + s * 0.33, 0.5 + 0.25 * amp]);   // S wave
+    pts.push([o + s * 0.30, 0.5 - 0.38 * amp]);
+    pts.push([o + s * 0.33, 0.5 + 0.25 * amp]);
     pts.push([o + s * 0.35, 0.5]);
-    // ST
     pts.push([o + s * 0.45, 0.5]);
-    // T wave
     pts.push([o + s * 0.52, 0.5 - 0.12 * amp]);
     pts.push([o + s * 0.58, 0.5]);
     pts.push([o + s * 0.90, 0.5]);
   }
-  pts.push([1, 0.5]);
+  // Fill remaining canvas with normal NSR beats
+  let x = beats[2].start + beats[2].width;
+  const nsrW = 0.33 * u;
+  while (x + nsrW <= 1.02) {
+    pts.push([x, 0.5]);
+    pts.push([x + nsrW * 0.12, 0.5]);
+    pts.push([x + nsrW * 0.16, 0.42]);
+    pts.push([x + nsrW * 0.20, 0.5]);
+    pts.push([x + nsrW * 0.25, 0.5]);
+    pts.push([x + nsrW * 0.28, 0.55]);
+    pts.push([x + nsrW * 0.30, 0.12]);
+    pts.push([x + nsrW * 0.33, 0.75]);
+    pts.push([x + nsrW * 0.35, 0.5]);
+    pts.push([x + nsrW * 0.45, 0.5]);
+    pts.push([x + nsrW * 0.52, 0.38]);
+    pts.push([x + nsrW * 0.58, 0.5]);
+    pts.push([x + nsrW * 0.90, 0.5]);
+    x += nsrW;
+  }
+  if (pts[pts.length - 1][0] < 1) pts.push([1, 0.5]);
   return pts;
 }
 
@@ -232,6 +261,7 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
 
     const DPR = window.devicePixelRatio || 1;
     const W = canvas.parentElement?.clientWidth || window.innerWidth || 1200;
+    const scale = W / 600;
     const H = 60;
     canvas.width = W * DPR;
     canvas.height = H * DPR;
@@ -240,7 +270,7 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
     ctx.scale(DPR, DPR);
 
     let rhythmIdx = 0;
-    let currentPts = RHYTHMS[0].gen();
+    let currentPts = RHYTHMS[0].gen(scale);
     let nextPts = currentPts;
     let crossfade = 0; // 0 = current, 1 = next
     let sweepT = 0; // 0–1 sweep position
@@ -316,7 +346,7 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
           if (shockElapsed >= SHOCK_PHASES.postFlat) {
             shockPhase = "recovery";
             shockStart = now;
-            recoveryPts = recoveryRhythm();
+            recoveryPts = recoveryRhythm(scale);
             currentPts = flatline();
             nextPts = recoveryPts;
             crossfadeStart = now;
@@ -337,7 +367,7 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
             // Transition complete — move to NSR
             shockPhase = "none";
             rhythmIdx = 0;
-            currentPts = RHYTHMS[0].gen();
+            currentPts = RHYTHMS[0].gen(scale);
             crossfade = 0;
             transitioning = false;
             rhythmStart = now;
@@ -357,7 +387,7 @@ export default function PulseLine({ className = "", dimmed = false }: { classNam
             transitioning = true;
             crossfadeStart = now;
             const nextIdx = (rhythmIdx + 1) % RHYTHMS.length;
-            nextPts = RHYTHMS[nextIdx].gen();
+            nextPts = RHYTHMS[nextIdx].gen(scale);
           }
         }
 
