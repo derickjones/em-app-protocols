@@ -2830,6 +2830,17 @@ export default function Home() {
         darkMode ? 'text-gray-600' : 'text-gray-400'
       }`}>
         <p className="mb-1">Pilot: AI-generated content may contain errors and may change as we evaluate the tool. Always verify with primary sources and clinical judgment.</p>
+        <p className="mb-1">
+          For a walkthrough of the app{' '}
+          <a
+            href="https://youtu.be/wgF-d99_u6s"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`hover:underline ${darkMode ? 'text-blue-500 hover:text-blue-400' : 'text-blue-600 hover:text-blue-500'}`}
+          >
+            click here
+          </a>
+        </p>
         <a href="/legal" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>Legal</a>
         <span className="mx-2">·</span>
         <a href="/about" target="_blank" rel="noopener noreferrer" className={`hover:underline ${darkMode ? 'hover:text-gray-300' : 'hover:text-gray-600'}`}>About</a>
