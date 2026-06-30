@@ -90,6 +90,8 @@ export default function AdminPage() {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [highlightedSet, setHighlightedSet] = useState<Set<string>>(new Set());
   const [togglingHighlight, setTogglingHighlight] = useState<string | null>(null);
+  const [selectedProtocols, setSelectedProtocols] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Derived helpers
   const currentEnterprise = enterprises.find((e) => e.id === selectedEnterprise);
@@ -356,6 +358,30 @@ export default function AdminPage() {
       newExpanded.add(key);
     }
     setExpandedEDs(newExpanded);
+  };
+
+  useEffect(() => {
+    setSelectedProtocols(new Set());
+  }, [selectedBundle]);
+
+  const handleBulkDelete = async () => {
+    if (selectedProtocols.size === 0) return;
+    if (!confirm(`Delete ${selectedProtocols.size} selected protocol(s)? This cannot be undone.`)) return;
+
+    setBulkDeleting(true);
+    for (const protocolId of Array.from(selectedProtocols)) {
+      try {
+        await fetch(`${API_URL}/protocols/${encodeURIComponent(selectedEnterprise)}/${encodeURIComponent(selectedED)}/${encodeURIComponent(selectedBundle)}/${encodeURIComponent(protocolId)}`, {
+          method: "DELETE",
+        });
+      } catch (err) {
+        console.error("Bulk delete error:", err);
+      }
+    }
+    setBulkDeleting(false);
+    setSelectedProtocols(new Set());
+    await fetchAllHospitals();
+    await fetchProtocols();
   };
 
   const handleDelete = async (enterpriseId: string, edId: string, bundleId: string, protocolId: string) => {
@@ -1158,14 +1184,26 @@ export default function AdminPage() {
                     <h2 className="text-lg font-medium text-white">
                       Protocols in {currentEnterprise?.name || selectedEnterprise} / {currentED?.name || selectedED} / {currentBundle?.name || selectedBundle}
                     </h2>
-                    <button
-                      onClick={fetchProtocols}
-                      disabled={loading}
-                      className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                      Refresh
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {selectedProtocols.size > 0 && (
+                        <button
+                          onClick={handleBulkDelete}
+                          disabled={bulkDeleting}
+                          className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm transition-colors disabled:opacity-50"
+                        >
+                          {bulkDeleting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          Delete {selectedProtocols.size} selected
+                        </button>
+                      )}
+                      <button
+                        onClick={fetchProtocols}
+                        disabled={loading}
+                        className="text-sm text-[#8ab4f8] hover:text-[#aecbfa] flex items-center gap-2 px-4 py-2 rounded-full hover:bg-[#8ab4f8]/10 transition-colors"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                        Refresh
+                      </button>
+                    </div>
                   </div>
 
                   {pendingProtocols.size > 0 && (
@@ -1184,17 +1222,48 @@ export default function AdminPage() {
                       <p className="text-sm text-[#5f6368]">Upload a PDF to get started</p>
                     </div>
                   ) : (
-                    <ul className="divide-y divide-[#3c4043]">
+                    <>
+                      <div className="flex items-center gap-3 px-5 py-2 border-b border-[#3c4043] bg-[#1a1b1c]">
+                        <input
+                          type="checkbox"
+                          checked={selectedProtocols.size === protocols.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedProtocols(new Set(protocols.map((p) => p.protocol_id)));
+                            } else {
+                              setSelectedProtocols(new Set());
+                            }
+                          }}
+                          className="w-4 h-4 accent-[#8ab4f8] cursor-pointer"
+                        />
+                        <span className="text-xs text-[#9aa0a6]">
+                          {selectedProtocols.size > 0 ? `${selectedProtocols.size} of ${protocols.length} selected` : "Select all"}
+                        </span>
+                      </div>
+                      <ul className="divide-y divide-[#3c4043]">
                       {protocols.map((protocol) => (
-                        <li key={protocol.protocol_id} className="p-5 hover:bg-[#2c2d2e] transition-colors">
+                        <li key={protocol.protocol_id} className={`p-5 transition-colors ${selectedProtocols.has(protocol.protocol_id) ? "bg-[#8ab4f8]/5" : "hover:bg-[#2c2d2e]"}`}>
                           <div className="flex items-center justify-between">
-                            <div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedProtocols.has(protocol.protocol_id)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedProtocols);
+                                  if (e.target.checked) next.add(protocol.protocol_id);
+                                  else next.delete(protocol.protocol_id);
+                                  setSelectedProtocols(next);
+                                }}
+                                className="w-4 h-4 accent-[#8ab4f8] cursor-pointer flex-shrink-0"
+                              />
+                              <div>
                               <h3 className="font-medium text-white">
                                 {protocol.protocol_id.replace(/_/g, " ")}
                               </h3>
                               <p className="text-sm text-[#9aa0a6] mt-1">
                                 {protocol.page_count} pages • {protocol.image_count} images • {protocol.char_count.toLocaleString()} characters
                               </p>
+                            </div>
                             </div>
                             <div className="flex items-center gap-3">
                               {pendingProtocols.has(protocol.protocol_id) && ragStatus[protocol.protocol_id] !== "indexed" ? (
@@ -1246,6 +1315,7 @@ export default function AdminPage() {
                         </li>
                       ))}
                     </ul>
+                    </>
                   )}
                 </div>
               </>
