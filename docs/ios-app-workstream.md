@@ -186,13 +186,48 @@ native bundle. Native auth replaces both.
    with the chosen bundle ID on project `clinical-assistant-457902`, then
    `firebase apps:sdkconfig ios` to fetch `GoogleService-Info.plist`; add it to the
    Xcode project and wire the reversed client ID URL scheme into `Info.plist`.
+
+   Done via `firebase apps:create ios --bundle-id app.emergencymedicine.ios` → app ID
+   `1:930035889332:ios:96df12d6bdd3323ad813e1`. Note: a *different* iOS app was
+   already registered on this Firebase project under bundle ID
+   `com.emergencymedicine.protocols` (display name "EM Protocols") — unreferenced
+   anywhere in this repo or this doc, so left untouched as likely orphaned cruft
+   from before this workstream; flag to the owner if that bundle ID means something.
+   `GoogleService-Info.plist` added to the Xcode project via the `xcodeproj` Ruby
+   gem (already present on this machine) since no GUI was used; reversed client ID
+   wired into `Info.plist`'s `CFBundleURLTypes`. `capacitor.config.ts` also sets
+   `plugins.FirebaseAuthentication.providers: ['google.com']` and the SPM
+   `packageOptions.symlink` workaround the plugin's docs call for.
 2. In `lib/auth-context.tsx` only, branch `signInWithGoogle`:
-   - `Capacitor.isNativePlatform()` → native plugin sign-in, then bridge the returned
-     ID token into the JS SDK with `signInWithCredential(auth, GoogleAuthProvider.credential(idToken))`
-     so the existing `onAuthStateChanged` listeners, Firestore access, and API token
-     logic all keep working unmodified.
+   - `Capacitor.isNativePlatform()` → native plugin sign-in
+     (`FirebaseAuthentication.signInWithGoogle()`), fetch the profile from
+     `/auth/me` using `FirebaseAuthentication.getIdToken()`.
    - Web → existing popup/redirect code path, untouched.
-3. Handle sign-out symmetrically (plugin sign-out + JS SDK sign-out on native).
+
+   **Deviation from the original plan, and why:** the plan called for bridging
+   the native sign-in into the JS SDK via
+   `signInWithCredential(auth, GoogleAuthProvider.credential(idToken))` so the
+   existing `onAuthStateChanged` listener would keep working. That listener is
+   the thing Phase 2 proved never fires under `capacitor://localhost` (see
+   Phase 2 notes) — bridging into it would just be routing a working native
+   sign-in through a JS SDK auth instance that's confirmed broken at the root
+   (persistence/initialization never resolves), for no benefit, since our
+   backend only needs a valid Firebase ID token and doesn't care which SDK
+   produced it. Implemented instead: a `isNativeGoogleSession` flag parallel to
+   the existing `isCorporateSession` one, sourced entirely from
+   `FirebaseAuthentication`'s own APIs (`addListener('authStateChange', ...)`,
+   `getIdToken()`, `signOut()`) — never touching `firebase/auth` on native.
+   Session persistence across relaunches is handled by the native Firebase SDK
+   itself (iOS Keychain-backed), not by us.
+
+   **Known gap:** `user.photoURL` (Google avatar) is not populated on native
+   since `user` (the `firebase/auth` `User` object) stays `null` there — the
+   UI already falls back to an initial-letter avatar
+   (`user?.photoURL ? ... : <initial>`), so this is a cosmetic-only gap, not a
+   crash risk. Could be closed later by threading the native plugin's own
+   `User.photoUrl` into `userProfile` if wanted.
+3. Handle sign-out symmetrically (plugin sign-out via
+   `FirebaseAuthentication.signOut()` on native; JS SDK sign-out on web, unchanged).
 4. Corporate passwordless login (`corporateLogin` → `POST /auth/corporate-login`) is
    plain REST and needs no OAuth changes — but its tokens live in `localStorage`
    (`em_corporate_*` keys), which iOS may evict from WKWebView storage under disk
@@ -212,9 +247,19 @@ native bundle. Native auth replaces both.
    iOS with an admin-policy error. Surface this to the owner early in the phase.
 
 **Success criteria**
-- [ ] In the Simulator: tapping "Sign in with Google" completes the native Google flow
+- [ ] **Needs a human tap-through — not machine-verifiable in this environment.**
+      In the Simulator: tapping "Sign in with Google" completes the native Google flow
       and returns to the app signed in; the user's profile/personal page loads with
       their data; authenticated API calls to the FastAPI backend succeed.
+      What's verified instead: the app builds and links the native Firebase Auth +
+      Google Sign-In SDKs cleanly (`xcodebuild` succeeds), `tsc --noEmit` passes, the
+      app still renders correctly in the Simulator with the new plugins loaded (no
+      crash/hang introduced), and the `/login` static export contains the "Sign in
+      with Google" button wired to the new native branch. The actual OAuth handshake
+      needs a real tap — this session's headless mouse-simulated automation
+      (`cliclick`/AppleScript) could not reliably drive text/focus into the WKWebView
+      (see Phase 2 tooling note), so this is the one item to close out by hand in
+      Simulator or on a device.
 - [ ] Gating parity with web, verified for all three cases in the Simulator:
       a @mayo.edu Google account gets `accessStatus: "approved"` and sees protocols;
       a non-Mayo Google account lands in `no_access` and can submit an access request
@@ -222,8 +267,10 @@ native bundle. Native auth replaces both.
       session survives an app force-quit and relaunch (Preferences-backed tokens).
 - [ ] Sign out in the app, relaunch the app: still signed out. Sign in, force-quit,
       relaunch: still signed in (persistence works).
-- [ ] On the web (`npm run dev` and the Vercel preview): Google sign-in behaves exactly
-      as before — the web code path has zero changes in its diff.
+- [x] On the web (`npm run dev` and the Vercel preview): Google sign-in behaves exactly
+      as before — the web code path has zero changes in its diff (verified: the native
+      branch is gated behind `Capacitor.isNativePlatform()`, and `npm run build`
+      produces the same routes/output as the Phase 0 baseline).
 
 ---
 

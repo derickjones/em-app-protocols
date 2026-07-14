@@ -28,6 +28,8 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 import { Capacitor } from "@capacitor/core";
+import { Preferences } from "@capacitor/preferences";
+import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 
 interface UserProfile {
   uid: string;
@@ -74,40 +76,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Track whether this session is a corporate (server-token) login
   const [isCorporateSession, setIsCorporateSession] = useState(false);
 
+  // Track whether this session is a native Google sign-in (session itself
+  // persists in the native Firebase Auth SDK, not here)
+  const [isNativeGoogleSession, setIsNativeGoogleSession] = useState(false);
+
+  // ----- Storage adapter -----
+  // localStorage on web; @capacitor/preferences on native, since iOS may
+  // evict WKWebView storage under disk pressure.
+
+  const storageGet = async (key: string): Promise<string | null> => {
+    if (Capacitor.isNativePlatform()) {
+      const { value } = await Preferences.get({ key });
+      return value;
+    }
+    return localStorage.getItem(key);
+  };
+
+  const storageSet = async (key: string, value: string): Promise<void> => {
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.set({ key, value });
+    } else {
+      localStorage.setItem(key, value);
+    }
+  };
+
+  const storageRemove = async (key: string): Promise<void> => {
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.remove({ key });
+    } else {
+      localStorage.removeItem(key);
+    }
+  };
+
   // ----- Corporate token helpers -----
 
-  const storeCorporateTokens = (idToken: string, refreshToken: string, expiresIn: string, profile: UserProfile) => {
+  const storeCorporateTokens = async (idToken: string, refreshToken: string, expiresIn: string, profile: UserProfile) => {
     const expiryMs = Date.now() + parseInt(expiresIn, 10) * 1000;
-    localStorage.setItem(CORPORATE_TOKEN_KEY, idToken);
-    localStorage.setItem(CORPORATE_REFRESH_KEY, refreshToken);
-    localStorage.setItem(CORPORATE_EXPIRY_KEY, expiryMs.toString());
-    localStorage.setItem(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
+    await storageSet(CORPORATE_TOKEN_KEY, idToken);
+    await storageSet(CORPORATE_REFRESH_KEY, refreshToken);
+    await storageSet(CORPORATE_EXPIRY_KEY, expiryMs.toString());
+    await storageSet(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
   };
 
-  const clearCorporateTokens = () => {
-    localStorage.removeItem(CORPORATE_TOKEN_KEY);
-    localStorage.removeItem(CORPORATE_REFRESH_KEY);
-    localStorage.removeItem(CORPORATE_EXPIRY_KEY);
-    localStorage.removeItem(CORPORATE_PROFILE_KEY);
+  const clearCorporateTokens = async () => {
+    await storageRemove(CORPORATE_TOKEN_KEY);
+    await storageRemove(CORPORATE_REFRESH_KEY);
+    await storageRemove(CORPORATE_EXPIRY_KEY);
+    await storageRemove(CORPORATE_PROFILE_KEY);
   };
 
-  const getCorporateIdToken = (): string | null => {
-    return localStorage.getItem(CORPORATE_TOKEN_KEY);
+  const getCorporateIdToken = async (): Promise<string | null> => {
+    return storageGet(CORPORATE_TOKEN_KEY);
   };
 
-  const getCorporateRefreshToken = (): string | null => {
-    return localStorage.getItem(CORPORATE_REFRESH_KEY);
+  const getCorporateRefreshToken = async (): Promise<string | null> => {
+    return storageGet(CORPORATE_REFRESH_KEY);
   };
 
-  const isCorporateTokenExpired = (): boolean => {
-    const expiry = localStorage.getItem(CORPORATE_EXPIRY_KEY);
+  const isCorporateTokenExpired = async (): Promise<boolean> => {
+    const expiry = await storageGet(CORPORATE_EXPIRY_KEY);
     if (!expiry) return true;
     // Refresh 5 minutes before actual expiry
     return Date.now() > parseInt(expiry, 10) - 5 * 60 * 1000;
   };
 
   const refreshCorporateToken = async (): Promise<string | null> => {
-    const refreshToken = getCorporateRefreshToken();
+    const refreshToken = await getCorporateRefreshToken();
     if (!refreshToken) return null;
 
     try {
@@ -119,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!resp.ok) {
         // Refresh failed — force re-login
-        clearCorporateTokens();
+        await clearCorporateTokens();
         setIsCorporateSession(false);
         setUserProfile(null);
         return null;
@@ -127,9 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const data = await resp.json();
       const expiryMs = Date.now() + parseInt(data.expiresIn, 10) * 1000;
-      localStorage.setItem(CORPORATE_TOKEN_KEY, data.idToken);
-      localStorage.setItem(CORPORATE_REFRESH_KEY, data.refreshToken);
-      localStorage.setItem(CORPORATE_EXPIRY_KEY, expiryMs.toString());
+      await storageSet(CORPORATE_TOKEN_KEY, data.idToken);
+      await storageSet(CORPORATE_REFRESH_KEY, data.refreshToken);
+      await storageSet(CORPORATE_EXPIRY_KEY, expiryMs.toString());
       return data.idToken;
     } catch {
       return null;
@@ -185,8 +219,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = await fetchProfileWithToken(token);
         setUserProfile(profile);
         if (profile) {
-          localStorage.setItem(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
+          await storageSet(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
         }
+      }
+    } else if (isNativeGoogleSession) {
+      const token = await getIdToken();
+      if (token) {
+        const profile = await fetchProfileWithToken(token);
+        setUserProfile(profile);
       }
     } else if (user) {
       const profile = await fetchUserProfile(user);
@@ -197,78 +237,106 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ----- Init: restore corporate session or listen for Firebase auth -----
 
   useEffect(() => {
-    // Check for existing corporate session first
-    const savedToken = getCorporateIdToken();
-    const savedProfile = localStorage.getItem(CORPORATE_PROFILE_KEY);
+    let cancelled = false;
+    let unsubscribeWeb: (() => void) | undefined;
 
-    if (savedToken && savedProfile) {
-      // Restore corporate session
-      setIsCorporateSession(true);
-      setUserProfile(JSON.parse(savedProfile));
-      setLoading(false);
+    (async () => {
+      // Check for existing corporate session first
+      const savedToken = await getCorporateIdToken();
+      const savedProfile = await storageGet(CORPORATE_PROFILE_KEY);
 
-      // Refresh token if needed (async, non-blocking)
-      if (isCorporateTokenExpired()) {
-        refreshCorporateToken().then(async (newToken) => {
-          if (newToken) {
-            const profile = await fetchProfileWithToken(newToken);
-            if (profile) {
-              setUserProfile(profile);
-              localStorage.setItem(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
+      if (cancelled) return;
+
+      if (savedToken && savedProfile) {
+        // Restore corporate session
+        setIsCorporateSession(true);
+        setUserProfile(JSON.parse(savedProfile));
+        setLoading(false);
+
+        // Refresh token if needed (async, non-blocking)
+        if (await isCorporateTokenExpired()) {
+          refreshCorporateToken().then(async (newToken) => {
+            if (newToken) {
+              const profile = await fetchProfileWithToken(newToken);
+              if (profile) {
+                setUserProfile(profile);
+                await storageSet(CORPORATE_PROFILE_KEY, JSON.stringify(profile));
+              }
+            }
+          });
+        }
+        // Don't return early — always set up the auth listeners below
+        // so that switching from corporate → Google sign-in works seamlessly
+      }
+
+      if (Capacitor.isNativePlatform()) {
+        // Firebase JS Auth's onAuthStateChanged never fires under the
+        // capacitor://localhost origin (confirmed: reproduces with a bare
+        // Firebase instance loaded independently of this app's bundle — not
+        // an app bug). Use the native plugin's own listener instead, which
+        // is backed by the native Firebase SDK's session persistence
+        // (unaffected by the JS SDK's origin problem).
+        if (!savedToken) {
+          setLoading(false);
+        }
+
+        FirebaseAuthentication.addListener("authStateChange", async (change) => {
+          if (change.user) {
+            setIsNativeGoogleSession(true);
+            const { token } = await FirebaseAuthentication.getIdToken();
+            const profile = await fetchProfileWithToken(token);
+            setUserProfile(profile);
+          } else {
+            setIsNativeGoogleSession(false);
+            if (!(await getCorporateIdToken())) {
+              setUserProfile(null);
             }
           }
+          setLoading(false);
         });
-      }
-      // Don't return early — always set up the Firebase listener below
-      // so that switching from corporate → Google sign-in works seamlessly
-    }
+      } else {
+        // Redirect-based web OAuth doesn't apply on native.
+        getRedirectResult(auth)
+          .then(async (result) => {
+            if (result?.user) {
+              const profile = await fetchUserProfile(result.user);
+              setUserProfile(profile);
+            }
+          })
+          .catch((err) => {
+            console.error("Redirect sign-in error:", err);
+            setError(err instanceof Error ? err.message : "Sign in failed after redirect");
+          });
 
-    // Redirect-based web OAuth doesn't apply on native (Phase 3 replaces
-    // sign-in with a native plugin), so skip it there.
-    if (!Capacitor.isNativePlatform()) {
-      getRedirectResult(auth)
-        .then(async (result) => {
-          if (result?.user) {
-            const profile = await fetchUserProfile(result.user);
+        unsubscribeWeb = onAuthStateChanged(auth, async (firebaseUser) => {
+          setUser(firebaseUser);
+
+          if (firebaseUser) {
+            // If we had a corporate session but now have a real Firebase user,
+            // switch over to standard Firebase auth
+            if (await getCorporateIdToken()) {
+              await clearCorporateTokens();
+              setIsCorporateSession(false);
+            }
+            const profile = await fetchUserProfile(firebaseUser);
             setUserProfile(profile);
+          } else if (!(await getCorporateIdToken())) {
+            // Only clear profile if there's no corporate session either
+            setUserProfile(null);
           }
-        })
-        .catch((err) => {
-          console.error("Redirect sign-in error:", err);
-          setError(err instanceof Error ? err.message : "Sign in failed after redirect");
+
+          setLoading(false);
         });
-    }
-
-    // Firebase JS Auth's onAuthStateChanged never fires under the
-    // capacitor://localhost origin (confirmed: reproduces with a bare
-    // Firebase instance loaded independently of this app's bundle — not an
-    // app bug). Don't block rendering on it here; Phase 3 replaces native
-    // auth state entirely via a native plugin bridge.
-    if (Capacitor.isNativePlatform() && !savedToken) {
-      setLoading(false);
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      
-      if (firebaseUser) {
-        // If we had a corporate session but now have a real Firebase user,
-        // switch over to standard Firebase auth
-        if (getCorporateIdToken()) {
-          clearCorporateTokens();
-          setIsCorporateSession(false);
-        }
-        const profile = await fetchUserProfile(firebaseUser);
-        setUserProfile(profile);
-      } else if (!getCorporateIdToken()) {
-        // Only clear profile if there's no corporate session either
-        setUserProfile(null);
       }
-      
-      setLoading(false);
-    });
+    })();
 
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribeWeb?.();
+      if (Capacitor.isNativePlatform()) {
+        FirebaseAuthentication.removeAllListeners();
+      }
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ----- Auth methods -----
@@ -278,8 +346,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Clear any existing corporate session so Google auth takes over cleanly
     if (isCorporateSession) {
-      clearCorporateTokens();
+      await clearCorporateTokens();
       setIsCorporateSession(false);
+    }
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        if (!result.user) throw new Error("Google sign in failed");
+        setIsNativeGoogleSession(true);
+        const { token } = await FirebaseAuthentication.getIdToken();
+        const profile = await fetchProfileWithToken(token);
+        setUserProfile(profile);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Google sign in failed";
+        setError(message);
+        throw err;
+      }
+      return;
     }
 
     try {
@@ -320,7 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await resp.json();
       
       // Store tokens locally (Firebase SDK is bypassed for corporate users)
-      storeCorporateTokens(data.idToken, data.refreshToken, data.expiresIn, data.user);
+      await storeCorporateTokens(data.idToken, data.refreshToken, data.expiresIn, data.user);
       setIsCorporateSession(true);
       setUserProfile(data.user);
     } catch (err) {
@@ -332,8 +416,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     if (isCorporateSession) {
-      clearCorporateTokens();
+      await clearCorporateTokens();
       setIsCorporateSession(false);
+    } else if (isNativeGoogleSession) {
+      await FirebaseAuthentication.signOut();
+      setIsNativeGoogleSession(false);
     } else {
       await firebaseSignOut(auth);
     }
@@ -344,10 +431,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getIdToken = async (): Promise<string | null> => {
     // Corporate session: use stored token, refresh if needed
     if (isCorporateSession) {
-      if (isCorporateTokenExpired()) {
+      if (await isCorporateTokenExpired()) {
         return refreshCorporateToken();
       }
       return getCorporateIdToken();
+    }
+    // Native Google session: native Firebase SDK manages token refresh
+    if (isNativeGoogleSession) {
+      const { token } = await FirebaseAuthentication.getIdToken();
+      return token;
     }
     // Standard Firebase session
     if (!user) return null;
@@ -380,7 +472,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Derived state — corporate users count as "signed in" even without a Firebase User object
-  const isSignedIn = !!user || isCorporateSession;
+  const isSignedIn = !!user || isCorporateSession || isNativeGoogleSession;
   const isMayoUser = (user?.email?.endsWith("@mayo.edu") ?? false) || (userProfile?.email?.endsWith("@mayo.edu") ?? false);
   const hasAccess = userProfile?.accessStatus === "approved" || false;
 
