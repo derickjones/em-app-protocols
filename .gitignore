@@ -27,5 +27,11 @@ scrapers/aliem/bulk_scrape.log
 api.log
 indexing.log
 .env
+.env.ios
 .vscode/mcp.json
 .vercel
+
+# iOS signing / App Store Connect secrets — never commit
+*.p8
+frontend/ios/fastlane/.env
+frontend/ios/fastlane/report.xml
