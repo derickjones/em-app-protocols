@@ -28,3 +28,4 @@ api.log
 indexing.log
 .env
 .vscode/mcp.json
+.vercel
