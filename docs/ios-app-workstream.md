@@ -104,12 +104,12 @@ directory; the default `npm run build` still produces the exact same Vercel buil
 4. Add `frontend/out/` to `.gitignore`.
 
 **Success criteria**
-- [ ] `npm run build` (default) succeeds and its behavior/config is byte-equivalent to
+- [x] `npm run build` (default) succeeds and its behavior/config is byte-equivalent to
       the Phase 0 baseline (no `output: 'export'`, redirects/rewrites still present).
-- [ ] `BUILD_TARGET=capacitor npm run build:ios-web` succeeds with zero errors and emits
+- [x] `BUILD_TARGET=capacitor npm run build:ios-web` succeeds with zero errors and emits
       `out/index.html` plus one `.html` per route (`/about`, `/login`, `/personal`,
       `/admin`, `/owner`, `/legal`).
-- [ ] `npx serve out` (or equivalent) locally: the app loads, client-side navigation
+- [x] `npx serve out` (or equivalent) locally: the app loads, client-side navigation
       between all six routes works, no 404s for JS/CSS chunks in the console.
 
 ---
