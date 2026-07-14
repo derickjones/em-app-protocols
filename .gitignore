@@ -36,3 +36,9 @@ indexing.log
 *.p8
 frontend/ios/fastlane/.env
 frontend/ios/fastlane/report.xml
+
+# iOS build artifacts (ios/ project itself is committed source)
+frontend/ios/App/Pods/
+frontend/ios/App/build/
+frontend/ios/DerivedData/
+frontend/ios/App/App/public/

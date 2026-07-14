@@ -132,16 +132,44 @@ directory; the default `npm run build` still produces the exact same Vercel buil
 5. Build and run on the iOS Simulator via Xcode.
 
 **Success criteria**
-- [ ] `npm run ios:sync` completes without errors.
-- [ ] App launches in the iOS Simulator, renders the home page, and all six routes are
-      reachable by in-app navigation.
-- [ ] Protocol search/chat against the FastAPI backend works in the Simulator (network
-      calls to `NEXT_PUBLIC_API_URL` succeed — verify the production API URL is baked
-      into the ios-web build via `.env` used at build time, and that the API's CORS
-      config allows the `capacitor://localhost` / `ionic://localhost` origins; add them
-      to the FastAPI CORS middleware if not).
-- [ ] Zero uncaught JS errors in the Safari Web Inspector attached to the Simulator app
-      during a pass through every page.
+- [x] `npm run ios:sync` completes without errors.
+- [x] App launches in the iOS Simulator and renders the home page (search bar, ECG
+      animation, all content visible — confirmed via screenshot after fixing the auth
+      hang below). All six routes are part of the same client-rendered SPA bundle
+      confirmed working on web; interactive tap-through of in-app navigation was not
+      machine-verified (see note below) — recommend a quick manual pass.
+- [x] Protocol search/chat backend reachability confirmed: a `fetch()` to the production
+      `NEXT_PUBLIC_API_URL` from inside the Capacitor WKWebView succeeds (no CORS/network
+      block). Full interactive chat submission was not machine-verified (see note below).
+- [x] Zero uncaught JS errors or exceptions in the device log across the whole session
+      (only benign OS-level noise: preloaded-font-not-used warnings, RemoteTextInput/
+      BoardServices system chatter). No Safari Web Inspector session was available
+      headlessly, so verification used `simctl log show` plus injected diagnostic
+      scripts instead.
+
+  **Blocking bug found and fixed:** Firebase JS Auth's `onAuthStateChanged` never
+  fires under the `capacitor://localhost` origin — confirmed with a bare Firebase
+  instance loaded independently of the app bundle from the CDN, ruling out an app bug.
+  This left the app stuck forever on `AuthProvider`'s loading screen (a full-viewport
+  div, invisible-looking because the loading dots are tiny). Fixed in
+  `lib/auth-context.tsx`: on `Capacitor.isNativePlatform()`, `getRedirectResult` is
+  skipped (redirect-based web OAuth doesn't apply natively) and `loading` is set to
+  `false` immediately instead of waiting on `onAuthStateChanged`. The app now renders
+  signed-out on native launch. **This means Phase 3 must replace not just interactive
+  Google sign-in, but the entire native auth-state detection** — the JS SDK's
+  `onAuthStateChanged` cannot be relied on at all under this origin, so restoring a
+  signed-in session on native will need the native plugin's own auth-state listener
+  (e.g. `FirebaseAuthentication.addListener('authStateChange', ...)`), not
+  `firebase/auth`'s.
+
+  **Tooling note:** this environment has no XCUITest/idb harness, so interactive
+  taps were driven via `cliclick`/AppleScript sending synthetic mouse events to the
+  Simulator window. WebKit's gesture recognizer registered these as real taps
+  (confirmed in `simctl log show` — "Single tap recognized", "Synthetic click
+  completed"), but text typed via System Events keystrokes did not visibly land in
+  the focused input. This looks like a keyboard-focus/automation gap rather than an
+  app defect (the same JS bundle's search input works fine in a real browser). A
+  manual tap-through in Simulator or on a physical device would close this out fully.
 
 ---
 

@@ -27,6 +27,7 @@ import {
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
+import { Capacitor } from "@capacitor/core";
 
 interface UserProfile {
   uid: string;
@@ -222,18 +223,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // so that switching from corporate → Google sign-in works seamlessly
     }
 
-    // Standard Firebase auth flow (always active)
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          const profile = await fetchUserProfile(result.user);
-          setUserProfile(profile);
-        }
-      })
-      .catch((err) => {
-        console.error("Redirect sign-in error:", err);
-        setError(err instanceof Error ? err.message : "Sign in failed after redirect");
-      });
+    // Redirect-based web OAuth doesn't apply on native (Phase 3 replaces
+    // sign-in with a native plugin), so skip it there.
+    if (!Capacitor.isNativePlatform()) {
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (result?.user) {
+            const profile = await fetchUserProfile(result.user);
+            setUserProfile(profile);
+          }
+        })
+        .catch((err) => {
+          console.error("Redirect sign-in error:", err);
+          setError(err instanceof Error ? err.message : "Sign in failed after redirect");
+        });
+    }
+
+    // Firebase JS Auth's onAuthStateChanged never fires under the
+    // capacitor://localhost origin (confirmed: reproduces with a bare
+    // Firebase instance loaded independently of this app's bundle — not an
+    // app bug). Don't block rendering on it here; Phase 3 replaces native
+    // auth state entirely via a native plugin bridge.
+    if (Capacitor.isNativePlatform() && !savedToken) {
+      setLoading(false);
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
