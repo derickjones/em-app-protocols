@@ -10,6 +10,7 @@ import ProtocolCard, { ProtocolCardData } from "@/components/ProtocolCard";
 import PulseLine from "@/components/PulseLine";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { openExternal } from "@/lib/native-links";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
@@ -2628,7 +2629,7 @@ export default function Home() {
                             });
                             if (res.ok) {
                               const data = await res.json();
-                              if (data.url) window.open(data.url, "_blank");
+                              if (data.url) openExternal(data.url);
                             }
                           } catch (e) {
                             console.error("Failed to get download URL:", e);

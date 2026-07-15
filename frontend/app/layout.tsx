@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import NativeLinkHandler from "@/components/NativeLinkHandler";
 
 const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
 
@@ -54,6 +55,7 @@ export default function RootLayout({
       </head>
       <body className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}>
         <AuthProvider>
+          <NativeLinkHandler />
           {children}
         </AuthProvider>
       </body>

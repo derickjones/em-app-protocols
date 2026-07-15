@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Upload, FileText, Trash2, RefreshCw, CheckCircle, AlertCircle, ArrowLeft, Menu, SquarePen, Shield, ChevronDown, ChevronRight, Building2, FolderOpen, Database, MapPin, Link2, Loader2, Bookmark } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { Capacitor } from "@capacitor/core";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 
@@ -1161,22 +1162,25 @@ export default function AdminPage() {
                     </p>
                   </div>
 
-                  {/* OneDrive Picker */}
-                  <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-5 flex flex-col items-center justify-center min-w-[200px]">
-                    <button
-                      onClick={handleOneDrivePick}
-                      disabled={uploadStatus.status === "uploading"}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-[#0078d4] text-white rounded-full text-sm font-medium hover:bg-[#106ebe] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M10.182 7.2l4.63 2.69L19.3 7.7a4.947 4.947 0 00-2.092-2.218A4.99 4.99 0 0014.56 4.6a5.05 5.05 0 00-3.073 1.025A4.89 4.89 0 0010.182 7.2zM4.2 13.6l3.54-2.06 3.38 1.97-4.64 2.69-.18.1A3.65 3.65 0 014.5 14.66 3.59 3.59 0 014.2 13.6zm5.88-3l4.63 2.69 5.7-3.32A3.55 3.55 0 0020.78 9a3.64 3.64 0 00-.88-.61l-1.6-.93-3.49 2.03zM14.69 14.2l-4.63-2.69-2.42 1.41a3.65 3.65 0 00.55 3.21A3.69 3.69 0 0010.78 17.6h8.44a2.74 2.74 0 001.68-.57A2.7 2.7 0 0021.92 15.4a2.72 2.72 0 00-.48-1.32l-6.75 3.93z"/>
-                      </svg>
-                      OneDrive
-                    </button>
-                    <p className="text-xs text-[#5f6368] mt-2 text-center">
-                      Pick PDFs from OneDrive
-                    </p>
-                  </div>
+                  {/* OneDrive Picker — hidden on native: its OAuth popup doesn't
+                      work in a WKWebView (see docs/ios-app-workstream.md Phase 4) */}
+                  {!Capacitor.isNativePlatform() && (
+                    <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] p-5 flex flex-col items-center justify-center min-w-[200px]">
+                      <button
+                        onClick={handleOneDrivePick}
+                        disabled={uploadStatus.status === "uploading"}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#0078d4] text-white rounded-full text-sm font-medium hover:bg-[#106ebe] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M10.182 7.2l4.63 2.69L19.3 7.7a4.947 4.947 0 00-2.092-2.218A4.99 4.99 0 0014.56 4.6a5.05 5.05 0 00-3.073 1.025A4.89 4.89 0 0010.182 7.2zM4.2 13.6l3.54-2.06 3.38 1.97-4.64 2.69-.18.1A3.65 3.65 0 014.5 14.66 3.59 3.59 0 014.2 13.6zm5.88-3l4.63 2.69 5.7-3.32A3.55 3.55 0 0020.78 9a3.64 3.64 0 00-.88-.61l-1.6-.93-3.49 2.03zM14.69 14.2l-4.63-2.69-2.42 1.41a3.65 3.65 0 00.55 3.21A3.69 3.69 0 0010.78 17.6h8.44a2.74 2.74 0 001.68-.57A2.7 2.7 0 0021.92 15.4a2.72 2.72 0 00-.48-1.32l-6.75 3.93z"/>
+                        </svg>
+                        OneDrive
+                      </button>
+                      <p className="text-xs text-[#5f6368] mt-2 text-center">
+                        Pick PDFs from OneDrive
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-[#1e1f20] rounded-[28px] border border-[#3c4043] overflow-hidden">

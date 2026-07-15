@@ -305,16 +305,29 @@ guide.
    and generic icon. Needs `@capacitor/splash-screen` + `@capacitor/assets` run
    against the logos in `logos/`.
 4. [ ] Keyboard: **not done**.
-5. [ ] External links: **not done**.
+5. [x] External links: one global `document` click listener
+   (`components/NativeLinkHandler.tsx`, mounted once in `layout.tsx`, self-gated on
+   `Capacitor.isNativePlatform()`) intercepts every `<a target="_blank">` click app-wide
+   and opens it via `@capacitor/browser`'s system browser sheet instead of navigating
+   the WKWebView away — covers all ~30 external links across `page.tsx`,
+   `ProtocolCard.tsx`, and `legal/page.tsx` without touching any of them individually.
+   The one non-anchor case (`window.open(...)` for a personal-file download URL in
+   `page.tsx`) routes through the same shared `lib/native-links.ts` helper. Not yet
+   tap-verified (same automation limitation noted throughout) but wired and
+   compiles/builds clean.
 6. [x] Disable webview affordances: `-webkit-tap-highlight-color: transparent`,
    `user-select: none` on interactive elements, a generic `:active` opacity dip
    (0.7) as the pressed state, `overscroll-behavior: none`, and pinch-zoom disabled
    via `maximumScale: 1, userScalable: false` in the viewport export (all native-build
    gated, same mechanism as safe areas). Momentum scrolling
    (`-webkit-overflow-scrolling: touch`) added to `.native-app body`.
-7. [ ] Hide OneDrive integration on native: **not done** — the OneDrive script tag in
-   `layout.tsx` still loads unconditionally on native; admin/owner controls that
-   trigger its OAuth popup haven't been checked/gated yet.
+7. [x] Hide OneDrive integration on native: the admin page's OneDrive picker button
+   (`app/admin/page.tsx`) is now wrapped in `!Capacitor.isNativePlatform()` — its
+   OAuth popup wasn't tested (out of scope per this doc) but is now simply not
+   offered on native rather than risking a dead-end control. The OneDrive script tag
+   in `layout.tsx` still loads unconditionally (harmless — async/defer, just unused
+   on native); left as-is rather than adding another build-time branch for a
+   negligible cost.
 
 **Not yet started this session:** items 8–12 (typography/touch-target audit beyond
 the tap-highlight/pressed-state work above, motion/scroll polish, dark-mode splash
