@@ -102,6 +102,14 @@ body {
   font-size: 16px;
 }
 
+/* Momentum scrolling for every independently-scrolling container, not just
+   body — WebKit requires this per-element, it doesn't inherit. */
+.native-app .overflow-y-auto,
+.native-app .overflow-auto,
+.native-app .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Title styling for headings - use Space Grotesk */
 .font-title {
   font-family: var(--font-title);
