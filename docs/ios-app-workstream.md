@@ -646,18 +646,19 @@ it's fiddly and undiscoverable.
    troubleshooting section covering every issue actually hit this session.
 
 **Success criteria**
-- [ ] `fastlane beta` goes from source to a processed TestFlight build. **Not yet
-      achieved as of this session** — got through app-record creation, bundle ID
-      registration, fastlane setup, and a full successful archive/compile (7+
-      minutes, entire app including Firebase/Google/Facebook SDKs compiled and
-      linked correctly) before hitting the Keychain ACL wall on the last two
-      embedded frameworks. The one-time Xcode sign-in and team-ID fix are done;
-      what's left is the Keychain "Always Allow" click, which needs to happen in
-      a real interactive Terminal session (handed to the user to run — see
-      docs/ios-release.md).
+- [x] `fastlane beta` goes from source to a processed TestFlight build with zero
+      Xcode GUI interaction and zero Apple ID password/2FA prompts. **Achieved
+      2026-07-15**: build 2 archived, signed, exported, and uploaded; confirmed via
+      the App Store Connect API directly (`GET /v1/builds`) showing
+      `processingState: VALID`. Getting here needed the user to run `fastlane beta`
+      once from a real interactive Terminal (not this session's sandboxed shell) so
+      the Keychain "allow codesign to use this key" dialog could actually be shown
+      and clicked through — documented in `docs/ios-release.md`. Every subsequent
+      run should no longer need that, since the identity now has standing access.
 - [ ] User confirms full manual pass on their iPhone via TestFlight: sign in with
       Google, run a protocol query, view results, navigate all routes, sign out —
-      zero crashes, zero blank screens.
+      zero crashes, zero blank screens. **Not done yet** — build just landed;
+      install via TestFlight and run through this next.
 - [x] `docs/ios-release.md` exists, covers the full one-time setup and every
       release step, and documents every real issue hit this session (not
       hypothetical ones) so a second person or fresh agent won't have to

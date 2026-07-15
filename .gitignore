@@ -47,3 +47,5 @@ frontend/ios/App/Pods/
 frontend/ios/App/build/
 frontend/ios/DerivedData/
 frontend/ios/App/App/public/
+frontend/ios/App/*.ipa
+frontend/ios/App/*.dSYM.zip
