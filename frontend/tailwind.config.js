@@ -9,9 +9,9 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          primary: '#2563EB',
-          'primary-dark': '#1D4ED8',
-          'primary-light': '#3B82F6',
+          primary: '#013DED',
+          'primary-dark': '#012FB8',
+          'primary-light': '#2F63F5',
           accent: '#FF4500',
           success: '#22C55E',
         },
@@ -21,9 +21,9 @@ module.exports = {
         },
       },
       fontFamily: {
-        title: ['var(--font-title)', 'Space Grotesk', 'sans-serif'],
+        title: ['var(--font-title)', '-apple-system', 'system-ui', 'sans-serif'],
         body: ['var(--font-body)', 'Inter', 'sans-serif'],
-        data: ['var(--font-mono)', 'JetBrains Mono', 'monospace'],
+        data: ['var(--font-mono)', 'Source Code Pro', 'monospace'],
       },
       borderColor: {
         DEFAULT: 'var(--border)',

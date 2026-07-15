@@ -1,27 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, Source_Code_Pro } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import NativeLinkHandler from "@/components/NativeLinkHandler";
 
 const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-title",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
+// Display/hero type uses the SF Pro system stack (see --font-title in globals.css).
 const inter = Inter({
   variable: "--font-body",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
+// Source Code Pro powers UI chrome, labels, and data elements.
+const sourceCodePro = Source_Code_Pro({
   variable: "--font-mono",
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -49,11 +45,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark${isCapacitorBuild ? " native-app" : ""}`}>
+    <html lang="en" className={isCapacitorBuild ? "native-app" : ""}>
       <head>
         <script type="text/javascript" src="https://js.live.net/v7.2/OneDrive.js" async defer></script>
       </head>
-      <body className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}>
+      <body className={`${inter.variable} ${sourceCodePro.variable} antialiased`}>
         <AuthProvider>
           <NativeLinkHandler />
           {children}
