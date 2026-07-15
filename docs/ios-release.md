@@ -121,6 +121,44 @@ things are needed the first time, neither obvious from the upload succeeding:
    management (see the note in the Fastfile) — the working path was the raw
    API calls above, not yet wrapped into a lane.
 
+3. **External testers (anyone without an App Store Connect team membership),
+   e.g. inviting someone outside the org.** `POST /v1/betaTesters` into an
+   *internal* group fails with `409 STATE_ERROR` for non-team-members —
+   internal groups only accept existing "Users and Access" team members
+   (adding a new team member is itself Account-Holder-only, `POST /v1/users`
+   returns `403` for a Team API key). External testing has no such
+   restriction, but requires a one-time **Beta App Review** (lighter/faster
+   than full App Store review) before invited testers can see the build:
+   - `POST /v1/betaGroups` with `isInternalGroup: false`, then
+     `POST /v1/betaGroups/{id}/relationships/builds` to associate the
+     specific build (external groups don't get `hasAccessToAllBuilds`).
+   - `POST /v1/betaTesters` with the tester's email + the external group's
+     relationship — same as internal, sends an email invite.
+   - Create a `betaAppLocalizations` resource (`POST /v1/betaAppLocalizations`,
+     locale + `description` + `feedbackEmail`) if one doesn't exist yet —
+     required before a review submission will be accepted
+     (`MISSING_BETA_APP_DESCRIPTION` otherwise).
+   - Fill in `PATCH /v1/betaAppReviewDetails/{appId}` — `contactFirstName`,
+     `contactLastName`, `contactPhone`, `contactEmail`, and either real
+     `demoAccountName`/`demoAccountPassword` (with `demoAccountRequired:
+     true`) or `demoAccountRequired: false` with `notes` explaining how a
+     reviewer can exercise the app without one. This is a *separate* resource
+     from the age rating and from `fastlane/metadata/review_information/`
+     (which is for the full App Store submission, not TestFlight beta
+     review) — a generic `MISSING_REQUIRED_DATA` error with no field name
+     when POSTing `betaAppReviewSubmissions` means this is empty.
+   - The app's **age rating declaration** must also be fully answered first
+     (`PATCH /v1/ageRatingDeclarations/{appInfoId}`) — a fresh app has every
+     field `null`, which also produces the same generic
+     `MISSING_REQUIRED_DATA` error. Note some fields are booleans and some
+     are `NONE`/`INFREQUENT_OR_MILD`/`FREQUENT_OR_INTENSE` enums; the API's
+     `409 ENTITY_ERROR.ATTRIBUTE.TYPE` response names the field and expected
+     type if you guess wrong.
+   - Then `POST /v1/betaAppReviewSubmissions` with a `build` relationship
+     succeeds (`201`, `betaReviewState: WAITING_FOR_REVIEW`). Apple reviews
+     it (usually within a day); once approved, the build becomes visible to
+     everyone in that external group.
+
 Once the invite is accepted and the build shows up: install via the
 TestFlight app on a real device and do a full manual pass — sign in with
 Google, run a protocol query, navigate every route, sign out — see
