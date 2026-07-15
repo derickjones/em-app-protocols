@@ -272,28 +272,56 @@ native bundle. Native auth replaces both.
       branch is gated behind `Capacitor.isNativePlatform()`, and `npm run build`
       produces the same routes/output as the Phase 0 baseline).
 
+**Bug found and fixed during verification:** the native Firebase SDK was never
+initialized — `AppDelegate.swift` was missing `FirebaseApp.configure()`, so every
+native Firebase Auth call would have silently no-opped or crashed. Caught via
+`simctl log show`: `[FirebaseCore] The default Firebase app has not yet been
+configured.` Fixed by adding `import FirebaseCore` and calling
+`FirebaseApp.configure()` in `application(_:didFinishLaunchingWithOptions:)` — this
+step is easy to miss because none of `@capacitor-firebase/authentication`'s docs
+mention it explicitly; it's assumed prior knowledge from Firebase's own iOS setup
+guide.
+
 ---
 
 ## Phase 4 — iOS polish (make it feel like an app, not a webpage)
 
 **Tasks**
-1. Safe areas: set `viewport-fit=cover` in the root layout's viewport meta, and pad the
-   header/footer with `env(safe-area-inset-top/bottom)` — apply via a `.native-app` class
-   or CSS that is harmless on web.
-2. Status bar: `@capacitor/status-bar`, style matched to the app's theme.
-3. Splash screen + app icon: `@capacitor/splash-screen` and generated icon set from the
-   existing logo assets in `logos/` (use `@capacitor/assets` to generate all sizes).
-4. Keyboard: `@capacitor/keyboard`, verify the chat/prompt input isn't obscured when the
-   keyboard opens.
-5. External links (training video link, legal pages' outbound links, OneDrive if present)
-   must open in the system browser (`@capacitor/browser` or `window.open` interception),
-   not navigate the webview away from the app.
-6. Disable webview affordances that feel non-native: text selection callouts where
-   inappropriate, pinch zoom (`user-scalable=no` for the native build), rubber-band
-   overscroll if it looks wrong.
-7. Known scope note: the admin/owner OneDrive integration may not work in the webview
-   (OAuth popup). If broken, hide that control on native (`isNativePlatform()` check) —
-   do not attempt to port it in this workstream.
+1. [x] Safe areas: `viewportFit: 'cover'` added in `app/layout.tsx`'s `viewport` export,
+   gated at build time on `BUILD_TARGET === 'capacitor'` (so the web viewport meta is
+   byte-identical to before). `html` gets a `native-app` class the same way. The three
+   screen-edge fixed/sticky regions in `app/page.tsx` (header, sidebar, bottom pinned
+   prompt bar) got small hook classNames (`app-header`/`app-sidebar`/`app-promptbar`/
+   `app-main`) and matching `env(safe-area-inset-*)` padding in `globals.css`, scoped
+   under `.native-app`. Verified visually: the header text/hamburger icon that was
+   previously clipped by the status bar now sits clear of it.
+2. [x] Status bar: `@capacitor/status-bar` installed; a `useEffect` in `page.tsx` (where
+   the existing `darkMode` toggle state already lives) calls `StatusBar.setStyle` +
+   `setBackgroundColor` whenever the user's theme changes, gated on
+   `Capacitor.isNativePlatform()`. Not yet visually confirmed against a light-mode
+   toggle tap (same tap-automation limitation as Phase 3) — the call itself is
+   wired and doesn't error.
+3. [ ] Splash screen + app icon: **not done**. Still Capacitor's default blank splash
+   and generic icon. Needs `@capacitor/splash-screen` + `@capacitor/assets` run
+   against the logos in `logos/`.
+4. [ ] Keyboard: **not done**.
+5. [ ] External links: **not done**.
+6. [x] Disable webview affordances: `-webkit-tap-highlight-color: transparent`,
+   `user-select: none` on interactive elements, a generic `:active` opacity dip
+   (0.7) as the pressed state, `overscroll-behavior: none`, and pinch-zoom disabled
+   via `maximumScale: 1, userScalable: false` in the viewport export (all native-build
+   gated, same mechanism as safe areas). Momentum scrolling
+   (`-webkit-overflow-scrolling: touch`) added to `.native-app body`.
+7. [ ] Hide OneDrive integration on native: **not done** — the OneDrive script tag in
+   `layout.tsx` still loads unconditionally on native; admin/owner controls that
+   trigger its OAuth popup haven't been checked/gated yet.
+
+**Not yet started this session:** items 8–12 (typography/touch-target audit beyond
+the tap-highlight/pressed-state work above, motion/scroll polish, dark-mode splash
+parity, chat/answer view reading measure, and the full vision-QA screenshot loop
+across every route × theme × device size). This is a large amount of remaining
+visual-polish work; recommend tackling it as its own focused pass with the user
+available to sign off on the screenshot set per the last success criterion below.
 
 **Native look-and-feel (make it beautiful, not just correct).** The bar: someone
 handed the phone should not guess it's a web app. Keep the app's existing visual
@@ -350,8 +378,11 @@ unless a fix obviously benefits mobile web too.
       (including tables) renders without breaking layout, and the input stays usable
       with the keyboard open.
 - [ ] User signs off on the final screenshot set before Phase 5 begins.
-- [ ] The web app rendering is unchanged (visually verify home + one inner page on
-      `npm run dev`).
+- [x] The web app rendering is unchanged: verified `.next/server/app/index.html` from
+      the default `npm run build` has `<html class="dark">` (no `native-app`) and the
+      original unmodified viewport meta tag — the new safe-area/touch-feel CSS and
+      viewport changes are proven build-time-gated to the capacitor target only, not
+      just visually spot-checked.
 
 ---
 

@@ -8,6 +8,8 @@ import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
 import ProtocolCard, { ProtocolCardData } from "@/components/ProtocolCard";
 import PulseLine from "@/components/PulseLine";
+import { Capacitor } from "@capacitor/core";
+import { StatusBar, Style } from "@capacitor/status-bar";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
@@ -407,6 +409,14 @@ export default function Home() {
       } else {
         document.documentElement.classList.remove('dark');
       }
+    }
+  }, [darkMode]);
+
+  // Match the native status bar to the active theme
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      StatusBar.setStyle({ style: darkMode ? Style.Dark : Style.Light });
+      StatusBar.setBackgroundColor({ color: darkMode ? '#0A0A0A' : '#F8F9FA' });
     }
   }, [darkMode]);
 
@@ -1113,7 +1123,7 @@ export default function Home() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 border-r transform transition-all duration-300 ease-in-out ${
+      <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 w-72 border-r transform transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } flex flex-col ${darkMode ? 'bg-[#0D0D0D] border-[#1E1E1E]' : 'bg-white border-gray-200'}`}
         style={darkMode ? { boxShadow: 'inset -1px 0 0 rgba(37,99,235,0.08), 4px 0 24px rgba(0,0,0,0.5)' } : {}}
@@ -1939,9 +1949,9 @@ export default function Home() {
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
+      <main className={`app-main flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
         {/* Header */}
-        <div className={`sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
+        <div className={`app-header sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
           <div className="flex items-center">
             {/* Far Left: Menu - only show when sidebar collapsed */}
             {!sidebarOpen && (
@@ -2702,7 +2712,7 @@ export default function Home() {
 
       {/* Pinned Input (when searching) */}
       {hasSearched && (
-        <div className={`fixed bottom-0 right-0 border-t px-4 py-4 z-40 transition-all duration-300 ${sidebarOpen ? 'left-72' : 'left-0'} ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
+        <div className={`app-promptbar fixed bottom-0 right-0 border-t px-4 py-4 z-40 transition-all duration-300 ${sidebarOpen ? 'left-72' : 'left-0'} ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
           <div className={`max-w-3xl mx-auto border-2 rounded-3xl shadow-lg transition-all duration-200 ${
             darkMode 
               ? 'bg-[#0F0F0F] border-[#3A3A3A] focus-within:border-blue-500 focus-within:ring-3 focus-within:ring-blue-500/25 focus-within:shadow-[0_0_30px_rgba(37,99,235,0.15)]' 

@@ -64,6 +64,37 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ─── Native app (Capacitor iOS) touch feel ───
+   Scoped to .native-app so web rendering (including mobile web) is
+   untouched. Removes the gray flash on tap (there's no hover state on
+   touch, so :active below covers it) and momentum-scrolls everywhere. */
+.native-app * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.native-app button,
+.native-app a,
+.native-app [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.native-app button:active,
+.native-app a:active,
+.native-app [role="button"]:active {
+  opacity: 0.7;
+  transition: opacity 0.1s;
+}
+
+.native-app {
+  overflow: hidden;
+}
+
+.native-app body {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: none;
+}
+
 /* Title styling for headings - use Space Grotesk */
 .font-title {
   font-family: var(--font-title);
@@ -320,4 +351,30 @@ body {
 
 .cite-ref-wrapper:hover .cite-tooltip {
   display: block;
+}
+
+/* ─── Native app (Capacitor iOS) safe areas ───
+   Scoped to .native-app (set on <html> only for the capacitor build) so web
+   rendering is untouched. Reserves space under the notch/status bar and the
+   home indicator for screen-edge fixed/sticky elements. */
+.native-app .app-header {
+  padding-top: calc(env(safe-area-inset-top) + 1rem);
+  padding-left: calc(env(safe-area-inset-left) + 1rem);
+  padding-right: calc(env(safe-area-inset-right) + 1rem);
+}
+
+.native-app .app-sidebar {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
+.native-app .app-promptbar {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+  padding-left: calc(env(safe-area-inset-left) + 1rem);
+  padding-right: calc(env(safe-area-inset-right) + 1rem);
+}
+
+.native-app .app-main {
+  padding-bottom: env(safe-area-inset-bottom);
 }

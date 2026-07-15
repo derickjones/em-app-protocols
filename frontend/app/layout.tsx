@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+
+const isCapacitorBuild = process.env.BUILD_TARGET === "capacitor";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-title",
@@ -26,13 +28,27 @@ export const metadata: Metadata = {
   description: "AI-powered emergency medicine clinical decision support",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Pinch zoom doesn't feel native and there's no content that benefits
+  // from it; keep it enabled on web.
+  maximumScale: isCapacitorBuild ? 1 : undefined,
+  userScalable: isCapacitorBuild ? false : undefined,
+  // Let content draw under the notch/home indicator on native so we can
+  // control the padding ourselves with env(safe-area-inset-*); harmless
+  // on web since Safari only honors viewport-fit within an installed/
+  // full-screen context.
+  viewportFit: isCapacitorBuild ? "cover" : undefined,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark${isCapacitorBuild ? " native-app" : ""}`}>
       <head>
         <script type="text/javascript" src="https://js.live.net/v7.2/OneDrive.js" async defer></script>
       </head>
