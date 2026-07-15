@@ -349,8 +349,13 @@ ANSWER:"""
         result = response.json()
         return result["candidates"][0]["content"]["parts"][0]["text"]
 
-    def generate_answer_stream(self, query: str, contexts: List[Dict]):
-        """Generate answer using Gemini with streaming. Yields text chunks."""
+    def generate_answer_stream(self, query: str, contexts: List[Dict], history: List[Dict] = None):
+        """Generate answer using Gemini with streaming. Yields text chunks.
+
+        `history` is prior conversation turns [{role: 'user'|'assistant', content}]
+        rendered as multi-turn context; only the current turn carries retrieved
+        context (the grounded prompt), so answers stay grounded but conversational.
+        """
         prompt, _ = self._build_prompt_and_context(query, contexts)
 
         url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
@@ -360,14 +365,23 @@ ANSWER:"""
             "Content-Type": "application/json"
         }
 
+        contents = []
+        for turn in (history or []):
+            text = (turn.get("content") or "").strip()
+            if not text:
+                continue
+            role = "model" if turn.get("role") == "assistant" else "user"
+            contents.append({"role": role, "parts": [{"text": text}]})
+        contents.append({"role": "user", "parts": [{"text": prompt}]})
+
         payload = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "contents": contents,
             "generationConfig": {
                 "temperature": 0.2,
                 "maxOutputTokens": 8192
             }
         }
-        
+
         response = requests.post(url, headers=headers, json=payload, stream=True)
         
         if response.status_code != 200:
@@ -1092,7 +1106,7 @@ ANSWER:"""
     def query_stream(self, query: str, include_images: bool = True, sources: List[str] = None,
                      pmc_journals: List[str] = None,
                      enterprise_id: str = None, ed_ids: List[str] = None, bundle_ids: List[str] = None,
-                     personal_user_id: str = None):
+                     personal_user_id: str = None, history: List[Dict] = None):
         """
         Execute a full RAG query with streaming answer generation.
         
@@ -1154,7 +1168,7 @@ ANSWER:"""
         contexts = self._allocate_slots(contexts)
 
         # Step 2: Stream answer from Gemini
-        for text_chunk in self.generate_answer_stream(query, contexts):
+        for text_chunk in self.generate_answer_stream(query, contexts, history=history):
             yield {"type": "chunk", "text": text_chunk}
 
         # Step 3: Get images
