@@ -604,26 +604,64 @@ it's fiddly and undiscoverable.
    other Phase 5/6 step (signing, archiving, TestFlight upload, metadata, submission)
    is scoped to an *existing* app and works fine with the App Manager key already
    set up — this is a one-time, single blocker, not a recurring one.
-3. Configure signing without Xcode login: set the team ID and automatic signing in
-   the project (editable in `project.pbxproj`), and archive with
-   `xcodebuild -allowProvisioningUpdates -authenticationKeyPath/-authenticationKeyID/
-   -authenticationKeyIssuerID` (or `fastlane gym` with the API key) so certificates
-   and profiles are created/renewed automatically via the API key.
-4. Add a `beta` lane: build number auto-increment → `gym` (archive + export) →
-   `pilot` (upload to TestFlight). Run it.
-5. Repeat the Phase 2–4 smoke tests on the TestFlight build (Simulator smoke tests
-   pass first; the user installs via TestFlight on their iPhone for the device pass —
-   this replaces cable-tethered Xcode device runs entirely).
-6. Document the release process in `docs/ios-release.md`: the exact commands from clean
-   checkout to TestFlight upload, so a fresh agent can repeat it.
+3. [partial] Configure signing without an *Apple ID password prompt* (a plain Xcode
+   Accounts sign-in turned out to be unavoidable — see below): the `beta` lane uses
+   **manual** signing with an explicit cert/profile rather than automatic +
+   `-allowProvisioningUpdates`, because the latter reported
+   `error: No Account for Team '<id>'` regardless of API-key auth flags passed
+   straight to `xcodebuild`. Two real, non-CLI-solvable requirements surfaced during
+   testing:
+   - **Xcode itself must have the team signed in** (Xcode → Settings → Accounts →
+     add Apple ID) before `xcodebuild` will trust *any* locally-installed
+     provisioning profile for that team, API key or not. This is a genuine Xcode
+     behavior, confirmed by testing: the error persisted through several different
+     CLI-only workarounds (explicit `-authenticationKeyPath/-authenticationKeyID/
+     -authenticationKeyIssuerID` flags, manually copying the profile to
+     `~/Library/MobileDevice/Provisioning Profiles/`) and only went away after an
+     interactive Xcode sign-in. No password/2FA prompt was needed for this step
+     itself, just the sign-in.
+   - **A wrong-team-ID trap**: `security find-identity -v -p codesigning` initially
+     showed a personal/free "Apple Development" team (`9J4BZ42NBS`) that turned out
+     to be *different* from the actual paid Developer Program team tied to the API
+     key and app record (`Z4584RKFL3`, matching the `seedId` returned when
+     registering the bundle ID). Using the wrong team produces the exact same "No
+     Account for Team" error, which looks identical to the Xcode-sign-in problem —
+     easy to misdiagnose. Fixed once identified.
+   - **Keychain private-key ACL**: the first time a new Apple Distribution
+     certificate is created, signing embedded frameworks can hang waiting on a
+     Keychain "allow this tool to use your private key?" dialog that a
+     sandboxed/headless shell can't show or answer. Fixed by running `fastlane
+     beta` once from a real interactive Terminal and clicking Always Allow — after
+     that it's permanent.
+   All three are documented in detail in `docs/ios-release.md`'s troubleshooting
+   section, since they're exactly the kind of thing a fresh agent would otherwise
+   waste significant time rediscovering.
+4. [x] Added a `beta` lane: build number auto-increment → manual-signing setup →
+   `get_certificates`/`get_provisioning_profile` (API key, no Apple ID) → `gym`
+   (archive + export) → `pilot` (upload to TestFlight).
+5. [ ] Repeat the Phase 2–4 smoke tests on the TestFlight build — not done yet,
+   pending a successful `fastlane beta` run (see success criteria below).
+6. [x] Documented the release process in `docs/ios-release.md`: exact commands,
+   the one-time setup (including the two GUI-only steps above), and a
+   troubleshooting section covering every issue actually hit this session.
 
 **Success criteria**
-- [ ] `fastlane beta` goes from source to a processed TestFlight build with zero
-      Xcode GUI interaction and zero Apple ID password/2FA prompts.
+- [ ] `fastlane beta` goes from source to a processed TestFlight build. **Not yet
+      achieved as of this session** — got through app-record creation, bundle ID
+      registration, fastlane setup, and a full successful archive/compile (7+
+      minutes, entire app including Firebase/Google/Facebook SDKs compiled and
+      linked correctly) before hitting the Keychain ACL wall on the last two
+      embedded frameworks. The one-time Xcode sign-in and team-ID fix are done;
+      what's left is the Keychain "Always Allow" click, which needs to happen in
+      a real interactive Terminal session (handed to the user to run — see
+      docs/ios-release.md).
 - [ ] User confirms full manual pass on their iPhone via TestFlight: sign in with
       Google, run a protocol query, view results, navigate all routes, sign out —
       zero crashes, zero blank screens.
-- [ ] `docs/ios-release.md` exists and a second person (or a fresh agent) could follow it.
+- [x] `docs/ios-release.md` exists, covers the full one-time setup and every
+      release step, and documents every real issue hit this session (not
+      hypothetical ones) so a second person or fresh agent won't have to
+      rediscover them.
 
 ---
 
@@ -633,29 +671,39 @@ it's fiddly and undiscoverable.
 reviewing the metadata text and pressing nothing.
 
 **Tasks**
-1. Keep it iPhone-only for v1 (set `TARGETED_DEVICE_FAMILY = 1`): halves the
-   screenshot burden and avoids iPad-layout review risk.
-2. Generate App Store screenshots from the Simulator: boot a 6.9" device (iPhone 16
-   Pro Max) and a 6.5"-class device, drive the app to its best screens (home, a
-   protocol answer, personal page), `xcrun simctl io booted screenshot` each. Verify
-   with vision that they're presentable before uploading.
-3. Write metadata in `fastlane/metadata/` (checked in, reviewable in the PR):
-   description, keywords (include "EMA"), subtitle (e.g. "EMA — ED protocols"),
-   support URL, marketing URL, privacy policy URL
-   (`https://www.emergencymedicine.app/legal`). Category: Medical.
-4. App Privacy declarations: submit via `fastlane deliver`'s privacy JSON
-   (`app_privacy_details`) — auth = identifiers (email), plus whatever
-   analytics_service collects (confirm with the owner what to declare). Voice input
-   (Phase 4b) uses Apple's on-device/Apple-server speech recognition and the app does
-   not store audio — declare accordingly, and mention the mic's purpose in the review
-   notes so the permission prompt doesn't surprise the reviewer.
-5. Review notes for the gated app (critical to avoid rejection): explain it is a
-   clinical-protocols app for emergency clinicians with institution-gated content,
-   and supply a **pre-approved demo account** (create a non-Mayo test user, approve
-   it at `/owner`) with its login steps. State that Google sign-in and email login
-   are both available and the demo account uses the email path.
-6. Age rating questionnaire (all "no" except medical/treatment info), pricing (free),
-   availability. All settable via `deliver`.
+1. [x] Locked iPhone-only for v1: `TARGETED_DEVICE_FAMILY = 1` in `project.pbxproj`
+   (was `"1,2"` including iPad).
+2. [partial] Generated one App Store screenshot at 6.9" resolution
+   (`fastlane/screenshots/en-US/01-home.png`, iPhone 17 Pro Max simulator,
+   1320×2868 — the home screen). **Not done:** a 6.5"-class device shot, and
+   screens beyond the home page (a protocol answer, personal page) — those need
+   an actual submitted query or signed-in state, which needs interactive taps this
+   session's headless environment couldn't reliably drive (same limitation noted
+   throughout Phase 3/4).
+3. [x] Drafted metadata in `fastlane/metadata/` (`en-US/name.txt`, `subtitle.txt`,
+   `description.txt`, `keywords.txt`, `promotional_text.txt`, `release_notes.txt`,
+   `support_url.txt`, `marketing_url.txt`, `privacy_url.txt`, plus top-level
+   `primary_category.txt` = MEDICAL and `copyright.txt`) — content drawn from the
+   app's own `/about` page copy. **This is a draft for the user to review and edit,
+   not final/approved wording** — per this phase's stated goal, "human involvement
+   is reviewing the metadata text." `support_url.txt` points at `/about` since no
+   dedicated support contact page/email exists yet; flag if a real one should be
+   used instead.
+4. [ ] App Privacy declarations: **not done**. Needs a decision on what
+   `analytics_service` collects (if anything) before it can be declared accurately —
+   flagging for the owner rather than guessing.
+5. [partial] Review information drafted in `fastlane/metadata/review_information/`
+   (first_name, last_name, email_address, notes — the gating/demo explanation and
+   mic-permission note from this task are written out in `notes.txt`). **Not done:**
+   `phone_number.txt` is a literal TODO placeholder (no number available to use),
+   and the demo account itself (`demo_user.txt`/`demo_password.txt`) hasn't been
+   created — that needs a non-Mayo test user created and approved at `/owner`,
+   which writes to production Firestore auth data, so it wasn't done unilaterally.
+   Corporate passwordless login (no password) is the intended demo path, noted in
+   `demo_password.txt`.
+6. [ ] Age rating questionnaire, pricing, availability: **not done** — these are
+   interactive `deliver` prompts / App Store Connect settings, not file-based
+   metadata, and weren't attempted this session.
 7. `fastlane deliver --submit_for_review` using the TestFlight build from Phase 5.
 8. While review is pending (typically 1–3 days), continue Phase 7. If rejected,
    read the rejection reason, fix, and resubmit — guideline 4.2 (minimum

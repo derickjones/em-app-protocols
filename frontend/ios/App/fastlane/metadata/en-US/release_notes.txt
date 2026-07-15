@@ -1,0 +1,1 @@
+Initial release of Emergency Medicine App (EMA) for iPhone: native Google sign-in, protocol search and chat, and voice dictation for hands-free questions.

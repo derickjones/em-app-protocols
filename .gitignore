@@ -34,6 +34,10 @@ indexing.log
 
 # iOS signing / App Store Connect secrets — never commit
 *.p8
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
 frontend/ios/App/fastlane/.env
 frontend/ios/App/fastlane/report.xml
 frontend/ios/App/fastlane/README.md

@@ -1,0 +1,11 @@
+Emergency Medicine App (EMA) is a clinical decision support tool for emergency medicine clinicians, gated by institution. A user's home hospital/department must approve their account before that institution's protocols become searchable; general clinical reference content (WikEM, PMC Open Access, LITFL, REBEL EM, ALiEM) is available to any signed-in user regardless of approval status.
+
+Two sign-in options are available:
+1. Google Sign-In — @mayo.edu accounts are auto-approved; other Google accounts land in a "no access" state and can submit a named access request for owner review.
+2. Corporate passwordless email login — enter an email, no password required, for environments where Google OAuth is blocked by institutional policy (e.g. Imprivata).
+
+DEMO ACCOUNT: see demo_user.txt / demo_password.txt — [TODO: not yet created, see notes above].
+
+The app requests microphone and speech recognition permissions to support hands-free voice dictation of protocol questions (critical for gloved/mid-task clinicians in the ED). Speech recognition runs on-device via Apple's SFSpeechRecognizer; the app does not record, store, or transmit audio.
+
+Live "Pilot" content notice: this is an active pilot deployment. AI-generated answers are clearly labeled and clinicians are instructed to verify against primary sources — see the in-app disclaimer and the Legal & Disclaimer page (privacy_url).

@@ -25,17 +25,48 @@ platform :ios do
       build_number: latest_testflight_build_number(app_identifier: "app.emergencymedicine.ios") + 1
     )
 
+    # xcodebuild's own -allowProvisioningUpdates couldn't resolve a team/
+    # profile via the API key alone in this environment ("No Account for
+    # Team..."), even with -authenticationKey* flags passed through. The
+    # dedicated cert/sigh actions (below) use the same API key via
+    # Spaceship::ConnectAPI and work reliably, so signing is done explicitly
+    # here rather than left to xcodebuild to sort out at archive time.
     update_code_signing_settings(
-      use_automatic_signing: true,
+      use_automatic_signing: false,
       path: "App.xcodeproj",
-      team_id: "9J4BZ42NBS"
+      team_id: "Z4584RKFL3",
+      code_sign_identity: "Apple Distribution",
+      profile_name: "app.emergencymedicine.ios AppStore"
     )
+
+    # The first time this creates a new "Apple Distribution" certificate,
+    # macOS may show a Keychain "allow codesign to use this private key?"
+    # dialog when gym later signs embedded frameworks. If running this in a
+    # sandboxed/non-interactive shell where that dialog can't be answered,
+    # run `fastlane beta` once from a normal interactive Terminal instead —
+    # clicking "Always Allow" there fixes it permanently for future runs.
+    get_certificates(development: false, team_id: "Z4584RKFL3")
+    get_provisioning_profile(app_identifier: "app.emergencymedicine.ios", team_id: "Z4584RKFL3")
+
+    # Neither sigh's own "Installing..." step nor the install_provisioning_
+    # profile action actually places the profile where xcodebuild looks for
+    # it in this environment (~/Library/MobileDevice/Provisioning Profiles/,
+    # named <UUID>.mobileprovision) — do it explicitly.
+    profiles_dir = File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
+    FileUtils.mkdir_p(profiles_dir)
+    dest = File.join(profiles_dir, "#{lane_context[SharedValues::SIGH_UUID]}.mobileprovision")
+    FileUtils.cp(lane_context[SharedValues::SIGH_PROFILE_PATH], dest)
 
     gym(
       project: "App.xcodeproj",
       scheme: "App",
       export_method: "app-store",
-      xcargs: "-allowProvisioningUpdates"
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "app.emergencymedicine.ios" => "app.emergencymedicine.ios AppStore"
+        }
+      }
     )
 
     pilot(

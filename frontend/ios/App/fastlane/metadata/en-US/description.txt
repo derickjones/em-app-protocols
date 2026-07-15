@@ -1,0 +1,19 @@
+Emergency Medicine App (EMA) is a clinical decision support tool built for emergency medicine. It gives physicians, APPs, nurses, and trainees instant, searchable access to their department's clinical protocols alongside the best open-access emergency medicine literature — all in one place, with answers in seconds.
+
+Instead of navigating clunky hospital intranets or clicking through PDFs during a critical patient encounter, clinicians can ask a plain-language question and get a cited, actionable answer with the relevant flowcharts and algorithms displayed prominently.
+
+HOW IT WORKS
+• Protocol Ingestion — hospitals upload their protocols as PDFs; EMA extracts all text, images, flowcharts, and algorithms automatically
+• AI-Powered Search — indexes everything so the most relevant content is retrieved in milliseconds
+• Instant Answers — a concise, cited answer is synthesized from the retrieved content and streamed to you in real time
+• Visual-First — flowcharts, algorithms, and protocol diagrams are displayed alongside every answer, with clickable citations back to the source PDF
+
+WHO IT'S FOR
+Emergency physicians, advanced practice providers (PAs, NPs), emergency department nurses, residents and fellows, and medical students on EM rotations.
+
+BEYOND YOUR DEPARTMENT'S PROTOCOLS
+EMA also searches across the best open-access emergency medicine resources — WikEM, PMC Open Access, LITFL, REBEL EM, and ALiEM — all used under Creative Commons licenses with full attribution.
+
+Access to institution-specific protocols is gated: your department must approve your account before its protocols become searchable. General clinical reference content is available to any signed-in user.
+
+Pilot notice: AI-generated content may contain errors and may change as we evaluate the tool. Always verify against primary sources and your own clinical judgment. This app is a reference aid for trained healthcare professionals — it is not a substitute for professional medical judgment and does not establish a provider-patient relationship.
