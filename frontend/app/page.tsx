@@ -977,6 +977,11 @@ export default function Home() {
   // Converts inline [N] references into superscript links that scroll to the
   // matching citation and show a tooltip on hover with the source name.
   const citationComponents: Components = {
+    table: ({ children, ...props }) => (
+      <div className="overflow-x-auto -mx-1 px-1">
+        <table {...props}>{children}</table>
+      </div>
+    ),
     p: ({ children, ...props }) => {
       const citations = response?.citations ?? [];
       const processNode = (node: React.ReactNode): React.ReactNode => {
@@ -1952,7 +1957,7 @@ export default function Home() {
       </aside>
 
       {/* Main Content */}
-      <main className={`app-main flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
+      <main className={`app-main flex-1 min-w-0 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
         {/* Header */}
         <div className={`app-header sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
           <div className="flex items-center">
@@ -1971,7 +1976,7 @@ export default function Home() {
             )}
 
             {/* Center: Title */}
-            <div className="flex-1 flex flex-col items-center text-center">
+            <div className="flex-1 min-w-0 flex flex-col items-center text-center">
               <h1
                 onClick={resetSearch}
                 className={`font-title font-extrabold transition-all duration-300 cursor-pointer ${
