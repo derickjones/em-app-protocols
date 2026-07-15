@@ -95,6 +95,13 @@ body {
   overscroll-behavior: none;
 }
 
+/* iOS Safari auto-zooms on focus for any input under 16px */
+.native-app input,
+.native-app textarea,
+.native-app select {
+  font-size: 16px;
+}
+
 /* Title styling for headings - use Space Grotesk */
 .font-title {
   font-family: var(--font-title);

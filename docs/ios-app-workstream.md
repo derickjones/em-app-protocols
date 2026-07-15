@@ -301,9 +301,20 @@ guide.
    `Capacitor.isNativePlatform()`. Not yet visually confirmed against a light-mode
    toggle tap (same tap-automation limitation as Phase 3) — the call itself is
    wired and doesn't error.
-3. [ ] Splash screen + app icon: **not done**. Still Capacitor's default blank splash
-   and generic icon. Needs `@capacitor/splash-screen` + `@capacitor/assets` run
-   against the logos in `logos/`.
+3. [ ] Splash screen + app icon: **blocked, needs owner input — not a mechanical task.**
+   The only source asset (`logos/ema_logo.png`) is a wide wordmark lockup (1448×1086,
+   ~4.4:1 "e_[ECG]_a" mark plus "Emergency Medicine / Protocol Assistant" text below
+   it) designed for a banner, not a square icon. Tried cropping just the "e_[ECG]_a"
+   mark and centering it in a 1024×1024 square (scratchpad, not committed): it renders
+   as a thin horizontal sliver, illegible at real home-screen icon sizes — the
+   underlying shape is too wide-and-short to fill a square icon well without a real
+   redesign decision (e.g. stacking "e/a" vertically around the ECG line, using just
+   the ECG squiggle alone, or a differently-composed square mark). This is a brand
+   judgment call, not something to guess at automatically, especially for a
+   permanent, highly-visible App Store asset. **Left as Capacitor's default icon/blank
+   splash for now** rather than shipping a bad result — needs either a square-friendly
+   source asset from whoever designed the logo, or explicit direction from the owner
+   on how to compose one, before running `@capacitor/assets`.
 4. [x] Keyboard: `@capacitor/keyboard` installed, `resize: KeyboardResize.Native` set in
    `capacitor.config.ts` (WKWebView's frame itself shrinks when the keyboard shows,
    which correctly repositions our `fixed bottom-0` prompt bar above it — no bespoke
@@ -334,12 +345,19 @@ guide.
    on native); left as-is rather than adding another build-time branch for a
    negligible cost.
 
-**Not yet started this session:** items 8–12 (typography/touch-target audit beyond
-the tap-highlight/pressed-state work above, motion/scroll polish, dark-mode splash
-parity, chat/answer view reading measure, and the full vision-QA screenshot loop
-across every route × theme × device size). This is a large amount of remaining
-visual-polish work; recommend tackling it as its own focused pass with the user
-available to sign off on the screenshot set per the last success criterion below.
+8. [partial] Typography and touch ergonomics: added `.native-app input/textarea/select
+   { font-size: 16px }` (found several inputs at `text-xs`/`text-sm`, i.e. 12–14px,
+   which would trigger iOS auto-zoom on focus — the request-access name/email fields,
+   the feedback comment box, and both chat prompt textareas). Tap-highlight/pressed-state
+   already covered under item 6. **Not done:** a full ≥44×44pt tap-target audit across
+   every icon button, nav item, and protocol card, and the system-font-stack question
+   (currently uses the brand fonts — Space Grotesk/Inter — which is presumably
+   intentional branding, left unchanged).
+   Items 9–12 (motion/scroll polish, dark-mode splash parity, chat/answer view reading
+   measure, and the full vision-QA screenshot loop across every route × theme × device
+   size) are **not started this session.** This is a large amount of remaining
+   visual-polish work; recommend tackling it as its own focused pass with the user
+   available to sign off on the screenshot set per the last success criterion below.
 
 **Native look-and-feel (make it beautiful, not just correct).** The bar: someone
 handed the phone should not guess it's a web app. Keep the app's existing visual
