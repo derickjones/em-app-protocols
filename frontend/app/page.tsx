@@ -2,17 +2,15 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Mic, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star, Bookmark } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star, Bookmark } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
 import ProtocolCard, { ProtocolCardData } from "@/components/ProtocolCard";
-import PulseLine from "@/components/PulseLine";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { Keyboard, KeyboardStyle } from "@capacitor/keyboard";
 import { openExternal } from "@/lib/native-links";
-import { useSpeechInput } from "@/lib/useSpeechInput";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
@@ -148,20 +146,6 @@ interface EnterpriseData {
   allEnterprises?: { id: string; name: string; eds: EDData[] }[];
 }
 
-const QUERY_EXAMPLES = [
-  {
-    label: "Department protocols",
-    prompt: "What does our sepsis protocol say?",
-  },
-  {
-    label: "Your uploaded files",
-    prompt: "Summarize my uploaded asthma PDF",
-  },
-  {
-    label: "General clinical questions",
-    prompt: "How do I manage hyperkalemia with ECG changes?",
-  },
-] as const;
 
 function getRouteDisplay(route?: string) {
   if (route === "local_protocol") {
@@ -202,17 +186,8 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState(true);
-
-  // Voice dictation for the prompt input (native + web speech recognition)
-  const speech = useSpeechInput();
-  const handleMicClick = () => {
-    if (speech.permissionDenied) {
-      alert("Microphone access is off. To dictate your question, enable Microphone and Speech Recognition for this app in iOS Settings.");
-      return;
-    }
-    speech.toggle(question, setQuestion);
-  };
+  const [darkMode, setDarkMode] = useState(false);
+  const [typedPlaceholder, setTypedPlaceholder] = useState("");
 
   // Protocol cards state
   const [protocolCards, setProtocolCards] = useState<ProtocolCardData[]>([]);
@@ -302,6 +277,18 @@ export default function Home() {
   // Is the globe "on"? (any external source is active)
   const globeActive = wikemEnabled || pmcEnabled || litflEnabled || rebelemEnabled || aliemEnabled;
 
+  // Data-source filter chip styling (Figma FILTERS row)
+  const sourceChipClass = (active: boolean) =>
+    `inline-flex items-center gap-2 pl-2.5 ${active ? 'pr-1' : 'pr-2.5'} py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
+      active
+        ? darkMode
+          ? 'bg-[#0E173D] border-brand-primary text-brand-primary'
+          : 'bg-white border-brand-primary text-brand-primary'
+        : darkMode
+          ? 'border-[#2A3763] text-gray-500 hover:border-brand-primary hover:text-brand-primary'
+          : 'border-gray-300 text-gray-400 hover:border-brand-primary hover:text-brand-primary'
+    }`;
+
   // Save EM Universe preferences to localStorage
   const saveUniversePreferences = () => {
     if (typeof window !== 'undefined') {
@@ -378,8 +365,8 @@ export default function Home() {
       if (savedTheme) {
         setDarkMode(savedTheme === 'dark');
       } else {
-        // Default to dark mode for new users
-        setDarkMode(true);
+        // Default to light mode (white + dot grid) for new users
+        setDarkMode(false);
       }
 
       // Load EM Universe preferences
@@ -429,10 +416,28 @@ export default function Home() {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       StatusBar.setStyle({ style: darkMode ? Style.Dark : Style.Light });
-      StatusBar.setBackgroundColor({ color: darkMode ? '#0A0A0A' : '#F8F9FA' });
+      StatusBar.setBackgroundColor({ color: darkMode ? '#0B1535' : '#F8F9FA' });
       Keyboard.setStyle({ style: darkMode ? KeyboardStyle.Dark : KeyboardStyle.Light });
     }
   }, [darkMode]);
+
+  // Typewriter effect for the search prompt — signals the field is typeable
+  useEffect(() => {
+    if (hasSearched) return;
+    const full = "What's the emergency?";
+    setTypedPlaceholder("");
+    let i = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      i += 1;
+      setTypedPlaceholder(full.slice(0, i));
+      if (i < full.length) {
+        timer = setTimeout(tick, 42);
+      }
+    };
+    timer = setTimeout(tick, 350);
+    return () => clearTimeout(timer);
+  }, [hasSearched]);
 
   // Save favorite protocols to localStorage
   useEffect(() => {
@@ -1970,176 +1975,149 @@ export default function Home() {
       {/* Main Content */}
       <main className={`app-main flex-1 min-w-0 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
         {/* Header */}
-        <div className={`app-header sticky top-0 z-30 w-full px-4 pt-4 border-b pb-3 ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
+        <div className="app-header sticky top-0 z-30 w-full px-4 pt-4 pb-3 bg-transparent">
           <div className="flex items-center">
-            {/* Far Left: Menu - only show when sidebar collapsed */}
-            {!sidebarOpen && (
-              <button 
+            {/* Left: EMA logo doubles as the menu button */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              title="Open menu"
+              aria-label="Open menu"
+              className="flex-shrink-0 p-1 rounded-lg transition-transform duration-200 hover:scale-105"
+            >
+              <img
+                src={darkMode ? "/ema-logo-dark.svg" : "/ema-logo.svg"}
+                alt="EMA — open menu"
+                className={`w-auto transition-all duration-300 ${hasSearched ? "h-7" : "h-9"}`}
+              />
+            </button>
+
+            <div className="flex-1" />
+
+            {/* Right: primary nav */}
+            <nav className="flex items-center gap-2">
+              <button
                 onClick={() => setSidebarOpen(true)}
-                className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'}`}
+                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
               >
-                <div className="flex flex-col gap-1.5">
-                  <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
-                  <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
-                  <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-black'}`} />
-                </div>
+                Settings
               </button>
-            )}
-
-            {/* Center: Title */}
-            <div className="flex-1 min-w-0 flex flex-col items-center text-center">
-              <h1
-                onClick={resetSearch}
-                className={`font-title font-extrabold transition-all duration-300 cursor-pointer ${
-                  hasSearched ? "text-xl tracking-wide" : "text-5xl tracking-tight"
-                }`}
-                style={darkMode && !hasSearched ? { textShadow: '0 0 60px rgba(37,99,235,0.25), 0 0 120px rgba(37,99,235,0.1)' } : {}}
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
               >
-              emergency medicine app
-            </h1>
-            {!hasSearched && (
-              <p className={`text-sm font-data mt-3 tracking-wider uppercase ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                AI-powered clinical decision support
-              </p>
-            )}
-          </div>
-
-          {/* Right: Question bubble */}
-          <div className="flex-shrink-0 max-w-[200px]">
-            {/* Question display removed - was redundant with main content */}
+                History
+              </button>
+              <a
+                href="/personal"
+                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
+              >
+                My Files
+              </a>
+            </nav>
           </div>
         </div>
-      </div>
 
       {/* Main Content */}
       <div className="w-full max-w-5xl mx-auto px-4 py-8">
         {!hasSearched ? (
           /* Initial Search View */
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
-            <div className="w-full max-w-3xl px-4">
-              {/* Input Box - Gemini style with source icons inside */}
-              <div className={`relative mt-2 border-2 rounded-3xl transition-all duration-200 ${
-                darkMode 
-                  ? 'bg-[#0F0F0F] border-[#3A3A3A] shadow-lg shadow-black/50 focus-within:border-blue-500 focus-within:ring-3 focus-within:ring-blue-500/25 focus-within:shadow-[0_0_30px_rgba(37,99,235,0.15)]' 
-                  : 'bg-gray-50 border-gray-300 shadow-lg focus-within:border-blue-400 focus-within:ring-3 focus-within:ring-blue-100'
-              }`}>
-                <textarea
-                  placeholder="What's the emergency?"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onFocus={() => setSearchFocused(true)}
-                  onBlur={() => setSearchFocused(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSubmit();
-                    }
-                  }}
-                  rows={2}
-                  className={`w-full p-4 pl-5 pr-28 rounded-t-3xl text-sm resize-none focus:outline-none bg-transparent ${
-                    darkMode 
-                      ? 'text-gray-100 placeholder-gray-500' 
-                      : 'text-gray-800'
-                  }`}
-                />
-
-                <div className="px-5 pb-2">
-                  <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    <span>Try:</span>
-                    {QUERY_EXAMPLES.map((example, index) => (
-                      <React.Fragment key={example.label}>
-                        {index > 0 && <span className={darkMode ? 'text-gray-700' : 'text-gray-300'}>·</span>}
-                        <button
-                          type="button"
-                          onClick={() => setQuestion(example.prompt)}
-                          className={`transition-colors duration-200 ${
-                            darkMode ? 'hover:text-blue-300' : 'hover:text-blue-600'
-                          }`}
-                        >
-                          {example.label}
-                        </button>
-                      </React.Fragment>
-                    ))}
-                  </div>
+            <div className="w-full max-w-3xl px-4 flex flex-col items-center">
+              {/* Query box — EMA MainDash minimalist prompt (centered as a unit) */}
+              <div className="relative mt-2 w-fit max-w-full">
+                <div className="flex items-baseline gap-1.5">
+                  {/* Blue caret — the "|" glyph in brand blue, blinking, inline with the text */}
+                  <span
+                    aria-hidden="true"
+                    className={`font-title font-medium text-4xl md:text-5xl select-none flex-shrink-0 ${!question ? 'animate-caret' : ''}`}
+                    style={{ letterSpacing: 0, lineHeight: 1.19, color: '#013DED', transform: 'translateY(-0.09em)' }}
+                  >
+                    |
+                  </span>
+                  <textarea
+                    placeholder={typedPlaceholder}
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => setSearchFocused(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
+                    }}
+                    rows={1}
+                    style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent', fieldSizing: 'content' } as React.CSSProperties}
+                    className={`p-0 w-[23.75rem] md:w-[31.25rem] max-w-full font-title font-medium bg-transparent resize-none focus:outline-none text-4xl md:text-5xl placeholder:opacity-100 focus:placeholder:text-transparent ${
+                      darkMode
+                        ? 'text-white placeholder:text-white'
+                        : 'text-[#0E173D] placeholder:text-[#0E173D]'
+                    }`}
+                  />
                 </div>
 
-                {/* Bottom bar inside search box */}
-                <div className={`flex items-center justify-between px-4 pb-3 pt-0`}>
-                  {/* Source toggles + ED filters - left side */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => toggleSource("wikem")}
-                      title="EM Universe — WikEM topics + PMC peer-reviewed literature"
-                      className={`p-2 rounded-xl transition-all duration-200 ${
-                        globeActive
-                          ? darkMode
-                            ? 'bg-blue-600/20 text-blue-400'
-                            : 'bg-blue-50 text-blue-600'
-                          : darkMode
-                            ? 'text-[#6B7280] hover:text-gray-300 hover:bg-[#1E1E1E]'
-                            : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <Globe className="w-5 h-5" />
-                    </button>
-                    {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
-                        <button
-                          key={ed.id}
-                          onClick={() => toggleEdSelection(ed.id)}
-                          title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 ${
-                            darkMode
-                              ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                              : 'bg-blue-50 text-blue-600 border border-blue-200'
-                          }`}
-                        >
-                          {ed.name}
-                        </button>
-                    ))}
-                  </div>
+                {/* Data sources — Figma FILTERS row */}
+                <div className="mt-4 flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setSidebarOpen(true)}
+                    title="Manage data sources & filters"
+                    className="inline-flex items-center px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
+                  >
+                    Filters
+                  </button>
 
-                  {/* Right side - mic & submit */}
-                  <div className="flex items-center gap-2">
-                    {speech.isSupported && (
+                  {/* EM Universe (WikEM, PMC, LITFL, REBEL EM, ALiEM) */}
+                  <button
+                    onClick={() => toggleSource("wikem")}
+                    title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM"
+                    className={sourceChipClass(globeActive)}
+                  >
+                    EM Universe
+                    {globeActive && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
+                  </button>
+
+                  {/* Enterprise EDs — e.g. Mayo Protocols, MCHS, RST */}
+                  {enterprise?.eds.map((ed) => {
+                    const active = selectedEds.has(ed.id);
+                    return (
+                      <button
+                        key={ed.id}
+                        onClick={() => toggleEdSelection(ed.id)}
+                        title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
+                        className={sourceChipClass(active)}
+                      >
+                        {ed.name}
+                        {active && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
+                      </button>
+                    );
+                  })}
+
+                  {/* My uploaded files */}
+                  {(user || userProfile) && (
                     <button
-                      type="button"
-                      title="Voice input"
-                      onClick={handleMicClick}
-                      className={`w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                        speech.listening
-                          ? 'text-red-500 bg-red-500/10 animate-pulse'
-                          : darkMode
-                          ? 'text-gray-400 hover:bg-[#1E1E1E] hover:text-gray-200'
-                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                      }`}
+                      onClick={() => setPersonalEnabled(!personalEnabled)}
+                      title="Search your uploaded files"
+                      className={sourceChipClass(personalEnabled)}
                     >
-                      <Mic className="w-4 h-4" />
+                      My Files
+                      {personalEnabled && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                     </button>
+                  )}
+
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!question.trim() || loading || isStreaming}
+                    title="Submit (or press Enter)"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-[4px] text-white bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 disabled:opacity-40"
+                  >
+                    {loading || isStreaming ? (
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <ArrowUp className="w-3.5 h-3.5" />
                     )}
-                    <button
-                      onClick={handleSubmit}
-                      disabled={!question.trim() || loading || isStreaming}
-                      title="Submit"
-                      className={`w-9 h-9 flex-shrink-0 rounded-xl text-white flex items-center justify-center transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 ${
-                        darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800'
-                      }`}
-                    >
-                      {loading || isStreaming ? (
-                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <ArrowUp className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
+                  </button>
                 </div>
               </div>
-
-              {/* Full-width ECG strip below search box */}
-              {darkMode && (
-                <div className="relative w-screen left-1/2 -translate-x-1/2 mt-4">
-                  <PulseLine className="opacity-80" dimmed={searchFocused} />
-                </div>
-              )}
 
               {/* Pinned Protocols — combined highlighted + favorites */}
               {(highlightedProtocols.length > 0 || favoriteProtocols.length > 0) && (
@@ -2798,29 +2776,11 @@ export default function Home() {
 
               {/* Right side */}
               <div className="flex items-center gap-2">
-                {speech.isSupported && (
-                <button
-                  type="button"
-                  title="Voice input"
-                  onClick={handleMicClick}
-                  className={`w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                    speech.listening
-                      ? 'text-red-500 bg-red-500/10 animate-pulse'
-                      : darkMode
-                      ? 'text-gray-400 hover:bg-[#1E1E1E] hover:text-gray-200'
-                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                  }`}
-                >
-                  <Mic className="w-4 h-4" />
-                </button>
-                )}
                 <button
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading || isStreaming}
                   title="Submit"
-                  className={`w-8 h-8 rounded-lg text-white flex items-center justify-center transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 ${
-                    darkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-black hover:bg-gray-800'
-                  }`}
+                  className="w-8 h-8 rounded-lg text-white flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
                 >
                   {loading || isStreaming ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
