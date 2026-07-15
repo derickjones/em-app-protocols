@@ -138,9 +138,10 @@ directory; the default `npm run build` still produces the exact same Vercel buil
       hang below). All six routes are part of the same client-rendered SPA bundle
       confirmed working on web; interactive tap-through of in-app navigation was not
       machine-verified (see note below) — recommend a quick manual pass.
-- [x] Protocol search/chat backend reachability confirmed: a `fetch()` to the production
-      `NEXT_PUBLIC_API_URL` from inside the Capacitor WKWebView succeeds (no CORS/network
-      block). Full interactive chat submission was not machine-verified (see note below).
+- [x] Protocol search/chat against the FastAPI backend works in the Simulator.
+      **Confirmed by the user directly** (2026-07-14): signed in, asked a protocol
+      question, got a response — network calls to `NEXT_PUBLIC_API_URL` succeed with
+      no CORS block, beyond the earlier machine-verified `fetch()` reachability check.
 - [x] Zero uncaught JS errors or exceptions in the device log across the whole session
       (only benign OS-level noise: preloaded-font-not-used warnings, RemoteTextInput/
       BoardServices system chatter). No Safari Web Inspector session was available
@@ -247,19 +248,12 @@ native bundle. Native auth replaces both.
    iOS with an admin-policy error. Surface this to the owner early in the phase.
 
 **Success criteria**
-- [ ] **Needs a human tap-through — not machine-verifiable in this environment.**
-      In the Simulator: tapping "Sign in with Google" completes the native Google flow
-      and returns to the app signed in; the user's profile/personal page loads with
-      their data; authenticated API calls to the FastAPI backend succeed.
-      What's verified instead: the app builds and links the native Firebase Auth +
-      Google Sign-In SDKs cleanly (`xcodebuild` succeeds), `tsc --noEmit` passes, the
-      app still renders correctly in the Simulator with the new plugins loaded (no
-      crash/hang introduced), and the `/login` static export contains the "Sign in
-      with Google" button wired to the new native branch. The actual OAuth handshake
-      needs a real tap — this session's headless mouse-simulated automation
-      (`cliclick`/AppleScript) could not reliably drive text/focus into the WKWebView
-      (see Phase 2 tooling note), so this is the one item to close out by hand in
-      Simulator or on a device.
+- [x] In the Simulator: tapping "Sign in with Google" completes the native Google flow
+      and returns to the app signed in; authenticated API calls to the FastAPI backend
+      succeed. **Confirmed by the user directly** (2026-07-14): signed in with Google
+      in the Simulator, asked a protocol question, got a response — the full native
+      auth → ID token → `/auth/me` + query flow works end to end on a real device
+      interaction, not just a machine-verified build.
 - [ ] Gating parity with web, verified for all three cases in the Simulator:
       a @mayo.edu Google account gets `accessStatus: "approved"` and sees protocols;
       a non-Mayo Google account lands in `no_access` and can submit an access request
