@@ -110,14 +110,22 @@ interface QueryResponse {
   route?: string;
 }
 
+// One completed prior turn in a multi-turn thread (kept compact for the
+// transcript + for sending conversation history to the backend).
+interface Turn {
+  question: string;
+  answer: string;
+}
+
 interface Conversation {
   id: string;
   title: string;
   timestamp: string; // Changed to string for JSON serialization
-  question: string;
-  response: QueryResponse | null;
+  question: string;              // latest (current) turn's question
+  response: QueryResponse | null; // latest (current) turn's response
   mode?: string;
   protocolCards?: ProtocolCardData[];
+  turns?: Turn[];                // prior turns (before the current one)
 }
 
 interface BundleData {
@@ -186,6 +194,9 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  // Prior turns of the active conversation (rendered as a transcript above the
+  // current answer, and sent to the backend as history for multi-turn context).
+  const [priorTurns, setPriorTurns] = useState<Turn[]>([]);
   const [darkMode, setDarkMode] = useState(false);
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
 
@@ -673,6 +684,20 @@ export default function Home() {
       return;
     }
 
+    // Build thread history from the active conversation BEFORE starting the new
+    // turn. The active conversation's question/response is the outgoing (current)
+    // turn; its `turns` are the turns before that. Together they are the context.
+    const activeConv = conversations.find(c => c.id === currentConversationId);
+    const threadPriorTurns: Turn[] = activeConv?.turns ? [...activeConv.turns] : [];
+    if (activeConv?.response && activeConv?.question) {
+      threadPriorTurns.push({ question: activeConv.question, answer: activeConv.response.answer });
+    }
+    const history = threadPriorTurns.flatMap(t => [
+      { role: "user" as const, content: t.question },
+      { role: "assistant" as const, content: t.answer },
+    ]);
+    setPriorTurns(threadPriorTurns);
+
     // Capture the question and clear the input immediately
     const submittedQuestion = question.trim();
     setSubmittedQuestion(submittedQuestion);
@@ -708,8 +733,9 @@ export default function Home() {
       const queryFetch = fetch(`${API_URL}/query`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           query: submittedQuestion,
+          history,
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
@@ -840,12 +866,13 @@ export default function Home() {
       const savedResponse = finalData || { answer: fullAnswer, images: [], citations: [], query_time_ms: 0 };
       const newConversation: Conversation = {
         id: conversationId,
-        title: submittedQuestion.slice(0, 50) + (submittedQuestion.length > 50 ? "..." : ""),
+        title: (threadPriorTurns[0]?.question || submittedQuestion).slice(0, 50) + ((threadPriorTurns[0]?.question || submittedQuestion).length > 50 ? "..." : ""),
         timestamp: new Date().toISOString(),
         question: submittedQuestion,
         response: savedResponse,
         mode: "qa",
         protocolCards: cards.length > 0 ? cards : undefined,
+        turns: threadPriorTurns.length > 0 ? threadPriorTurns : undefined,
       };
       
       setConversations(prev => {
@@ -876,6 +903,7 @@ export default function Home() {
     setHasSearched(false);
     setCurrentConversationId(null);
     setProtocolCards([]);
+    setPriorTurns([]);
     setSidebarOpen(false);
   };
 
@@ -884,6 +912,7 @@ export default function Home() {
     setSubmittedQuestion(conversation.question);
     setResponse(conversation.response);
     setProtocolCards(conversation.protocolCards || []);
+    setPriorTurns(conversation.turns || []);
     setHasSearched(true);
     setCurrentConversationId(conversation.id);
     setError(null);
@@ -917,6 +946,7 @@ export default function Home() {
     setError(null);
     setHasSearched(false);
     setCurrentConversationId(null);
+    setPriorTurns([]);
   };
 
   const handleSignOut = async () => {
@@ -2253,7 +2283,34 @@ export default function Home() {
         ) : (
           /* Results View */
           <div className="space-y-6 pb-[50vh]">
-            {/* User Question */}
+            {/* New conversation (fresh context — current thread stays in the sidebar) */}
+            <div className="flex justify-end">
+              <button
+                onClick={startNewConversation}
+                title="Start a new conversation"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary hover:bg-brand-primary/10 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> New conversation
+              </button>
+            </div>
+
+            {/* Prior turns transcript (multi-turn thread context) */}
+            {priorTurns.map((t, ti) => (
+              <div key={`turn-${ti}`} className="space-y-6">
+                <div className="flex justify-end">
+                  <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-[#1E1E1E] border border-[#2A2A2A]' : 'bg-blue-50 border border-blue-100'}`}>
+                    <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{t.question}</p>
+                  </div>
+                </div>
+                <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-white border border-gray-200'}`}>
+                  <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{t.answer}</ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* User Question (current turn) */}
             <div className="flex justify-end">
               <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-[#1E1E1E] border border-[#2A2A2A]' : 'bg-blue-50 border border-blue-100'}`}>
                 <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{submittedQuestion}</p>
