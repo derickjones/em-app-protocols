@@ -304,7 +304,12 @@ guide.
 3. [ ] Splash screen + app icon: **not done**. Still Capacitor's default blank splash
    and generic icon. Needs `@capacitor/splash-screen` + `@capacitor/assets` run
    against the logos in `logos/`.
-4. [ ] Keyboard: **not done**.
+4. [x] Keyboard: `@capacitor/keyboard` installed, `resize: KeyboardResize.Native` set in
+   `capacitor.config.ts` (WKWebView's frame itself shrinks when the keyboard shows,
+   which correctly repositions our `fixed bottom-0` prompt bar above it — no bespoke
+   resize-handling code needed). Keyboard appearance (light/dark) synced to the app's
+   theme via `Keyboard.setStyle()` in the same effect that syncs the status bar.
+   Not yet tap-verified with the keyboard actually open (same automation limitation).
 5. [x] External links: one global `document` click listener
    (`components/NativeLinkHandler.tsx`, mounted once in `layout.tsx`, self-gated on
    `Capacitor.isNativePlatform()`) intercepts every `<a target="_blank">` click app-wide

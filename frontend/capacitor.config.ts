@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 const config: CapacitorConfig = {
   appId: 'app.emergencymedicine.ios',
@@ -8,6 +9,10 @@ const config: CapacitorConfig = {
     FirebaseAuthentication: {
       skipNativeAuth: false,
       providers: ['google.com'],
+    },
+    Keyboard: {
+      resize: KeyboardResize.Native,
+      autoBackdropColor: 'auto',
     },
   },
   experimental: {

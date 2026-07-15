@@ -10,6 +10,7 @@ import ProtocolCard, { ProtocolCardData } from "@/components/ProtocolCard";
 import PulseLine from "@/components/PulseLine";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { Keyboard, KeyboardStyle } from "@capacitor/keyboard";
 import { openExternal } from "@/lib/native-links";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
@@ -413,11 +414,12 @@ export default function Home() {
     }
   }, [darkMode]);
 
-  // Match the native status bar to the active theme
+  // Match the native status bar and keyboard to the active theme
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       StatusBar.setStyle({ style: darkMode ? Style.Dark : Style.Light });
       StatusBar.setBackgroundColor({ color: darkMode ? '#0A0A0A' : '#F8F9FA' });
+      Keyboard.setStyle({ style: darkMode ? KeyboardStyle.Dark : KeyboardStyle.Light });
     }
   }, [darkMode]);
 
