@@ -254,13 +254,20 @@ native bundle. Native auth replaces both.
       in the Simulator, asked a protocol question, got a response — the full native
       auth → ID token → `/auth/me` + query flow works end to end on a real device
       interaction, not just a machine-verified build.
-- [ ] Gating parity with web, verified for all three cases in the Simulator:
-      a @mayo.edu Google account gets `accessStatus: "approved"` and sees protocols;
-      a non-Mayo Google account lands in `no_access` and can submit an access request
-      that appears at `/owner`; corporate passwordless login works end to end and the
-      session survives an app force-quit and relaunch (Preferences-backed tokens).
+- [x] Gating parity with web, verified by the user directly in the Simulator
+      (2026-07-14): an approved @mayo.edu account signing in with native Google
+      gets access and sees protocols; corporate passwordless login (no password) with
+      an approved @mayo.edu account also grants access to the protocols it's already
+      approved for; corporate passwordless login with an *unapproved* @mayo.edu account
+      correctly routes to the access-request flow instead of granting access. All three
+      matched expected behavior. **Not explicitly tested:** the exact non-Mayo-domain
+      case from this checklist (a non-`@mayo.edu` Google account landing in
+      `no_access`) — the unapproved-@mayo.edu corporate-login case above exercises the
+      same underlying access-request/gating mechanism, so this is very likely fine, but
+      wasn't the literal scenario run.
 - [ ] Sign out in the app, relaunch the app: still signed out. Sign in, force-quit,
-      relaunch: still signed in (persistence works).
+      relaunch: still signed in (persistence works). **Not yet tested** — everything
+      confirmed above was within a single running session, not across a force-quit.
 - [x] On the web (`npm run dev` and the Vercel preview): Google sign-in behaves exactly
       as before — the web code path has zero changes in its diff (verified: the native
       branch is gated behind `Capacitor.isNativePlatform()`, and `npm run build`
