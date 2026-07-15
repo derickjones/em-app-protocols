@@ -570,14 +570,40 @@ it's fiddly and undiscoverable.
 **Goal:** a signed build reaches TestFlight entirely from the command line.
 
 **Tasks**
-1. Set up fastlane in `frontend/ios/App`: `Appfile` with bundle ID and team,
-   `app_store_connect_api_key` wired to the user's `.p8` key (path/key ID/issuer ID
-   read from environment variables or an untracked `.env`; add fastlane's generated
-   secrets paths to `.gitignore`).
-2. Create the App Store Connect app record via CLI: `fastlane produce` (app name
-   **"Emergency Medicine App"**, bundle ID from Phase 2, primary language, SKU).
-   No App Store Connect web UI needed. If Apple reports the name as taken, fall back
-   to "Emergency Medicine App — EMA" and confirm with the owner.
+1. [x] Set up fastlane in `frontend/ios/App`: `Appfile` (bundle ID `app.emergencymedicine.ios`,
+   team ID `9J4BZ42NBS` — read off the existing local "Apple Development" signing
+   identity via `security find-identity -v -p codesigning`, since nothing in the repo
+   had it recorded), `fastlane/Fastfile` with `app_store_connect_api_key` wired to
+   `.env.ios`'s key via `fastlane/.env` (gitignored, alongside `report.xml` and the
+   auto-generated `fastlane/README.md`). `brew install fastlane` was needed (not
+   present on this machine).
+2. [blocked] Create the App Store Connect app record via CLI: **`fastlane produce`
+   cannot do this without real Apple ID login**, contrary to the original plan.
+   Investigated and fixed one layer of this: `produce`'s bundle-ID registration step
+   (`Produce::DeveloperCenter`) hard-requires legacy `Spaceship::Portal` session auth
+   (Apple ID + password) even with `skip_devcenter: true` and a valid
+   `app_store_connect_api_key` — it errors on a missing `username` before even
+   reaching that code path. Routed around *that* specific problem by calling the
+   modern App Store Connect API directly (`POST /v1/bundleIds`, JWT signed with the
+   `.p8` key, no `produce`/Apple-ID involvement at all) — **this succeeded**, the
+   bundle ID `app.emergencymedicine.ios` is now registered
+   (resource ID `HG6SATYV67`).
+
+   The actual app record creation (`POST /v1/apps`) is the real blocker:
+   Apple returns `403 FORBIDDEN — "The resource 'apps' does not allow 'CREATE'.
+   Allowed operations are: GET_COLLECTION, GET_INSTANCE, UPDATE"` for this endpoint,
+   regardless of the API key's role (App Manager, tested; Admin-role keys report the
+   same restriction in other developers' reports found via search). This matches
+   Apple's own documented behavior: creating a *new* app is one of the few operations
+   reserved for the **Account Holder** specifically — not delegable to any Team API
+   key role, by design (it has billing/agreement implications tied to the account
+   owner). No further CLI workaround exists for this one step; it needs a human with
+   Account Holder access to either create the app record once
+   (appstoreconnect.apple.com → Apps → **+** → New App, using the bundle ID already
+   registered above, ~1 minute), or confirm delegating that specific action. Every
+   other Phase 5/6 step (signing, archiving, TestFlight upload, metadata, submission)
+   is scoped to an *existing* app and works fine with the App Manager key already
+   set up — this is a one-time, single blocker, not a recurring one.
 3. Configure signing without Xcode login: set the team ID and automatic signing in
    the project (editable in `project.pbxproj`), and archive with
    `xcodebuild -allowProvisioningUpdates -authenticationKeyPath/-authenticationKeyID/

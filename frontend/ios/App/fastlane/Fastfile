@@ -1,0 +1,47 @@
+default_platform(:ios)
+
+# One-time, human-only step (Account Holder access required — no Team API key
+# role can do this, see docs/ios-app-workstream.md Phase 5 task 2):
+#   appstoreconnect.apple.com -> Apps -> + -> New App
+#   Bundle ID: app.emergencymedicine.ios (already registered via the API,
+#   see scripts/register_asc_bundle_id.py)
+# Every lane below operates on an *existing* app record and needs no further
+# manual steps.
+
+platform :ios do
+  before_all do
+    app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_filepath: ENV["ASC_KEY_PATH"],
+      in_house: false
+    )
+  end
+
+  desc "Build, sign, and upload a build to TestFlight"
+  lane :beta do
+    increment_build_number(
+      xcodeproj: "App.xcodeproj",
+      build_number: latest_testflight_build_number(app_identifier: "app.emergencymedicine.ios") + 1
+    )
+
+    update_code_signing_settings(
+      use_automatic_signing: true,
+      path: "App.xcodeproj",
+      team_id: "9J4BZ42NBS"
+    )
+
+    gym(
+      project: "App.xcodeproj",
+      scheme: "App",
+      export_method: "app-store",
+      xcargs: "-allowProvisioningUpdates"
+    )
+
+    pilot(
+      app_identifier: "app.emergencymedicine.ios",
+      skip_waiting_for_build_processing: true,
+      distribute_external: false
+    )
+  end
+end

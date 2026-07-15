@@ -34,8 +34,9 @@ indexing.log
 
 # iOS signing / App Store Connect secrets — never commit
 *.p8
-frontend/ios/fastlane/.env
-frontend/ios/fastlane/report.xml
+frontend/ios/App/fastlane/.env
+frontend/ios/App/fastlane/report.xml
+frontend/ios/App/fastlane/README.md
 
 # iOS build artifacts (ios/ project itself is committed source)
 frontend/ios/App/Pods/
