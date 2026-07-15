@@ -26,7 +26,7 @@ def seed_enterprises():
             "eds": [
                 {
                     "id": "rochester",
-                    "name": "Rochester",
+                    "name": "RST",
                     "slug": "rochester",
                     "location": "Rochester, MN",
                     "bundles": [
