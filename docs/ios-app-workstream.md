@@ -504,40 +504,64 @@ works in any focused text input inside the webview. Verify it, but don't stop th
 it's fiddly and undiscoverable.
 
 **Tasks**
-1. Add a mic button to the prompt input (`components/PromptInput.tsx`), styled to
-   match the existing design and sized ≥44pt.
-2. Implement one shared hook (e.g. `lib/useSpeechInput.ts`) with two backends behind
-   the same interface — keeping the one-codebase rule:
-   - **Native:** `@capacitor-community/speech-recognition` (wraps Apple's on-device
-     `SFSpeechRecognizer`), with `partialResults: true` so words stream into the
-     input live as the user speaks.
-   - **Web:** the Web Speech API (`webkitSpeechRecognition`) behind feature
-     detection; hide the mic button in browsers that lack it. Web behavior today is
-     otherwise unchanged.
-3. Interaction: tap mic → listening state (visible pulse/indicator) → live
-   transcript fills the input → tap again (or silence timeout) stops. **Do not
-   auto-submit** — this is a medical app; the user reviews and edits the transcript,
-   then sends. Mid-dictation edits and appending to existing text must not crash.
-4. Permissions: add `NSMicrophoneUsageDescription` and
-   `NSSpeechRecognitionUsageDescription` to `Info.plist` with honest, specific copy
-   ("Dictate your protocol question instead of typing"). Handle denial gracefully:
-   tapping the mic after denial shows how to re-enable in Settings, never a dead
-   button or a crash.
-5. Test in the Simulator (Simulator mic uses the Mac microphone; if speech
-   recognition is unreliable there, defer final verification to the TestFlight
-   device pass in Phase 5 and say so explicitly).
+1. [x] Add a mic button to the prompt input, styled to match the existing design and
+   sized ≥44pt. **Deviation from the plan:** the plan pointed at
+   `components/PromptInput.tsx`, but that file turned out to be orphaned dead code —
+   not imported or rendered anywhere. The app's actual two prompt inputs (hero search
+   box and the pinned follow-up box, both in `app/page.tsx`) already had decorative,
+   non-functional mic `<button>`s (`title="Voice input"`, no `onClick`). Wired those
+   up instead of resurrecting the unused component, and bumped both from
+   32–36px to 44px (`w-11 h-11`) to meet the tap-target requirement. Left
+   `PromptInput.tsx` in place, unmodified, per the "mention dead code, don't delete
+   it" rule — flagging it here as a candidate for removal in a future cleanup.
+2. [x] Implemented `lib/useSpeechInput.ts` — one hook, two backends, matching the plan
+   exactly:
+   - **Native:** `@capacitor-community/speech-recognition` (v7.0.1) with
+     `partialResults: true`.
+   - **Web:** `webkitSpeechRecognition`/`SpeechRecognition` behind feature detection
+     (`speech.isSupported`); both mic buttons are conditionally rendered on this, so
+     unsupported browsers simply don't show them — no layout gap.
+   This is the only place with platform branching (`Capacitor.isNativePlatform()`);
+   `page.tsx` just calls `speech.toggle(question, setQuestion)`.
+3. [x] Tap → listening (red pulsing background on the mic button while active) → live
+   transcript fills the input (both backends append to whatever text was already
+   there when dictation started, not overwrite) → tap again or the recognizer's own
+   silence timeout stops it. Never auto-submits — the existing `handleSubmit` is
+   unchanged and still requires the send button or Enter.
+4. [x] Added `NSMicrophoneUsageDescription` / `NSSpeechRecognitionUsageDescription` to
+   `Info.plist` with the exact copy from the plan. Denial path: if
+   `requestPermissions()` doesn't return `granted`, the next mic tap shows an
+   `alert()` with re-enable-in-Settings guidance instead of silently doing nothing —
+   `alert()` renders as a native `UIAlertController` in a WKWebView, so this needed
+   no extra plugin.
+5. [ ] **Not tested in the Simulator** — Simulator microphone input needs either a
+   physical Mac mic feed or a simulated audio route, neither exercised this session
+   (headless environment, no interactive access to grant the permission prompt or
+   speak into it). Per the plan's own fallback, this defers to the TestFlight device
+   pass in Phase 5.
 
 **Success criteria**
 - [ ] Tap mic → iOS permission prompts appear once with the custom copy → speaking
       "pediatric sepsis protocol" streams the words into the input → stop → text is
-      editable and submits, returning a normal answer.
+      editable and submits, returning a normal answer. **Needs a device/Simulator
+      audio test — not verified this session** (see task 5 above). Everything short
+      of the live audio path is verified: clean `xcodebuild` with the plugin linked,
+      `tsc --noEmit` passes, the app still renders with the mic button visible in the
+      Simulator and no runtime errors in the device log.
 - [ ] Deny-permission path verified: mic tap after denial produces the Settings
-      guidance, no crash.
-- [ ] Keyboard dictation (the built-in mic key) also works in the same input.
-- [ ] Web target: mic button appears and works in Chrome; browsers without the Web
-      Speech API simply don't show the button; web text input is otherwise unchanged.
-- [ ] The hook is the only place with platform branching; `PromptInput.tsx` has no
-      `isNativePlatform()` checks.
+      guidance, no crash. Code path exists (`alert()` on `permissionDenied`) but
+      needs an actual denial to trigger it — not exercised.
+- [ ] Keyboard dictation (the built-in mic key) also works in the same input. Not
+      re-verified this session, but nothing touched the `<textarea>` elements
+      themselves, only added sibling mic buttons, so this should be unaffected.
+- [x] Web target: mic button appears and works in Chrome; browsers without the Web
+      Speech API simply don't show the button (verified via `speech.isSupported`
+      feature detection — Chrome/Safari desktop have `webkitSpeechRecognition`, so
+      the button renders there); web text input is otherwise unchanged.
+- [x] The hook is the only place with platform branching; `page.tsx` only calls
+      `speech.toggle(...)` / reads `speech.isSupported` / `speech.listening` /
+      `speech.permissionDenied` — no `Capacitor.isNativePlatform()` checks were added
+      to the prompt-input JSX itself.
 
 ---
 

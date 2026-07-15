@@ -12,6 +12,7 @@ import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { Keyboard, KeyboardStyle } from "@capacitor/keyboard";
 import { openExternal } from "@/lib/native-links";
+import { useSpeechInput } from "@/lib/useSpeechInput";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
@@ -202,6 +203,16 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(true);
+
+  // Voice dictation for the prompt input (native + web speech recognition)
+  const speech = useSpeechInput();
+  const handleMicClick = () => {
+    if (speech.permissionDenied) {
+      alert("Microphone access is off. To dictate your question, enable Microphone and Speech Recognition for this app in iOS Settings.");
+      return;
+    }
+    speech.toggle(question, setQuestion);
+  };
 
   // Protocol cards state
   const [protocolCards, setProtocolCards] = useState<ProtocolCardData[]>([]);
@@ -2089,16 +2100,22 @@ export default function Home() {
 
                   {/* Right side - mic & submit */}
                   <div className="flex items-center gap-2">
+                    {speech.isSupported && (
                     <button
+                      type="button"
                       title="Voice input"
-                      className={`w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                        darkMode 
-                          ? 'text-gray-400 hover:bg-[#1E1E1E] hover:text-gray-200' 
+                      onClick={handleMicClick}
+                      className={`w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                        speech.listening
+                          ? 'text-red-500 bg-red-500/10 animate-pulse'
+                          : darkMode
+                          ? 'text-gray-400 hover:bg-[#1E1E1E] hover:text-gray-200'
                           : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                       }`}
                     >
                       <Mic className="w-4 h-4" />
                     </button>
+                    )}
                     <button
                       onClick={handleSubmit}
                       disabled={!question.trim() || loading || isStreaming}
@@ -2781,16 +2798,22 @@ export default function Home() {
 
               {/* Right side */}
               <div className="flex items-center gap-2">
+                {speech.isSupported && (
                 <button
+                  type="button"
                   title="Voice input"
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                    darkMode 
-                      ? 'text-gray-400 hover:bg-[#1E1E1E] hover:text-gray-200' 
+                  onClick={handleMicClick}
+                  className={`w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                    speech.listening
+                      ? 'text-red-500 bg-red-500/10 animate-pulse'
+                      : darkMode
+                      ? 'text-gray-400 hover:bg-[#1E1E1E] hover:text-gray-200'
                       : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                   }`}
                 >
                   <Mic className="w-4 h-4" />
                 </button>
+                )}
                 <button
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading || isStreaming}
