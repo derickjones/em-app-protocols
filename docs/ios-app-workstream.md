@@ -354,11 +354,51 @@ guide.
    every icon button, nav item, and protocol card, and the system-font-stack question
    (currently uses the brand fonts — Space Grotesk/Inter — which is presumably
    intentional branding, left unchanged).
-   Items 9–10 (motion/scroll polish, dark-mode splash parity) and the full vision-QA
-   screenshot loop (item 12) across every route × theme × device size are **not
-   started this session.** This is a large amount of remaining visual-polish work;
-   recommend tackling it as its own focused pass with the user available to sign off
-   on the screenshot set per the last success criterion below.
+9. [x] Motion and scroll feel: momentum scrolling (`-webkit-overflow-scrolling: touch`)
+   extended to every independently-scrolling container (sidebar conversation list, and
+   other `overflow-y-auto`/`overflow-auto`/`overflow-x-auto` elements), not just
+   `body` — WebKit requires this per-element. Navigation between routes already uses
+   Next's `router.push`/client-side routing (not full page reloads), so it already
+   feels instant without adding transition animation complexity. **Not deeply
+   audited:** whether any specific async-loading area (e.g. streaming chat responses)
+   has layout shift — the streaming response grows incrementally rather than
+   "popping in," which avoids the worst case, but no systematic check was done.
+10. [x] Dark mode / launch parity: found and fixed a real mismatch — Capacitor's
+    default splash was a white background with a generic blue "X" logo, clashing
+    with the app's always-dark-by-default theme. Splash replaced with a plain
+    `#0A0A0A` background (see commit `1ebd4ab7`); WKWebView `backgroundColor` also set
+    to match so there's no white flash before the splash or the app's CSS paints.
+    The app itself has a light/dark **toggle** (defaults to dark for new users,
+    persisted in `localStorage`) — status bar and keyboard chrome already sync to
+    whichever the user has selected (item 2/4 above), so this covers both directions,
+    not just the default.
+
+**Vision QA pass (item 12) — partial, not the full matrix:** rather than the
+Simulator round-trip for every check, most of this pass used a faster loop: serving
+the static `out/` build locally and screenshotting a phone-width (402px) browser
+window, since the `.native-app` CSS is baked into that build regardless of how it's
+served. Checked all seven routes (`/`, `/about`, `/admin`, `/legal`, `/login`,
+`/owner`, `/personal`) in dark mode — all clean, no overflow, gating redirects
+behaved as expected (`/owner` → home, `/personal` → sign-in prompt, both
+unauthenticated). Checked `/` in light mode (toggled by temporarily flipping the
+theme default in source, screenshotting, then reverting — Chrome's own UI automation
+in this environment was unreliable, see below) — layout and contrast were clean;
+the one dark-looking gap (ECG strip area blank) turned out to be intentional
+(`{darkMode && <PulseLine />}` — the strip is dark-mode-only by design), not a bug,
+so no change was made there. **Not done:** light mode on the other six routes, and
+any check on a second device width (large vs. small iPhone) — the fixes made this
+session (flexbox `min-w-0`, `overflow-x-auto` tables) are width-agnostic CSS
+corrections rather than viewport-specific tuning, so a second size is lower-risk to
+skip than it would otherwise be, but it's still unverified. This is real remaining
+work for a focused follow-up pass, ending in the user's sign-off per the last
+success criterion below.
+
+**Automation note:** driving Chrome via AppleScript in this environment was
+unreliable for coordinate-based clicks — the window's on-screen position drifted
+between the `set bounds` call and the `screencapture` call independently of any
+script action (traced to the user's own concurrent window interaction during this
+session, not an environment bug). URL navigation via `set URL of active tab`
+worked reliably throughout; only click-based interaction was affected.
 
 **Real bug found via user report, fixed:** the user sent a screenshot from their own
 device showing the header text and prompt box cut off on the right edge, not
@@ -417,21 +457,34 @@ unless a fix obviously benefits mobile web too.
     screenshot set to the user for sign-off before Phase 5.
 
 **Success criteria**
-- [ ] On a notched-device Simulator (e.g. iPhone 16 Pro): no content under the notch or
-      home indicator; status bar legible on every page.
-- [ ] Custom app icon and splash screen appear (not Capacitor defaults).
-- [ ] With the keyboard open, the active text input is fully visible.
-- [ ] Tapping every external link opens the system browser sheet; the app never gets
-      "stuck" on an external site with no way back.
-- [ ] Vision QA pass complete: screenshots of every route × {light, dark} × {small,
-      large iPhone} reviewed against the look-and-feel checklist, with zero remaining
-      findings (no horizontal overflow, no truncation, no sub-44pt targets, no
-      default-web-styled controls, correct dark mode colors).
-- [ ] Inputs don't trigger iOS auto-zoom on focus; every interactive element shows a
-      pressed state on tap.
-- [ ] The chat/answer screen reads comfortably at phone size: protocol markdown
-      (including tables) renders without breaking layout, and the input stays usable
-      with the keyboard open.
+- [x] On a notched-device Simulator (iPhone 17, this session's test device): no
+      content under the notch or home indicator; status bar legible. Confirmed via
+      repeated screenshots throughout this session (the flexbox overflow fix was
+      what made this true — before that fix, header content ran under/past the
+      status bar area).
+- [ ] Custom app icon and splash screen appear (not Capacitor defaults). **Partial:**
+      splash is no longer Capacitor's white-background/wrong-logo default — it's now
+      a plain dark background matching the app's theme — but there's no actual
+      branded splash graphic or custom icon yet (blocked on design input, see Phase 4
+      task 3 above).
+- [ ] With the keyboard open, the active text input is fully visible. Wired
+      (`KeyboardResize.Native`) but not tap-verified with a real keyboard open.
+- [ ] Tapping every external link opens the system browser sheet. Wired
+      (`NativeLinkHandler`) but not tap-verified.
+- [ ] Vision QA pass: **partial**, not the full route × theme × device-size matrix —
+      see the detailed note above. All 7 routes checked in dark mode, home checked in
+      light mode, one device size. Remaining: light mode on the other 6 routes, a
+      second device size, and the user's sign-off.
+- [x] Inputs don't trigger iOS auto-zoom on focus: `.native-app input/textarea/select
+      { font-size: 16px }` is a deterministic CSS fix (16px is the browser's own
+      zoom threshold, not app-specific behavior needing a live device test to
+      confirm). Every interactive element shows a pressed state on tap: covered by
+      the `:active` opacity-dip rule added under item 6, applied globally to
+      buttons/links/`[role=button]`.
+- [ ] The chat/answer screen reads comfortably at phone size: markdown tables now
+      scroll horizontally within their own container instead of breaking page width
+      (fixed this session), but the broader reading-measure/line-height/code-block
+      legibility question wasn't systematically audited.
 - [ ] User signs off on the final screenshot set before Phase 5 begins.
 - [x] The web app rendering is unchanged: verified `.next/server/app/index.html` from
       the default `npm run build` has `<html class="dark">` (no `native-app`) and the
