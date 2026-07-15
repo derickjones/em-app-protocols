@@ -18,6 +18,25 @@ platform :ios do
     )
   end
 
+  # NOTE: this doesn't actually work as a tester-only-management lane — pilot
+  # insists on trying to upload/re-upload an .ipa even with skip_submission:
+  # true, and fails if App.ipa isn't present or is a stale/duplicate build
+  # number. Adding an internal tester + beta group was actually done via raw
+  # App Store Connect API calls instead (POST /v1/betaGroups,
+  # POST /v1/betaTesters) — see docs/ios-release.md "After upload". Left here
+  # as a documented dead end rather than deleted, so nobody re-tries it.
+  desc "Attempted: add yourself as an internal TestFlight tester (doesn't work, see comment above)"
+  lane :add_internal_tester do
+    pilot(
+      app_identifier: "app.emergencymedicine.ios",
+      first_name: "Derick",
+      last_name: "Jones",
+      email: "derickdavidjones@gmail.com",
+      skip_submission: true,
+      skip_waiting_for_build_processing: true
+    )
+  end
+
   desc "Build, sign, and upload a build to TestFlight"
   lane :beta do
     increment_build_number(

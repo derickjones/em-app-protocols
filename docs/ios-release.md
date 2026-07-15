@@ -91,10 +91,40 @@ one-time setup above is done.
 
 ## After upload
 
-Processing on Apple's side typically takes a few minutes. Once it's done,
-install via the TestFlight app on a real device and do a full manual pass:
-sign in with Google, run a protocol query, navigate every route, sign out —
-see `docs/ios-app-workstream.md` Phase 5 success criteria for the full list.
+Processing on Apple's side typically takes a few minutes. But **a build being
+`VALID` does not mean it will show up in the TestFlight app** — two more
+things are needed the first time, neither obvious from the upload succeeding:
+
+1. **Export compliance answer.** Check
+   `GET /v1/builds?filter[app]={appId}` — if `usesNonExemptEncryption` is
+   `null` (not `true`/`false`), the build won't appear for any tester until
+   this is answered. Our app only uses standard HTTPS (exempt), so:
+   ```bash
+   # PATCH /v1/builds/{buildId} with { "usesNonExemptEncryption": false }
+   ```
+   `pilot`/`fastlane beta` does **not** set this automatically.
+2. **At least one internal tester, in a beta group.** A fresh app has *zero*
+   beta groups — Apple doesn't auto-create one. `fastlane pilot` (both as a
+   lane action and the standalone CLI) kept trying to re-upload an `.ipa`
+   even with `skip_submission: true` when asked to just manage testers, so
+   this was done via the raw API instead:
+   - `POST /v1/betaGroups` with `isInternalGroup: true`,
+     `hasAccessToAllBuilds: true`, linked to the app (`hasAccessToAllBuilds`
+     means every future build is automatically visible to this group, no
+     per-build association needed).
+   - `POST /v1/betaTesters` with the tester's email/name and a
+     `betaGroups` relationship pointing at that group. This sends an email
+     invite (`inviteType: "EMAIL"`) — the tester must accept it before the
+     build appears in their TestFlight app.
+   A `add_internal_tester` lane exists in the Fastfile as a *first attempt*
+   at this via `pilot`, but it doesn't actually work for tester-only
+   management (see the note in the Fastfile) — the working path was the raw
+   API calls above, not yet wrapped into a lane.
+
+Once the invite is accepted and the build shows up: install via the
+TestFlight app on a real device and do a full manual pass — sign in with
+Google, run a protocol query, navigate every route, sign out — see
+`docs/ios-app-workstream.md` Phase 5 success criteria for the full list.
 
 ## Troubleshooting
 
