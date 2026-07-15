@@ -354,11 +354,29 @@ guide.
    every icon button, nav item, and protocol card, and the system-font-stack question
    (currently uses the brand fonts — Space Grotesk/Inter — which is presumably
    intentional branding, left unchanged).
-   Items 9–12 (motion/scroll polish, dark-mode splash parity, chat/answer view reading
-   measure, and the full vision-QA screenshot loop across every route × theme × device
-   size) are **not started this session.** This is a large amount of remaining
-   visual-polish work; recommend tackling it as its own focused pass with the user
-   available to sign off on the screenshot set per the last success criterion below.
+   Items 9–10 (motion/scroll polish, dark-mode splash parity) and the full vision-QA
+   screenshot loop (item 12) across every route × theme × device size are **not
+   started this session.** This is a large amount of remaining visual-polish work;
+   recommend tackling it as its own focused pass with the user available to sign off
+   on the screenshot set per the last success criterion below.
+
+**Real bug found via user report, fixed:** the user sent a screenshot from their own
+device showing the header text and prompt box cut off on the right edge, not
+centered. Root cause: `<main>` and the header's title `<div>` were both flex items
+(`flex-1`) without `min-w-0`. Flexbox's default `min-width: auto` let some
+descendant's unbreakable min-content width force `main`'s minimum width to 466px
+against a 402px iPhone viewport, instead of letting the text wrap to fit — and
+because the root container has `overflow-hidden`, the excess was silently clipped
+rather than producing a visible scrollbar, so it looked like random content loss
+rather than an obvious overflow bug. Confirmed and fixed via a DOM-walking
+diagnostic script (temporarily injected into `layout.tsx`, removed after) that
+flagged every element whose right edge exceeded the viewport width — went from 24
+offending elements to 0 after adding `min-w-0` to both flex items. **This fix is not
+native-scoped** (no `.native-app` gate) since it's a real bug that would affect any
+narrow mobile-web viewport too, not just the native shell. Also added a horizontal-
+scroll wrapper around markdown `<table>` elements in the chat/answer view (item 11)
+so wide protocol dosing tables scroll within their own container instead of
+re-triggering the same class of page-width overflow.
 
 **Native look-and-feel (make it beautiful, not just correct).** The bar: someone
 handed the phone should not guess it's a web app. Keep the app's existing visual
