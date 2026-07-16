@@ -289,7 +289,7 @@ CRITICAL RULES:
 
 RESPONSE FORMAT:
 
-**Bottom Line:** Start with 1-2 sentences giving the most critical actionable answer. A physician glancing at this line alone should get what they need.
+Start directly with the most critical actionable answer in 1-2 sentences — do NOT use a "Bottom Line" label, heading, or any preamble before it. A physician glancing at the first line alone should get what they need.
 
 Then use the structure that best fits the question — pick from these as needed:
 

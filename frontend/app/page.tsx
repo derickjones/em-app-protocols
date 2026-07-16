@@ -2030,7 +2030,7 @@ export default function Home() {
         </div>
 
       {/* Main Content */}
-      <div className="w-full max-w-5xl mx-auto px-4 py-8">
+      <div className={`w-full px-4 py-8 ${hasSearched ? '' : 'max-w-5xl mx-auto'}`}>
         {!hasSearched ? (
           /* Initial Search View */
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -2263,19 +2263,10 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          /* Results View */
-          <div className="space-y-6 pb-[50vh]">
-            {/* New conversation (fresh context — current thread stays in the sidebar) */}
-            <div className="flex justify-end">
-              <button
-                onClick={startNewConversation}
-                title="Start a new conversation"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary hover:bg-brand-primary/10 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> New conversation
-              </button>
-            </div>
-
+          /* Results View — conversation lives in a fixed-width box; New conversation opens to the right */
+          <div className="flex items-start gap-6 overflow-x-auto pb-[40vh]">
+            {/* Conversation box (column) */}
+            <div className={`flex-shrink-0 w-full max-w-[680px] rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-brand-primary bg-white'}`}>
             {/* Prior turns transcript (multi-turn thread context) */}
             {priorTurns.map((t, ti) => (
               <div key={`turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-brand-primary/40'}`}>
@@ -2746,78 +2737,57 @@ export default function Home() {
                 )}
               </div>
             ) : null}
-          </div>
-        )}
-      </div>
 
-      {/* Pinned Input (when searching) */}
-      {hasSearched && (
-        <div className={`app-promptbar fixed bottom-0 right-0 border-t px-4 py-4 z-40 transition-all duration-300 ${sidebarOpen ? 'left-72' : 'left-0'} ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
-          <div className={`max-w-3xl mx-auto border-2 rounded-3xl shadow-lg transition-all duration-200 ${
-            darkMode 
-              ? 'bg-[#0F0F0F] border-[#3A3A3A] focus-within:border-blue-500 focus-within:ring-3 focus-within:ring-blue-500/25 focus-within:shadow-[0_0_30px_rgba(37,99,235,0.15)]' 
-              : 'bg-gray-50 border-gray-300 focus-within:border-blue-400 focus-within:ring-3 focus-within:ring-blue-100'
-          }`}>
-            <textarea
-              placeholder="Ask a follow-up question..."
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              rows={1}
-              className={`w-full p-4 pl-5 pr-4 rounded-t-3xl text-sm resize-none focus:outline-none bg-transparent ${
-                darkMode 
-                  ? 'text-gray-100 placeholder-gray-500' 
-                  : 'text-gray-800'
-              }`}
-            />
-
-            {/* Bottom bar */}
-            <div className="flex items-center justify-between px-4 pb-3 pt-0">
-              {/* Source toggles + ED filters */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => toggleSource("wikem")}
-                  title="EM Universe — WikEM topics + PMC peer-reviewed literature"
-                  className={`p-1.5 rounded-lg transition-all duration-200 ${
-                    globeActive
-                      ? darkMode
-                        ? 'bg-blue-600/20 text-blue-400'
-                        : 'bg-blue-50 text-blue-600'
-                      : darkMode
-                        ? 'text-[#6B7280] hover:text-gray-300 hover:bg-[#1E1E1E]'
-                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <Globe className="w-4 h-4" />
-                </button>
-                {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
+            {/* Follow-up reply — inside the conversation, under the response */}
+            <div className={`mt-2 border-2 rounded-[6px] transition-all duration-200 ${
+              darkMode
+                ? 'bg-[#0F0F0F] border-[#24305C] focus-within:border-brand-primary'
+                : 'bg-gray-50 border-gray-300 focus-within:border-brand-primary'
+            }`}>
+              <textarea
+                placeholder="Ask a follow-up question..."
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+                rows={1}
+                className={`w-full p-4 pl-5 pr-4 rounded-t-[6px] text-sm resize-none focus:outline-none bg-transparent ${
+                  darkMode ? 'text-gray-100 placeholder-gray-500' : 'text-gray-800'
+                }`}
+              />
+              <div className="flex items-center justify-between px-4 pb-3 pt-0">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    onClick={() => toggleSource("wikem")}
+                    title="EM Universe — WikEM topics + PMC peer-reviewed literature"
+                    className={`p-1.5 rounded-[4px] transition-all duration-200 ${
+                      globeActive
+                        ? 'bg-brand-primary/10 text-brand-primary'
+                        : darkMode ? 'text-[#6B7699] hover:text-gray-300 hover:bg-[#131E4D]' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Globe className="w-4 h-4" />
+                  </button>
+                  {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
                     <button
                       key={ed.id}
                       onClick={() => toggleEdSelection(ed.id)}
                       title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        darkMode
-                          ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                          : 'bg-blue-50 text-blue-600 border border-blue-200'
-                      }`}
+                      className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary"
                     >
                       {edLabel(ed)}
                     </button>
-                ))}
-              </div>
-
-              {/* Right side */}
-              <div className="flex items-center gap-2">
+                  ))}
+                </div>
                 <button
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading || isStreaming}
                   title="Submit"
-                  className="w-8 h-8 rounded-lg text-white flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                  className="w-8 h-8 rounded-[4px] text-white flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 disabled:opacity-50"
                 >
                   {loading || isStreaming ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2827,9 +2797,22 @@ export default function Home() {
                 </button>
               </div>
             </div>
+            </div>
+
+            {/* New conversation — opens a column to the right */}
+            <button
+              onClick={startNewConversation}
+              title="Start a new conversation"
+              className="flex-shrink-0 inline-flex items-center gap-2"
+            >
+              <span className="w-9 h-9 rounded-[6px] flex items-center justify-center text-white" style={{ backgroundColor: '#013DED' }}>
+                <Plus className="w-5 h-5" />
+              </span>
+              <span className={`font-data text-sm font-bold uppercase tracking-wide whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-[#0E173D]'}`}>New conversation</span>
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Image Lightbox Modal */}
       {lightboxImage && (
