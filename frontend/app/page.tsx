@@ -1179,24 +1179,24 @@ export default function Home() {
       {/* Sidebar */}
       <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 w-72 border-r transform transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } flex flex-col ${darkMode ? 'bg-[#0D0D0D] border-[#1E1E1E]' : 'bg-white border-gray-200'}`}
+      } flex flex-col ${darkMode ? 'bg-[#0B1535] border-[#131E4D]' : 'bg-white border-gray-200'}`}
         style={darkMode ? { boxShadow: 'inset -1px 0 0 rgba(37,99,235,0.08), 4px 0 24px rgba(0,0,0,0.5)' } : {}}
       >
         {/* Sidebar Header */}
-        <div className={`p-4 border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-200'}`}>
+        <div className={`p-4 border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className={`text-lg font-title font-semibold tracking-tight ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Conversations</h2>
             <button 
               onClick={() => setSidebarOpen(false)}
-              className={`p-1 rounded ${darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-200'}`}
+              className={`p-1 rounded ${darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-200'}`}
             >
               <X className={`w-5 h-5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
             </button>
           </div>
           <button
             onClick={startNewConversation}
-            className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-colors font-medium ${
-              darkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-600/20' : 'bg-brand-primary text-white hover:bg-brand-primary-dark shadow-md'
+            className={`w-full flex items-center gap-2 px-4 py-3 rounded-[6px] transition-colors font-medium ${
+              darkMode ? 'bg-brand-primary text-white hover:bg-brand-primary-dark ' : 'bg-brand-primary text-white hover:bg-brand-primary-dark shadow-md'
             }`}
           >
             <Plus className="w-5 h-5" />
@@ -1217,15 +1217,15 @@ export default function Home() {
               <div
                 key={conv.id}
                 onClick={() => loadConversation(conv)}
-                className={`group w-full text-left px-4 py-3 rounded-xl transition-colors cursor-pointer ${
+                className={`group w-full text-left px-4 py-3 rounded-[6px] transition-colors cursor-pointer ${
                   currentConversationId === conv.id
-                    ? darkMode ? 'bg-[#1E1E1E] border border-[#2A2A2A]' : 'bg-blue-50 border border-blue-200'
-                    : darkMode ? 'hover:bg-[#1E1E1E] border border-transparent' : 'hover:bg-gray-50 border border-transparent'
+                    ? darkMode ? 'bg-[#131E4D] border border-[#24305C]' : 'bg-blue-50 border border-blue-200'
+                    : darkMode ? 'hover:bg-[#131E4D] border border-transparent' : 'hover:bg-gray-50 border border-transparent'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                    currentConversationId === conv.id ? 'text-blue-500' : darkMode ? 'text-gray-500' : 'text-gray-400'
+                    currentConversationId === conv.id ? 'text-brand-primary' : darkMode ? 'text-gray-500' : 'text-gray-400'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium truncate ${
@@ -1241,7 +1241,7 @@ export default function Home() {
                   </div>
                   <button
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-[#2A2A2A]' : 'hover:bg-red-100'}`}
+                    className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-[#24305C]' : 'hover:bg-red-100'}`}
                     title="Delete conversation"
                   >
                     <Trash2 className="w-4 h-4 text-red-500" />
@@ -1253,7 +1253,7 @@ export default function Home() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className={`p-4 border-t ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-200'}`}>
+        <div className={`p-4 border-t ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
           {/* Settings collapse toggle */}
           <button
             onClick={() => setSettingsCollapsed(!settingsCollapsed)}
@@ -1290,7 +1290,7 @@ export default function Home() {
           </div>
 
           {/* EM Universe — Knowledge Sources */}
-          <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#1E1E1E] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
+          <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#131E4D] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
             <div className={`px-3 py-2 flex items-center gap-2`}>
               <Globe className={`w-3.5 h-3.5 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-gray-400'}`} />
               <span className={`text-xs font-semibold tracking-wider uppercase ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>
@@ -1303,8 +1303,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setWikemExpanded(!wikemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1333,8 +1333,8 @@ export default function Home() {
                   )}
                 </button>
                 {wikemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     Community-maintained EM knowledge base covering 1,899 clinical topics — diagnoses, procedures, and differentials.
                   </div>
@@ -1345,8 +1345,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setLitflExpanded(!litflExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1375,8 +1375,8 @@ export default function Home() {
                   )}
                 </button>
                 {litflExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     Life in the Fast Lane — 7,902 FOAMed articles covering ECG interpretation, critical care, toxicology, pharmacology, clinical cases, and eponymous medical terms. CC BY-NC-SA 4.0.
                   </div>
@@ -1387,8 +1387,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setRebelemExpanded(!rebelemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1417,8 +1417,8 @@ export default function Home() {
                   )}
                 </button>
                 {rebelemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     REBEL EM — 1,245 evidence-based reviews of recent emergency medicine literature with clinical bottom lines and critical appraisals. CC BY-NC-ND 4.0.
                   </div>
@@ -1429,8 +1429,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setAliemExpanded(!aliemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1459,8 +1459,8 @@ export default function Home() {
                   )}
                 </button>
                 {aliemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     ALiEM — 258 PV Cards and MEdIC cases covering emergency medicine education, clinical decision-making, and academic development. CC BY-NC-ND 3.0.
                   </div>
@@ -1471,8 +1471,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setPmcExpanded(!pmcExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1548,7 +1548,7 @@ export default function Home() {
                             <button
                               onClick={() => toggleGroupExpanded(group.group)}
                               className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-                                darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                                darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                               }`}
                             >
                               <div
@@ -1593,7 +1593,7 @@ export default function Home() {
                                       key={j.key}
                                       onClick={() => toggleJournal(j.key)}
                                       className={`w-full flex items-center gap-2 px-2 py-0.5 rounded-md text-xs transition-colors ${
-                                        darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                                        darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                                       }`}
                                     >
                                       <div className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${
@@ -1631,7 +1631,7 @@ export default function Home() {
 
           {/* My Files — Personal RAG toggle */}
           {isSignedIn && (
-            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#1E1E1E] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
+            <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#131E4D] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
                 <div className="flex items-center gap-2 px-1 mb-2">
                   <FolderOpen className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-violet-400' : 'text-violet-600'}`} />
@@ -1642,8 +1642,8 @@ export default function Home() {
 
                 <button
                   onClick={() => setPersonalEnabled(!personalEnabled)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1662,7 +1662,7 @@ export default function Home() {
 
                 <a
                   href="/personal"
-                  className={`mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                     darkMode
                       ? 'bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 border border-violet-600/30'
                       : 'bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200'
@@ -1677,7 +1677,7 @@ export default function Home() {
 
           {/* Mayo Protocols — Request Access (sidebar) */}
           {isSignedIn && !hasAccess && (
-            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#2A2A2A] bg-[#141414]/50' : 'border-gray-200 bg-gray-50/50'}`}>
+            <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#24305C] bg-[#0E173D]/50' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
                 <div className="flex items-center gap-2 px-1 mb-2">
                   <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
@@ -1711,9 +1711,9 @@ export default function Home() {
                     </p>
                     <button
                       onClick={() => setShowRequestForm(true)}
-                      className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                         darkMode
-                          ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
+                          ? 'bg-brand-primary/20 text-blue-400 hover:bg-brand-primary/30 border border-blue-600/30'
                           : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
                       }`}
                     >
@@ -1758,9 +1758,9 @@ export default function Home() {
                       onChange={(e) => setRequestName(e.target.value)}
                       placeholder="Full Name"
                       required
-                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${
+                      className={`w-full px-2.5 py-1.5 rounded-[6px] text-xs ${
                         darkMode
-                          ? 'bg-[#1E1E1E] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
+                          ? 'bg-[#131E4D] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
                           : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
                       } focus:outline-none focus:border-blue-500`}
                     />
@@ -1770,9 +1770,9 @@ export default function Home() {
                       onChange={(e) => setRequestEmail(e.target.value)}
                       placeholder="your.name@mayo.edu"
                       required
-                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${
+                      className={`w-full px-2.5 py-1.5 rounded-[6px] text-xs ${
                         darkMode
-                          ? 'bg-[#1E1E1E] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
+                          ? 'bg-[#131E4D] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
                           : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
                       } focus:outline-none focus:border-blue-500`}
                     />
@@ -1780,14 +1780,14 @@ export default function Home() {
                       <button
                         type="submit"
                         disabled={requestLoading}
-                        className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-xs font-medium rounded-lg transition-colors"
+                        className="flex-1 px-3 py-1.5 bg-brand-primary hover:bg-blue-700 disabled:bg-brand-primary/50 text-white text-xs font-medium rounded-[6px] transition-colors"
                       >
                         {requestLoading ? "Submitting..." : "Submit"}
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowRequestForm(false); setRequestError(null); }}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                        className={`px-3 py-1.5 text-xs rounded-[6px] transition-colors ${
                           darkMode ? 'text-[#9CA3AF] hover:text-white' : 'text-gray-500 hover:text-gray-700'
                         }`}
                       >
@@ -1808,7 +1808,7 @@ export default function Home() {
 
           {/* Enterprise + ED Selector */}
           {isSignedIn && hasAccess && enterprise && (
-            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#1E1E1E] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
+            <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#131E4D] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
               {/* Enterprise selector (super_admin) or name (regular user) */}
               {enterprise.allEnterprises && enterprise.allEnterprises.length > 1 ? (
@@ -1820,9 +1820,9 @@ export default function Home() {
                     <select
                       value={enterprise.id}
                       onChange={(e) => switchEnterprise(e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg text-sm font-semibold appearance-none cursor-pointer pr-8 ${
+                      className={`w-full px-3 py-2 rounded-[6px] text-sm font-semibold appearance-none cursor-pointer pr-8 ${
                         darkMode
-                          ? 'bg-[#1E1E1E] text-gray-200 border border-[#2A2A2A] focus:border-blue-500'
+                          ? 'bg-[#131E4D] text-gray-200 border border-[#24305C] focus:border-blue-500'
                           : 'bg-white text-gray-700 border border-gray-200 focus:border-blue-400'
                       } focus:outline-none transition-colors`}
                     >
@@ -1861,7 +1861,7 @@ export default function Home() {
                                 ? 'bg-blue-900/40 text-blue-300'
                                 : 'bg-blue-50 text-blue-700'
                               : darkMode
-                                ? 'text-gray-400 hover:bg-[#1E1E1E]'
+                                ? 'text-gray-400 hover:bg-[#131E4D]'
                                 : 'text-gray-500 hover:bg-gray-100'
                           }`}
                         >
@@ -1893,9 +1893,9 @@ export default function Home() {
             <div className="mb-4">
               <button
                 onClick={saveUniversePreferences}
-                className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                   darkMode
-                    ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
+                    ? 'bg-brand-primary/20 text-blue-400 hover:bg-brand-primary/30 border border-blue-600/30'
                     : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
                 }`}
               >
@@ -1912,7 +1912,7 @@ export default function Home() {
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-[6px] transition-colors ${darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'}`}
               >
                 {user?.photoURL ? (
                   <img 
@@ -1941,8 +1941,8 @@ export default function Home() {
                     className="fixed inset-0 z-10" 
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 ${darkMode ? 'bg-[#141414] border-[#2A2A2A]' : 'bg-white border-gray-200'}`}>
-                    <div className={`px-4 py-3 border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-100'}`}>
+                  <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-[6px] shadow-lg z-20 ${darkMode ? 'bg-[#0E173D] border-[#24305C]' : 'bg-white border-gray-200'}`}>
+                    <div className={`px-4 py-3 border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-100'}`}>
                       <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user?.email || userProfile?.email}</p>
                       {userProfile?.enterpriseName && (
                         <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{userProfile.enterpriseName}</p>
@@ -1959,7 +1959,7 @@ export default function Home() {
                         {userProfile.role === "super_admin" && (
                           <button
                             onClick={() => router.push("/owner")}
-                            className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#1E1E1E]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-100'}`}
+                            className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#131E4D]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-100'}`}
                           >
                             <Crown className="w-4 h-4" />
                             Owner Dashboard
@@ -1967,7 +1967,7 @@ export default function Home() {
                         )}
                         <button
                           onClick={() => router.push("/admin")}
-                          className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#1E1E1E]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-100'}`}
+                          className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#131E4D]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-100'}`}
                         >
                           <Shield className="w-4 h-4" />
                           Upload Protocols
@@ -1976,7 +1976,7 @@ export default function Home() {
                     )}
                     <button
                       onClick={handleSignOut}
-                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-[#1E1E1E]' : 'text-gray-600 hover:bg-gray-50'}`}
+                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-[#131E4D]' : 'text-gray-600 hover:bg-gray-50'}`}
                     >
                       <LogOut className="w-4 h-4" />
                       Sign out
@@ -1988,7 +1988,7 @@ export default function Home() {
           ) : (
             <button
               onClick={() => router.push("/login")}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${darkMode ? 'border-[#2A2A2A] hover:bg-[#1E1E1E]' : 'border-gray-200 hover:bg-gray-100'}`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[6px] border transition-colors ${darkMode ? 'border-[#24305C] hover:bg-[#131E4D]' : 'border-gray-200 hover:bg-gray-100'}`}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -2022,28 +2022,6 @@ export default function Home() {
             </button>
 
             <div className="flex-1" />
-
-            {/* Right: primary nav */}
-            <nav className="flex items-center gap-2">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
-              >
-                Settings
-              </button>
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
-              >
-                History
-              </button>
-              <a
-                href="/personal"
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
-              >
-                My Files
-              </a>
-            </nav>
           </div>
         </div>
 
@@ -2296,13 +2274,13 @@ export default function Home() {
 
             {/* Prior turns transcript (multi-turn thread context) */}
             {priorTurns.map((t, ti) => (
-              <div key={`turn-${ti}`} className="space-y-6">
-                <div className="flex justify-end">
-                  <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-[#1E1E1E] border border-[#2A2A2A]' : 'bg-blue-50 border border-blue-100'}`}>
-                    <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{t.question}</p>
-                  </div>
+              <div key={`turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-brand-primary/40'}`}>
+                {/* Question banner (solid brand blue) */}
+                <div className="bg-brand-primary px-5 py-3">
+                  <p className="text-white font-medium">{t.question}</p>
                 </div>
-                <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-white border border-gray-200'}`}>
+                {/* Answer */}
+                <div className={`p-6 ${darkMode ? 'bg-[#0E173D]' : 'bg-white'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{t.answer}</ReactMarkdown>
                   </div>
@@ -2310,11 +2288,9 @@ export default function Home() {
               </div>
             ))}
 
-            {/* User Question (current turn) */}
-            <div className="flex justify-end">
-              <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-[#1E1E1E] border border-[#2A2A2A]' : 'bg-blue-50 border border-blue-100'}`}>
-                <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{submittedQuestion}</p>
-              </div>
+            {/* User Question (current turn) — solid brand blue banner */}
+            <div className="rounded-[6px] bg-brand-primary px-5 py-3">
+              <p className="text-white font-medium">{submittedQuestion}</p>
             </div>
 
             {/* Response */}
@@ -2330,7 +2306,7 @@ export default function Home() {
                 </span>
               </div>
             ) : error ? (
-              <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
+              <div className={`rounded-[6px] px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
                 <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
               </div>
             ) : (isStreaming || response) ? (
@@ -2349,7 +2325,7 @@ export default function Home() {
                 )}
 
                 {routeDisplay && (
-                  <div className={`-mt-2 rounded-2xl px-4 py-3 text-sm ${darkMode ? 'bg-[#111827]/40 border border-[#1F2937] text-gray-300' : 'bg-blue-50 border border-blue-100 text-gray-700'}`}>
+                  <div className={`-mt-2 rounded-[6px] px-4 py-3 text-sm ${darkMode ? 'bg-[#111827]/40 border border-[#1F2937] text-gray-300' : 'bg-blue-50 border border-blue-100 text-gray-700'}`}>
                     <span className={`font-medium ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
                       Searched: {routeDisplay.label}
                     </span>
@@ -2359,7 +2335,7 @@ export default function Home() {
 
                 {/* Local Protocol Cards — highlighted box above answer */}
                 {protocolCards.length > 0 && (
-                  <div className={`rounded-2xl overflow-hidden border-l-4 ${
+                  <div className={`rounded-[6px] overflow-hidden border-l-4 ${
                     darkMode
                       ? 'border-l-blue-500 bg-[#0A0A0A]/30 border border-blue-900/40'
                       : 'border-l-blue-500 bg-blue-50/70 border border-blue-200/60'
@@ -2428,7 +2404,7 @@ export default function Home() {
                 )}
 
                 {/* Answer — streaming or final */}
-                <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-white border border-gray-200'}`}>
+                <div className={`rounded-[6px] p-6 ${darkMode ? 'bg-[#0E173D] border border-[#24305C]' : 'bg-white border border-brand-primary/40'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
@@ -2611,7 +2587,7 @@ export default function Home() {
 
                 {/* Citations */}
                 {response && response.citations.length > 0 && (
-                  <div className={`rounded-2xl p-5 ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-gray-50 border border-gray-200'}`}>
+                  <div className={`rounded-[6px] p-5 ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-gray-50 border border-gray-200'}`}>
                     <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
