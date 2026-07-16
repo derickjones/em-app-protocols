@@ -2276,7 +2276,7 @@ export default function Home() {
                 </div>
                 {/* Answer */}
                 <div className={`p-6 ${darkMode ? 'bg-[#0E173D]' : 'bg-white'}`}>
-                  <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
+                  <div className={`prose prose-sm max-w-none leading-relaxed font-data ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{t.answer}</ReactMarkdown>
                   </div>
                 </div>
@@ -2305,7 +2305,7 @@ export default function Home() {
                 <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
               </div>
             ) : (isStreaming || response) ? (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {/* Query Time — only after stream finishes */}
                 {response && (
                   <div className={`flex flex-wrap items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -2320,8 +2320,8 @@ export default function Home() {
                 )}
 
                 {routeDisplay && (
-                  <div className={`-mt-2 rounded-[6px] px-4 py-3 text-sm ${darkMode ? 'bg-[#111827]/40 border border-[#1F2937] text-gray-300' : 'bg-blue-50 border border-blue-100 text-gray-700'}`}>
-                    <span className={`font-medium ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                  <div className={`rounded-[6px] px-4 py-3 text-sm border ${darkMode ? 'bg-[#0E173D] border-[#24305C] text-gray-300' : 'bg-white border-brand-primary text-[#0E173D]'}`}>
+                    <span className="font-semibold text-brand-primary">
                       Searched: {routeDisplay.label}
                     </span>
                     <span className="ml-2">{routeDisplay.detail}</span>
@@ -2330,10 +2330,10 @@ export default function Home() {
 
                 {/* Local Protocol Cards — highlighted box above answer */}
                 {protocolCards.length > 0 && (
-                  <div className={`rounded-[6px] overflow-hidden border-l-4 ${
+                  <div className={`rounded-[6px] overflow-hidden border-l-4 border-l-brand-primary border ${
                     darkMode
-                      ? 'border-l-blue-500 bg-[#0A0A0A]/30 border border-blue-900/40'
-                      : 'border-l-blue-500 bg-blue-50/70 border border-blue-200/60'
+                      ? 'bg-[#0E173D] border-[#24305C]'
+                      : 'bg-white border-brand-primary'
                   }`}>
                     <div className="px-5 pt-4 pb-2">
                       <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
@@ -2400,7 +2400,7 @@ export default function Home() {
 
                 {/* Answer — streaming or final */}
                 <div className={`rounded-[6px] p-6 ${darkMode ? 'bg-[#0E173D] border border-[#24305C]' : 'bg-white border border-brand-primary/40'}`}>
-                  <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
+                  <div className={`prose prose-sm max-w-none leading-relaxed font-data ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
 
