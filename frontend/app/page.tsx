@@ -288,6 +288,10 @@ export default function Home() {
   // Is the globe "on"? (any external source is active)
   const globeActive = wikemEnabled || pmcEnabled || litflEnabled || rebelemEnabled || aliemEnabled;
 
+  // Display override: the "rochester" ED shows as "RST" in the UI (id/search
+  // unchanged). Cosmetic stopgap until Firestore is re-seeded with the new name.
+  const edLabel = (ed: { id: string; name: string }) => (ed.id === "rochester" ? "RST" : ed.name);
+
   // Data-source filter chip styling (Figma FILTERS row)
   const sourceChipClass = (active: boolean) =>
     `inline-flex items-center gap-2 pl-2.5 ${active ? 'pr-1' : 'pr-2.5'} py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
@@ -1872,7 +1876,7 @@ export default function Home() {
                           }`}>
                             {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
-                          <span className="flex-1 text-left text-xs font-medium">{ed.name}</span>
+                          <span className="flex-1 text-left text-xs font-medium">{edLabel(ed)}</span>
                           {ed.location && (
                             <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
                               {ed.location}
@@ -2091,10 +2095,10 @@ export default function Home() {
                       <button
                         key={ed.id}
                         onClick={() => toggleEdSelection(ed.id)}
-                        title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
+                        title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
                         className={sourceChipClass(active)}
                       >
-                        {ed.name}
+                        {edLabel(ed)}
                         {active && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                       </button>
                     );
@@ -2795,14 +2799,14 @@ export default function Home() {
                     <button
                       key={ed.id}
                       onClick={() => toggleEdSelection(ed.id)}
-                      title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
+                      title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
                       className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
                         darkMode
                           ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
                           : 'bg-blue-50 text-blue-600 border border-blue-200'
                       }`}
                     >
-                      {ed.name}
+                      {edLabel(ed)}
                     </button>
                 ))}
               </div>
