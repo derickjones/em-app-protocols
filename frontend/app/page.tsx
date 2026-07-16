@@ -2738,56 +2738,37 @@ export default function Home() {
               </div>
             ) : null}
 
-            {/* Follow-up reply — inside the conversation, under the response */}
-            <div className={`mt-2 border-2 rounded-[6px] transition-all duration-200 ${
-              darkMode
-                ? 'bg-[#0F0F0F] border-[#24305C] focus-within:border-brand-primary'
-                : 'bg-gray-50 border-gray-300 focus-within:border-brand-primary'
-            }`}>
-              <textarea
-                placeholder="Ask a follow-up question..."
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                rows={1}
-                className={`w-full p-4 pl-5 pr-4 rounded-t-[6px] text-sm resize-none focus:outline-none bg-transparent ${
-                  darkMode ? 'text-gray-100 placeholder-gray-500' : 'text-gray-800'
-                }`}
-              />
-              <div className="flex items-center justify-between px-4 pb-3 pt-0">
-                <div className="flex items-center gap-1 flex-wrap">
-                  <button
-                    onClick={() => toggleSource("wikem")}
-                    title="EM Universe — WikEM topics + PMC peer-reviewed literature"
-                    className={`p-1.5 rounded-[4px] transition-all duration-200 ${
-                      globeActive
-                        ? 'bg-brand-primary/10 text-brand-primary'
-                        : darkMode ? 'text-[#6B7699] hover:text-gray-300 hover:bg-[#131E4D]' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Globe className="w-4 h-4" />
-                  </button>
-                  {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
-                    <button
-                      key={ed.id}
-                      onClick={() => toggleEdSelection(ed.id)}
-                      title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
-                      className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary"
-                    >
-                      {edLabel(ed)}
-                    </button>
-                  ))}
-                </div>
+            {/* Follow-up reply — matches the "| Anything else?" prompt */}
+            <div className="mt-2 pt-2">
+              <div className="flex items-baseline gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className={`font-title font-medium text-2xl md:text-3xl select-none flex-shrink-0 ${!question ? 'animate-caret' : ''}`}
+                  style={{ letterSpacing: 0, lineHeight: 1.19, color: '#013DED', transform: 'translateY(-0.09em)' }}
+                >
+                  |
+                </span>
+                <textarea
+                  placeholder="Anything else?"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  rows={1}
+                  style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent' }}
+                  className={`flex-1 p-0 font-title font-medium bg-transparent resize-none focus:outline-none text-2xl md:text-3xl placeholder:opacity-100 focus:placeholder:text-transparent ${
+                    darkMode ? 'text-white placeholder:text-white' : 'text-[#0E173D] placeholder:text-[#0E173D]'
+                  }`}
+                />
                 <button
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading || isStreaming}
-                  title="Submit"
-                  className="w-8 h-8 rounded-[4px] text-white flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 disabled:opacity-50"
+                  title="Submit (or press Enter)"
+                  className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 disabled:opacity-40"
                 >
                   {loading || isStreaming ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2795,6 +2776,28 @@ export default function Home() {
                     <ArrowUp className="w-4 h-4" />
                   )}
                 </button>
+              </div>
+              {/* Source chips */}
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => toggleSource("wikem")}
+                  title="EM Universe — WikEM topics + PMC peer-reviewed literature"
+                  className={`inline-flex items-center justify-center w-8 h-8 rounded-[4px] transition-all ${
+                    globeActive ? 'bg-brand-primary text-white' : darkMode ? 'text-[#6B7699] border border-[#24305C]' : 'text-gray-400 border border-gray-300'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                </button>
+                {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
+                  <button
+                    key={ed.id}
+                    onClick={() => toggleEdSelection(ed.id)}
+                    title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
+                    className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary"
+                  >
+                    {edLabel(ed)}
+                  </button>
+                ))}
               </div>
             </div>
             </div>
