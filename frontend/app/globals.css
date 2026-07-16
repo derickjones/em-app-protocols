@@ -49,6 +49,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* Tailwind v4 reads theme colors from here (not tailwind.config.js), so these
+     generate the bg-/text-/border-brand-primary utilities used across the app. */
+  --color-brand-primary: #013DED;
+  --color-brand-primary-dark: #012FB8;
+  --color-brand-primary-light: #2F63F5;
+  --color-brand-accent: #FF4500;
+  --color-brand-success: #22C55E;
 }
 
 * {

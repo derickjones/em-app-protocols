@@ -2280,7 +2280,7 @@ export default function Home() {
             {priorTurns.map((t, ti) => (
               <div key={`turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-brand-primary/40'}`}>
                 {/* Question banner (solid brand blue) */}
-                <div className="bg-brand-primary px-5 py-3">
+                <div className="px-5 py-3" style={{ backgroundColor: '#013DED' }}>
                   <p className="text-white font-medium">{t.question}</p>
                 </div>
                 {/* Answer */}
@@ -2293,7 +2293,7 @@ export default function Home() {
             ))}
 
             {/* User Question (current turn) — solid brand blue banner */}
-            <div className="rounded-[6px] bg-brand-primary px-5 py-3">
+            <div className="rounded-[6px] px-5 py-3" style={{ backgroundColor: '#013DED' }}>
               <p className="text-white font-medium">{submittedQuestion}</p>
             </div>
 
