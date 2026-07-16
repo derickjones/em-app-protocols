@@ -1268,10 +1268,13 @@ ANSWER:"""
         # Step 4: Rank by best score (lower = more relevant in Vertex AI RAG) and take top_k
         ranked = sorted(protocol_chunks.values(), key=lambda p: p["max_score"])[:top_k]
 
-        # Step 4.5: Apply adaptive relevance threshold to drop low-relevance cards
+        # Step 4.5: Apply adaptive relevance threshold to drop low-relevance cards.
+        # Vertex AI RAG scores are distances (lower = more relevant). Keep only
+        # protocols close to the best match so off-topic protocols (e.g. a
+        # respiratory protocol for an ortho query) don't leak in.
         if ranked:
             best_score = ranked[0]["max_score"]
-            cutoff = max(best_score * 4.0, 0.05)
+            cutoff = min(max(best_score * 1.5, 0.05), best_score + 0.12)
             ranked = [p for p in ranked if p["max_score"] <= cutoff]
 
         if not ranked:
