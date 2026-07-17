@@ -11,6 +11,8 @@ import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { Keyboard, KeyboardStyle } from "@capacitor/keyboard";
 import { openExternal } from "@/lib/native-links";
+import { useSpeechInput } from "@/lib/useSpeechInput";
+import MicButton from "@/components/MicButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-930035889332.us-central1.run.app";
 const STORAGE_KEY = "em-protocol-conversations";
@@ -174,6 +176,7 @@ function getRouteDisplay(route?: string) {
 
 export default function Home() {
   const [question, setQuestion] = useState("");
+  const { isSupported: micSupported, listening: micListening, permissionDenied: micPermissionDenied, toggle: toggleMic } = useSpeechInput();
   const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [response, setResponse] = useState<QueryResponse | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState<string>("");
@@ -2104,6 +2107,15 @@ export default function Home() {
                     </button>
                   )}
 
+                  <MicButton
+                    isSupported={micSupported}
+                    listening={micListening}
+                    permissionDenied={micPermissionDenied}
+                    onToggle={() => toggleMic(question, setQuestion)}
+                    darkMode={darkMode}
+                    size="sm"
+                  />
+
                   <button
                     onClick={handleSubmit}
                     disabled={!question.trim() || loading || isStreaming}
@@ -2776,6 +2788,14 @@ export default function Home() {
 
               {/* Right side */}
               <div className="flex items-center gap-2">
+                <MicButton
+                  isSupported={micSupported}
+                  listening={micListening}
+                  permissionDenied={micPermissionDenied}
+                  onToggle={() => toggleMic(question, setQuestion)}
+                  darkMode={darkMode}
+                  size="md"
+                />
                 <button
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading || isStreaming}

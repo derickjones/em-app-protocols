@@ -1,0 +1,16 @@
+PODS:
+  - CapacitorCommunitySpeechRecognition (7.0.1)
+
+DEPENDENCIES:
+  - CapacitorCommunitySpeechRecognition (from `LocalPods`)
+
+EXTERNAL SOURCES:
+  CapacitorCommunitySpeechRecognition:
+    :path: LocalPods
+
+SPEC CHECKSUMS:
+  CapacitorCommunitySpeechRecognition: 807f81ae51499a5455b82337010cc782356b5ca5
+
+PODFILE CHECKSUM: 4c48edc4a815cc2f0cb18528cfcb715be504a248
+
+COCOAPODS: 1.16.2
