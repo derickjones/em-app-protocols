@@ -6,6 +6,7 @@ Supports multi-source queries (local protocols + WikEM + PMC literature)
 
 import os
 import json
+import threading
 import requests
 import google.auth
 import google.auth.transport.requests
@@ -56,12 +57,24 @@ class RAGService:
         self.personal_corpus_name = f"projects/{PROJECT_NUMBER}/locations/{RAG_LOCATION}/ragCorpora/{PERSONAL_CORPUS_ID}" if PERSONAL_CORPUS_ID else None
         self.storage_client = storage.Client()
         self._metadata_cache = {}
-    
+        self._credentials = None
+        self._token_lock = threading.Lock()
+
     def _get_access_token(self) -> str:
-        """Get OAuth2 access token"""
-        credentials, _ = google.auth.default()
-        auth_req = google.auth.transport.requests.Request()
-        credentials.refresh(auth_req)
+        """Get OAuth2 access token, cached until near expiry.
+
+        Called up to ~8x per query (once per parallel corpus retrieval, once
+        for generation) — refreshing fresh every time was serializing these
+        calls behind Google's token endpoint. Lock ensures only one thread
+        refreshes at a time; everyone else reuses the cached, still-valid token.
+        """
+        with self._token_lock:
+            if self._credentials is None:
+                self._credentials, _ = google.auth.default()
+            if not self._credentials.valid:
+                auth_req = google.auth.transport.requests.Request()
+                self._credentials.refresh(auth_req)
+            return self._credentials.token
         return credentials.token
     
     def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5) -> List[Dict]:
@@ -350,7 +363,13 @@ ANSWER:"""
         return result["candidates"][0]["content"]["parts"][0]["text"]
 
     def generate_answer_stream(self, query: str, contexts: List[Dict]):
-        """Generate answer using Gemini with streaming. Yields text chunks."""
+        """Generate answer using Gemini with streaming. Yields text chunks.
+
+        Aborts early on a sustained run of whitespace-only output — a
+        confirmed, non-deterministic Gemini failure mode (see EMA-97) where
+        the model gets stuck padding a markdown table and never recovers,
+        otherwise burning the full maxOutputTokens budget producing nothing.
+        """
         prompt, _ = self._build_prompt_and_context(query, contexts)
 
         url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
@@ -364,15 +383,24 @@ ANSWER:"""
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 8192
+                "maxOutputTokens": 4096
             }
         }
-        
+
         response = requests.post(url, headers=headers, json=payload, stream=True)
-        
+
         if response.status_code != 200:
             raise Exception(f"Gemini streaming failed: {response.status_code} - {response.text}")
-        
+
+        # Whitespace-only chunks are buffered, not yielded immediately: a
+        # short run is normal (blank line between sections) and gets
+        # flushed once real content resumes. A run that exceeds the
+        # threshold without being interrupted is discarded entirely (never
+        # sent to the client) and the stream is cut — so a runaway produces
+        # a clean stop at the last real content, not a trailing blank gap.
+        WHITESPACE_RUNAWAY_THRESHOLD = 300
+        pending_whitespace = ""
+
         for line in response.iter_lines():
             if not line:
                 continue
@@ -386,7 +414,18 @@ ANSWER:"""
                         parts = candidates[0].get("content", {}).get("parts", [])
                         for part in parts:
                             text = part.get("text", "")
-                            if text:
+                            if not text:
+                                continue
+                            if text.strip() == "":
+                                pending_whitespace += text
+                                if len(pending_whitespace) > WHITESPACE_RUNAWAY_THRESHOLD:
+                                    print(f"[rag-generation] Aborting degenerate whitespace runaway after {len(pending_whitespace)} buffered chars")
+                                    response.close()
+                                    return
+                            else:
+                                if pending_whitespace:
+                                    yield pending_whitespace
+                                    pending_whitespace = ""
                                 yield text
                 except json.JSONDecodeError:
                     continue
@@ -717,10 +756,17 @@ ANSWER:"""
 
     def _get_images_from_contexts(self, contexts: List[Dict], all_contexts: List[Dict] = None) -> List[Dict]:
         """Extract images from context sources - maintains protocol relevance order.
-        
+
         all_contexts: optional pre-dedup list so personal page numbers can be
         collected from every chunk that matched, not just the single surviving
         context after deduplication.
+
+        Per-context metadata fetches (one GCS lookup each) run in parallel via
+        ThreadPoolExecutor — this was previously sequential and added a
+        consistent ~4s tax to every query regardless of answer content.
+        Dedup/ordering is still done in a single sequential pass afterward,
+        in ctx_idx order, so output is byte-for-byte identical to the old
+        sequential version regardless of which thread finishes first.
         """
         seen_images = set()
         images = []
@@ -738,126 +784,126 @@ ANSWER:"""
         # Deduplicate & sort per source
         for src in personal_all_pages:
             personal_all_pages[src] = sorted(set(personal_all_pages[src]))
-        
-        # Process contexts in order (most relevant first)
-        for ctx_idx, ctx in enumerate(contexts):
+
+        def fetch_candidates(ctx_idx: int, ctx: Dict) -> List[tuple]:
+            """Fetch raw (dedup_key, image_dict) candidates for one context. No shared state — dedup happens after gathering."""
             source_type = ctx.get("source_type", "local")
-            
+            candidates: List[tuple] = []
+
             if source_type == "wikem":
-                # Get WikEM metadata with image URLs
                 metadata = self._get_wikem_metadata(ctx["source"])
                 if metadata:
                     for img in metadata.get("images", []):
                         img_url = img.get("url", "")
-                        if img_url and img_url not in seen_images:
-                            seen_images.add(img_url)
-                            images.append({
+                        if img_url:
+                            candidates.append((img_url, {
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"WikEM: {metadata.get('title', metadata.get('protocol_id', 'unknown'))}",
                                 "protocol_rank": ctx_idx
-                            })
+                            }))
             elif source_type == "pmc":
-                # Get PMC metadata with image URLs  
                 metadata = self._get_pmc_metadata(ctx["source"])
                 if metadata:
                     for img in metadata.get("images", []):
                         img_url = img.get("url", "")
-                        if img_url and img_url not in seen_images:
-                            seen_images.add(img_url)
-                            images.append({
+                        if img_url:
+                            candidates.append((img_url, {
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"PMC: {metadata.get('title', metadata.get('pmcid', 'unknown'))}",
                                 "protocol_rank": ctx_idx
-                            })
+                            }))
             elif source_type == "litfl":
-                # Get LITFL metadata with image URLs
                 metadata = self._get_litfl_metadata(ctx["source"])
                 if metadata:
                     for img in metadata.get("images", []):
                         img_url = img.get("gcs_public_url", img.get("url", ""))
-                        if img_url and img_url not in seen_images:
-                            seen_images.add(img_url)
-                            images.append({
+                        if img_url:
+                            candidates.append((img_url, {
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"LITFL: {metadata.get('title', 'unknown')}",
                                 "protocol_rank": ctx_idx
-                            })
+                            }))
             elif source_type == "rebelem":
-                # Get REBEL EM metadata with image URLs
                 metadata = self._get_rebelem_metadata(ctx["source"])
                 if metadata:
                     for img in metadata.get("images", []):
                         img_url = img.get("url", "")
-                        if img_url and img_url not in seen_images:
-                            seen_images.add(img_url)
-                            images.append({
+                        if img_url:
+                            candidates.append((img_url, {
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"REBEL EM: {metadata.get('title', 'unknown')}",
                                 "protocol_rank": ctx_idx
-                            })
+                            }))
             elif source_type == "aliem":
-                # Get ALiEM metadata with image URLs
                 metadata = self._get_aliem_metadata(ctx["source"])
                 if metadata:
                     for img in metadata.get("images", []):
                         img_url = img.get("url", "")
-                        if img_url and img_url not in seen_images:
-                            seen_images.add(img_url)
-                            images.append({
+                        if img_url:
+                            candidates.append((img_url, {
                                 "page": img.get("page", 0),
                                 "url": img_url,
                                 "source": f"ALiEM: {metadata.get('title', 'unknown')}",
                                 "protocol_rank": ctx_idx
-                            })
+                            }))
             elif source_type == "personal":
-                # Use pre-collected pages from ALL chunks (not just this deduped one)
                 matched_pages = personal_all_pages.get(ctx.get("source", ""), [])
                 if not matched_pages:
-                    # Fallback: parse from this single chunk
                     matched_pages = [int(m) for m in _re.findall(r'--- Page (\d+)', ctx.get("text", ""))]
                 personal_images = self._get_personal_images(ctx["source"], matched_pages=matched_pages or None)
                 for img in personal_images:
                     img_url = img.get("url", "")
-                    if img_url and img_url not in seen_images:
-                        seen_images.add(img_url)
-                        images.append({
+                    if img_url:
+                        candidates.append((img_url, {
                             "page": img.get("page", 0),
                             "url": img_url,
                             "source": img.get("source", "My File"),
                             "protocol_rank": ctx_idx
-                        })
+                        }))
             else:
-                # Local protocol metadata
                 metadata = self._get_protocol_metadata(ctx["source"])
-                
                 if metadata:
-                    protocol_images = []
+                    protocol_candidates: List[tuple] = []
                     for img in metadata.get("images", []):
                         img_key = img.get("gcs_uri", "")
-                        if img_key and img_key not in seen_images:
-                            seen_images.add(img_key)
-                            
-                            # Convert to public URL
-                            url = img_key.replace(
-                                "gs://",
-                                "https://storage.googleapis.com/"
-                            )
-                            
-                            protocol_images.append({
+                        if img_key:
+                            url = img_key.replace("gs://", "https://storage.googleapis.com/")
+                            protocol_candidates.append((img_key, {
                                 "page": img.get("page", 0),
                                 "url": url,
                                 "source": metadata.get("protocol_id", "unknown"),
-                                "protocol_rank": ctx_idx  # Track source protocol order
-                            })
-                    
-                    # Sort this protocol's images by page number
-                    protocol_images.sort(key=lambda x: x["page"])
-                    images.extend(protocol_images)
-        
+                                "protocol_rank": ctx_idx
+                            }))
+                    # Sort this protocol's own images by page number (matches old behavior)
+                    protocol_candidates.sort(key=lambda x: x[1]["page"])
+                    candidates.extend(protocol_candidates)
+
+            return candidates
+
+        results_by_idx: Dict[int, List[tuple]] = {}
+        if contexts:
+            with ThreadPoolExecutor(max_workers=min(len(contexts), 10)) as executor:
+                futures = {executor.submit(fetch_candidates, idx, ctx): idx for idx, ctx in enumerate(contexts)}
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    try:
+                        results_by_idx[idx] = future.result()
+                    except Exception as e:
+                        print(f"[rag-images] context {idx} image fetch failed: {e}")
+                        results_by_idx[idx] = []
+
+        # Assemble in original relevance order, deduplicating exactly as the
+        # old sequential version did (lowest ctx_idx wins on a duplicate URL).
+        for ctx_idx in range(len(contexts)):
+            for img_key, img_dict in results_by_idx.get(ctx_idx, []):
+                if img_key not in seen_images:
+                    seen_images.add(img_key)
+                    images.append(img_dict)
+
         return images
     
     def _retrieve_multi_source(self, query: str, sources: List[str] = None, personal_user_id: str = None) -> List[Dict]:
