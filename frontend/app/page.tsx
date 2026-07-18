@@ -1236,40 +1236,37 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Scrollable content — conversations + settings/account */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-        {/* Conversation List */}
-        <div className="p-3 space-y-2">
+        {/* Conversation List — fixed height (~5 compact items), scrolls internally */}
+        <div className={`flex-shrink-0 max-h-[280px] overflow-y-auto px-2 py-2 space-y-1 border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
           {conversations.length === 0 ? (
-            <div className={`text-center py-8 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <div className={`text-center py-6 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+              <MessageSquare className="w-7 h-7 mx-auto mb-2 opacity-50" />
               <p>No conversations yet</p>
-              <p className="text-xs mt-1">Start a new conversation above</p>
             </div>
           ) : (
             conversations.map((conv) => (
               <div
                 key={conv.id}
                 onClick={() => loadConversation(conv)}
-                className={`group w-full text-left px-4 py-3 rounded-[6px] transition-colors cursor-pointer ${
+                className={`group w-full text-left px-3 py-1.5 rounded-[6px] transition-colors cursor-pointer ${
                   currentConversationId === conv.id
                     ? darkMode ? 'bg-[#131E4D] border border-[#24305C]' : 'bg-blue-50 border border-blue-200'
                     : darkMode ? 'hover:bg-[#131E4D] border border-transparent' : 'hover:bg-gray-50 border border-transparent'
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                <div className="flex items-center gap-2">
+                  <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${
                     currentConversationId === conv.id ? 'text-[#013DED]' : darkMode ? 'text-gray-500' : 'text-gray-400'
                   }`} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium truncate ${
-                      currentConversationId === conv.id 
+                    <p className={`text-sm font-medium truncate leading-tight ${
+                      currentConversationId === conv.id
                         ? darkMode ? 'text-blue-300' : 'text-blue-900'
                         : darkMode ? 'text-gray-200' : 'text-gray-800'
                     }`}>
                       {conv.title}
                     </p>
-                    <p className={`text-xs mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <p className={`text-[11px] leading-tight ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                       {new Date(conv.timestamp).toLocaleDateString()} {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
@@ -1278,7 +1275,7 @@ export default function Home() {
                     className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-[#24305C]' : 'hover:bg-red-100'}`}
                     title="Delete conversation"
                   >
-                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
                   </button>
                 </div>
               </div>
@@ -1286,8 +1283,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Sidebar Footer */}
-        <div className={`p-4 border-t ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
+        {/* Sidebar Footer — settings/sources/account (scrolls to fill remaining) */}
+        <div className={`flex-1 min-h-0 overflow-y-auto p-4 ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
           {/* Settings collapse toggle */}
           <button
             onClick={() => setSettingsCollapsed(!settingsCollapsed)}
@@ -2033,7 +2030,6 @@ export default function Home() {
               <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Sign in with Google</span>
             </button>
           )}
-        </div>
         </div>
       </aside>
 
