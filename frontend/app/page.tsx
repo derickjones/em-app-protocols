@@ -970,11 +970,15 @@ export default function Home() {
   const resetSearch = () => {
     setQuestion("");
     setResponse(null);
+    setStreamingAnswer("");
+    setIsStreaming(false);
+    setLoading(false);
     setProtocolCards([]);
     setError(null);
     setHasSearched(false);
     setCurrentConversationId(null);
     setPriorTurns([]);
+    setSubmittedQuestion("");
   };
 
   const handleSignOut = async () => {
@@ -2035,21 +2039,43 @@ export default function Home() {
         {/* Header */}
         <div className="app-header sticky top-0 z-30 w-full px-4 pt-4 pb-3 bg-transparent">
           <div className="flex items-center">
-            {/* Left: EMA logo doubles as the menu button */}
+            {/* Left: EMA logo — returns to the main screen */}
             <button
-              onClick={() => setSidebarOpen(true)}
-              title="Open menu"
-              aria-label="Open menu"
+              onClick={resetSearch}
+              title="Home"
+              aria-label="Home — EMA"
               className="flex-shrink-0 p-1 rounded-lg transition-transform duration-200 hover:scale-105"
             >
               <img
                 src={darkMode ? "/ema-logo-dark.svg" : "/ema-logo.svg"}
-                alt="EMA — open menu"
+                alt="EMA — home"
                 className={`w-auto transition-all duration-300 ${hasSearched ? "h-7" : "h-9"}`}
               />
             </button>
 
             <div className="flex-1" />
+
+            {/* Right: primary nav */}
+            <nav className="flex items-center gap-2">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
+              >
+                Settings
+              </button>
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
+              >
+                History
+              </button>
+              <a
+                href="/personal"
+                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
+              >
+                My Files
+              </a>
+            </nav>
           </div>
         </div>
 
