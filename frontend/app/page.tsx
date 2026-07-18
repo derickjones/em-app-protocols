@@ -197,6 +197,10 @@ export default function Home() {
   // Prior turns of the active conversation (rendered as a transcript above the
   // current answer, and sent to the backend as history for multi-turn context).
   const [priorTurns, setPriorTurns] = useState<Turn[]>([]);
+  // Conversations open as side-by-side columns (patient workspace). Oldest→newest,
+  // left→right. The active column (currentConversationId) is live; the rest are
+  // static snapshots you can click to resume.
+  const [openPanels, setOpenPanels] = useState<string[]>([]);
   const [darkMode, setDarkMode] = useState(false);
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
 
@@ -291,6 +295,10 @@ export default function Home() {
   // Display override: the "rochester" ED shows as "RST" in the UI (id/search
   // unchanged). Cosmetic stopgap until Firestore is re-seeded with the new name.
   const edLabel = (ed: { id: string; name: string }) => (ed.id === "rochester" ? "RST" : ed.name);
+
+  // The active conversation column is "empty" (a fresh New conversation) — show
+  // the prompt to type into rather than an (empty) answer thread.
+  const activeIsEmpty = !submittedQuestion && !response && !isStreaming && !loading && priorTurns.length === 0;
 
   // Data-source filter chip styling (Figma FILTERS row)
   const sourceChipClass = (active: boolean) =>
@@ -724,6 +732,8 @@ export default function Home() {
     if (!currentConversationId) {
       setCurrentConversationId(conversationId);
     }
+    // Ensure this conversation is an open column
+    setOpenPanels(prev => prev.includes(conversationId) ? prev : [...prev, conversationId]);
 
     // --- Q&A mode (existing logic) ---
     try {
@@ -899,26 +909,33 @@ export default function Home() {
   };
 
   const startNewConversation = () => {
+    // Open a fresh conversation as a new column to the right (don't leave the
+    // workspace). The new column shows the empty prompt to type into.
+    const newId = `conv-${Date.now()}`;
+    setOpenPanels(prev => [...prev, newId]);
+    setCurrentConversationId(newId);
     setQuestion("");
     setResponse(null);
     setStreamingAnswer("");
     setIsStreaming(false);
+    setLoading(false);
     setError(null);
-    setHasSearched(false);
-    setCurrentConversationId(null);
     setProtocolCards([]);
     setPriorTurns([]);
+    setSubmittedQuestion("");
+    setHasSearched(true);
     setSidebarOpen(false);
   };
 
   const loadConversation = (conversation: Conversation) => {
-    setQuestion(conversation.question);
+    setQuestion("");
     setSubmittedQuestion(conversation.question);
     setResponse(conversation.response);
     setProtocolCards(conversation.protocolCards || []);
     setPriorTurns(conversation.turns || []);
     setHasSearched(true);
     setCurrentConversationId(conversation.id);
+    setOpenPanels(prev => prev.includes(conversation.id) ? prev : [...prev, conversation.id]);
     setError(null);
     setSidebarOpen(false);
   };
@@ -2263,10 +2280,83 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          /* Results View — conversation lives in a fixed-width box; New conversation opens to the right */
+          /* Results View — conversation columns; New conversation opens a column to the right */
           <div className="flex items-start gap-6 overflow-x-auto pb-[40vh]">
-            {/* Conversation box (column) */}
+            {/* Other open conversations — static snapshots (click to resume) */}
+            {openPanels.filter((pid) => pid !== currentConversationId).map((pid) => {
+              const pconv = conversations.find((c) => c.id === pid);
+              if (!pconv) return null;
+              return (
+                <button
+                  key={pid}
+                  onClick={() => loadConversation(pconv)}
+                  title="Resume this conversation"
+                  className={`flex-shrink-0 w-[320px] text-left rounded-[6px] border-2 overflow-hidden transition-colors hover:border-brand-primary ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-gray-300 bg-white'}`}
+                >
+                  <div className="px-4 py-2.5" style={{ backgroundColor: '#013DED' }}>
+                    <p className="text-white text-sm font-medium truncate">{pconv.question}</p>
+                  </div>
+                  <div className="p-4">
+                    <p className={`text-xs font-data line-clamp-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {(pconv.response?.answer || '').replace(/[#*`>\[\]()]/g, '').slice(0, 240) || '…'}
+                    </p>
+                    <p className="mt-3 text-[11px] font-data uppercase tracking-wide text-brand-primary">Click to resume →</p>
+                  </div>
+                </button>
+              );
+            })}
+
+            {/* Active conversation box (column) */}
             <div className={`flex-shrink-0 w-full max-w-[680px] rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-brand-primary bg-white'}`}>
+            {activeIsEmpty ? (
+              <div className="py-6">
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className={`font-title font-medium text-3xl md:text-4xl select-none flex-shrink-0 ${!question ? 'animate-caret' : ''}`}
+                    style={{ letterSpacing: 0, lineHeight: 1.19, color: '#013DED', transform: 'translateY(-0.09em)' }}
+                  >
+                    |
+                  </span>
+                  <textarea
+                    placeholder="What's the emergency?"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+                    rows={1}
+                    style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent' }}
+                    className={`flex-1 p-0 font-title font-medium bg-transparent resize-none focus:outline-none text-3xl md:text-4xl placeholder:opacity-100 focus:placeholder:text-transparent ${darkMode ? 'text-white placeholder:text-white' : 'text-[#0E173D] placeholder:text-[#0E173D]'}`}
+                  />
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!question.trim() || loading || isStreaming}
+                    title="Submit (or press Enter)"
+                    className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-brand-primary hover:bg-brand-primary-dark disabled:opacity-40"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => toggleSource("wikem")}
+                    title="EM Universe — WikEM topics + PMC peer-reviewed literature"
+                    className={`inline-flex items-center justify-center w-8 h-8 rounded-[4px] ${globeActive ? 'bg-brand-primary text-white' : darkMode ? 'text-[#6B7699] border border-[#24305C]' : 'text-gray-400 border border-gray-300'}`}
+                  >
+                    <Globe className="w-4 h-4" />
+                  </button>
+                  {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
+                    <button
+                      key={ed.id}
+                      onClick={() => toggleEdSelection(ed.id)}
+                      className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary"
+                    >
+                      {edLabel(ed)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
             {/* Prior turns transcript (multi-turn thread context) */}
             {priorTurns.map((t, ti) => (
               <div key={`turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-brand-primary/40'}`}>
@@ -2800,6 +2890,8 @@ export default function Home() {
                 ))}
               </div>
             </div>
+            </>
+            )}
             </div>
 
             {/* New conversation — opens a column to the right */}
