@@ -305,11 +305,11 @@ export default function Home() {
     `inline-flex items-center gap-2 pl-2.5 ${active ? 'pr-1' : 'pr-2.5'} py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
       active
         ? darkMode
-          ? 'bg-[#0E173D] border-brand-primary text-brand-primary'
-          : 'bg-white border-brand-primary text-brand-primary'
+          ? 'bg-[#0E173D] border-[#013DED] text-[#013DED]'
+          : 'bg-white border-[#013DED] text-[#013DED]'
         : darkMode
-          ? 'border-[#2A3763] text-gray-500 hover:border-brand-primary hover:text-brand-primary'
-          : 'border-gray-300 text-gray-400 hover:border-brand-primary hover:text-brand-primary'
+          ? 'border-[#2A3763] text-gray-500 hover:border-[#013DED] hover:text-[#013DED]'
+          : 'border-gray-300 text-gray-400 hover:border-[#013DED] hover:text-[#013DED]'
     }`;
 
   // Save EM Universe preferences to localStorage
@@ -1188,9 +1188,9 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--background)' }}>
         <div className="flex gap-1">
-          <div className="w-2 h-2 bg-brand-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-          <div className="w-2 h-2 bg-brand-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-          <div className="w-2 h-2 bg-brand-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+          <div className="w-2 h-2 bg-[#013DED] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+          <div className="w-2 h-2 bg-[#013DED] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+          <div className="w-2 h-2 bg-[#013DED] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
       </div>
     );
@@ -1226,7 +1226,7 @@ export default function Home() {
           <button
             onClick={startNewConversation}
             className={`w-full flex items-center gap-2 px-4 py-3 rounded-[6px] transition-colors font-medium ${
-              darkMode ? 'bg-brand-primary text-white hover:bg-brand-primary-dark ' : 'bg-brand-primary text-white hover:bg-brand-primary-dark shadow-md'
+              darkMode ? 'bg-[#013DED] text-white hover:bg-[#012FB8] ' : 'bg-[#013DED] text-white hover:bg-[#012FB8] shadow-md'
             }`}
           >
             <Plus className="w-5 h-5" />
@@ -1255,7 +1255,7 @@ export default function Home() {
               >
                 <div className="flex items-start gap-3">
                   <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                    currentConversationId === conv.id ? 'text-brand-primary' : darkMode ? 'text-gray-500' : 'text-gray-400'
+                    currentConversationId === conv.id ? 'text-[#013DED]' : darkMode ? 'text-gray-500' : 'text-gray-400'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium truncate ${
@@ -1307,7 +1307,7 @@ export default function Home() {
             <button
               onClick={() => setDarkMode(!darkMode)}
               className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
-                darkMode ? 'bg-brand-primary' : 'bg-gray-300'
+                darkMode ? 'bg-[#013DED]' : 'bg-gray-300'
               }`}
             >
               <span
@@ -1743,7 +1743,7 @@ export default function Home() {
                       onClick={() => setShowRequestForm(true)}
                       className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                         darkMode
-                          ? 'bg-brand-primary/20 text-blue-400 hover:bg-brand-primary/30 border border-blue-600/30'
+                          ? 'bg-[#013DED]/20 text-blue-400 hover:bg-[#013DED]/30 border border-blue-600/30'
                           : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
                       }`}
                     >
@@ -1810,7 +1810,7 @@ export default function Home() {
                       <button
                         type="submit"
                         disabled={requestLoading}
-                        className="flex-1 px-3 py-1.5 bg-brand-primary hover:bg-blue-700 disabled:bg-brand-primary/50 text-white text-xs font-medium rounded-[6px] transition-colors"
+                        className="flex-1 px-3 py-1.5 bg-[#013DED] hover:bg-blue-700 disabled:bg-[#013DED]/50 text-white text-xs font-medium rounded-[6px] transition-colors"
                       >
                         {requestLoading ? "Submitting..." : "Submit"}
                       </button>
@@ -1925,7 +1925,7 @@ export default function Home() {
                 onClick={saveUniversePreferences}
                 className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                   darkMode
-                    ? 'bg-brand-primary/20 text-blue-400 hover:bg-brand-primary/30 border border-blue-600/30'
+                    ? 'bg-[#013DED]/20 text-blue-400 hover:bg-[#013DED]/30 border border-blue-600/30'
                     : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
                 }`}
               >
@@ -2099,7 +2099,7 @@ export default function Home() {
                   <button
                     onClick={() => setSidebarOpen(true)}
                     title="Manage data sources & filters"
-                    className="inline-flex items-center px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
+                    className="inline-flex items-center px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
                   >
                     Filters
                   </button>
@@ -2111,7 +2111,7 @@ export default function Home() {
                     className={sourceChipClass(globeActive)}
                   >
                     EM Universe
-                    {globeActive && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
+                    {globeActive && <span className="bg-[#013DED] text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                   </button>
 
                   {/* Enterprise EDs — e.g. Mayo Protocols, MCHS, RST */}
@@ -2125,7 +2125,7 @@ export default function Home() {
                         className={sourceChipClass(active)}
                       >
                         {edLabel(ed)}
-                        {active && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
+                        {active && <span className="bg-[#013DED] text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                       </button>
                     );
                   })}
@@ -2138,7 +2138,7 @@ export default function Home() {
                       className={sourceChipClass(personalEnabled)}
                     >
                       My Files
-                      {personalEnabled && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
+                      {personalEnabled && <span className="bg-[#013DED] text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                     </button>
                   )}
 
@@ -2146,7 +2146,7 @@ export default function Home() {
                     onClick={handleSubmit}
                     disabled={!question.trim() || loading || isStreaming}
                     title="Submit (or press Enter)"
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-[4px] text-white bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 disabled:opacity-40"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-[4px] text-white bg-[#013DED] hover:bg-[#012FB8] transition-all duration-200 disabled:opacity-40"
                   >
                     {loading || isStreaming ? (
                       <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2303,7 +2303,7 @@ export default function Home() {
                     key={pid}
                     onClick={() => loadConversation(pconv)}
                     title="Resume this conversation"
-                    className={`flex-shrink-0 w-[320px] text-left rounded-[6px] border-2 overflow-hidden transition-colors hover:border-brand-primary ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-gray-300 bg-white'}`}
+                    className={`flex-shrink-0 w-[320px] text-left rounded-[6px] border-2 overflow-hidden transition-colors hover:border-[#013DED] ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-gray-300 bg-white'}`}
                   >
                     <div className="px-4 py-2.5" style={{ backgroundColor: '#013DED' }}>
                       <p className="text-white text-sm font-medium truncate">{pconv.question}</p>
@@ -2312,7 +2312,7 @@ export default function Home() {
                       <p className={`text-xs font-data line-clamp-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         {(pconv.response?.answer || '').replace(/[#*`>\[\]()]/g, '').slice(0, 240) || '…'}
                       </p>
-                      <p className="mt-3 text-[11px] font-data uppercase tracking-wide text-brand-primary">Click to resume →</p>
+                      <p className="mt-3 text-[11px] font-data uppercase tracking-wide text-[#013DED]">Click to resume →</p>
                     </div>
                   </button>
                 );
@@ -2321,7 +2321,7 @@ export default function Home() {
               // Active (live) column — renders in its own position (resume in place),
               // tall with internal scroll so multiple answers are readable at once.
               return (
-                <div key={pid} className={`flex-shrink-0 w-full max-w-[680px] max-h-[82vh] overflow-y-auto rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-brand-primary bg-white'}`}>
+                <div key={pid} className={`flex-shrink-0 w-full max-w-[680px] max-h-[82vh] overflow-y-auto rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-[#013DED] bg-white'}`}>
             {activeIsEmpty ? (
               <div className="py-6">
                 <div className="flex items-baseline gap-1.5">
@@ -2345,7 +2345,7 @@ export default function Home() {
                     onClick={handleSubmit}
                     disabled={!question.trim() || loading || isStreaming}
                     title="Submit (or press Enter)"
-                    className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-brand-primary hover:bg-brand-primary-dark disabled:opacity-40"
+                    className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-[#013DED] hover:bg-[#012FB8] disabled:opacity-40"
                   >
                     <ArrowUp className="w-4 h-4" />
                   </button>
@@ -2354,7 +2354,7 @@ export default function Home() {
                   <button
                     onClick={() => toggleSource("wikem")}
                     title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM"
-                    className={`px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${globeActive ? 'border-brand-primary bg-brand-primary text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'}`}
+                    className={`px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${globeActive ? 'border-[#013DED] bg-[#013DED] text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'}`}
                   >
                     EM Universe
                   </button>
@@ -2362,7 +2362,7 @@ export default function Home() {
                     <button
                       key={ed.id}
                       onClick={() => toggleEdSelection(ed.id)}
-                      className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary"
+                      className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-[#013DED] text-[#013DED]"
                     >
                       {edLabel(ed)}
                     </button>
@@ -2373,7 +2373,7 @@ export default function Home() {
               <>
             {/* Prior turns transcript (multi-turn thread context) */}
             {priorTurns.map((t, ti) => (
-              <div key={`turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-brand-primary/40'}`}>
+              <div key={`turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-[#013DED]/40'}`}>
                 {/* Question banner (solid brand blue) */}
                 <div className="px-5 py-3" style={{ backgroundColor: '#013DED' }}>
                   <p className="text-white font-medium">{t.question}</p>
@@ -2424,8 +2424,8 @@ export default function Home() {
                 )}
 
                 {routeDisplay && (
-                  <div className={`rounded-[6px] px-4 py-3 text-sm border ${darkMode ? 'bg-[#0E173D] border-[#24305C] text-gray-300' : 'bg-white border-brand-primary text-[#0E173D]'}`}>
-                    <span className="font-semibold text-brand-primary">
+                  <div className={`rounded-[6px] px-4 py-3 text-sm border ${darkMode ? 'bg-[#0E173D] border-[#24305C] text-gray-300' : 'bg-white border-[#013DED] text-[#0E173D]'}`}>
+                    <span className="font-semibold text-[#013DED]">
                       Searched: {routeDisplay.label}
                     </span>
                     <span className="ml-2">{routeDisplay.detail}</span>
@@ -2434,10 +2434,10 @@ export default function Home() {
 
                 {/* Local Protocol Cards — highlighted box above answer */}
                 {protocolCards.length > 0 && (
-                  <div className={`rounded-[6px] overflow-hidden border-l-4 border-l-brand-primary border ${
+                  <div className={`rounded-[6px] overflow-hidden border-l-4 border-l-[#013DED] border ${
                     darkMode
                       ? 'bg-[#0E173D] border-[#24305C]'
-                      : 'bg-white border-brand-primary'
+                      : 'bg-white border-[#013DED]'
                   }`}>
                     <div className="px-5 pt-4 pb-2">
                       <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
@@ -2503,7 +2503,7 @@ export default function Home() {
                 )}
 
                 {/* Answer — streaming or final */}
-                <div className={`rounded-[6px] p-6 ${darkMode ? 'bg-[#0E173D] border border-[#24305C]' : 'bg-white border border-brand-primary/40'}`}>
+                <div className={`rounded-[6px] p-6 ${darkMode ? 'bg-[#0E173D] border border-[#24305C]' : 'bg-white border border-[#013DED]/40'}`}>
                   <div className={`prose prose-sm max-w-none leading-relaxed font-data ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
@@ -2872,7 +2872,7 @@ export default function Home() {
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading || isStreaming}
                   title="Submit (or press Enter)"
-                  className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 disabled:opacity-40"
+                  className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-[#013DED] hover:bg-[#012FB8] transition-all duration-200 disabled:opacity-40"
                 >
                   {loading || isStreaming ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2887,7 +2887,7 @@ export default function Home() {
                   onClick={() => toggleSource("wikem")}
                   title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM"
                   className={`px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
-                    globeActive ? 'border-brand-primary bg-brand-primary text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'
+                    globeActive ? 'border-[#013DED] bg-[#013DED] text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'
                   }`}
                 >
                   EM Universe
@@ -2897,7 +2897,7 @@ export default function Home() {
                     key={ed.id}
                     onClick={() => toggleEdSelection(ed.id)}
                     title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
-                    className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-brand-primary text-brand-primary"
+                    className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-[#013DED] text-[#013DED]"
                   >
                     {edLabel(ed)}
                   </button>
