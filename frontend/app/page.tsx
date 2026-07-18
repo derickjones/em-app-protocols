@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star, Bookmark } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
@@ -204,6 +204,8 @@ export default function Home() {
   // left→right. The active column (currentConversationId) is live; the rest are
   // static snapshots you can click to resume.
   const [openPanels, setOpenPanels] = useState<string[]>([]);
+  // Horizontal columns row — used to center the active conversation column.
+  const columnsRowRef = useRef<HTMLDivElement>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
 
@@ -462,6 +464,16 @@ export default function Home() {
     timer = setTimeout(tick, 350);
     return () => clearTimeout(timer);
   }, [hasSearched]);
+
+  // Center the active conversation column when it changes (new / resumed).
+  useEffect(() => {
+    if (!hasSearched) return;
+    const t = setTimeout(() => {
+      const el = columnsRowRef.current?.querySelector('[data-active-column="true"]') as HTMLElement | null;
+      el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [currentConversationId, openPanels.length, hasSearched]);
 
   // Save favorite protocols to localStorage
   useEffect(() => {
@@ -2106,8 +2118,8 @@ export default function Home() {
                       }
                     }}
                     rows={1}
-                    style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent', fieldSizing: 'content' } as React.CSSProperties}
-                    className={`p-0 w-[23.75rem] md:w-[31.25rem] max-w-full font-title font-medium bg-transparent resize-none focus:outline-none text-4xl md:text-5xl placeholder:opacity-100 focus:placeholder:text-transparent ${
+                    style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent', fieldSizing: 'content', whiteSpace: 'nowrap' } as React.CSSProperties}
+                    className={`p-0 min-w-[18rem] md:min-w-[30rem] max-w-full font-title font-medium bg-transparent resize-none overflow-hidden focus:outline-none text-4xl md:text-5xl placeholder:opacity-100 focus:placeholder:text-transparent ${
                       darkMode
                         ? 'text-white placeholder:text-white'
                         : 'text-[#0E173D] placeholder:text-[#0E173D]'
@@ -2309,7 +2321,9 @@ export default function Home() {
           </div>
         ) : (
           /* Results View — conversation columns; New conversation opens a column to the right */
-          <div className="flex items-start gap-6 overflow-x-auto pb-8">
+          <div ref={columnsRowRef} className="flex items-start gap-6 overflow-x-auto pb-8 scroll-smooth">
+            {/* leading spacer so the first/active column can center in the window */}
+            <div className="flex-shrink-0 w-[calc(50vw-350px)] max-[820px]:hidden" aria-hidden="true" />
             {openPanels.map((pid) => {
               const pconv = conversations.find((c) => c.id === pid);
               const isActive = pid === currentConversationId;
@@ -2340,7 +2354,7 @@ export default function Home() {
               // Active (live) column — renders in its own position (resume in place),
               // tall with internal scroll so multiple answers are readable at once.
               return (
-                <div key={pid} className={`flex-shrink-0 w-full max-w-[680px] max-h-[82vh] overflow-y-auto rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-[#013DED] bg-white'}`}>
+                <div key={pid} data-active-column="true" className={`flex-shrink-0 w-full max-w-[680px] max-h-[82vh] overflow-y-auto rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-[#013DED] bg-white'}`}>
             {activeIsEmpty ? (
               <div className="py-6">
                 <div className="flex items-baseline gap-1.5">
@@ -2947,6 +2961,9 @@ export default function Home() {
               </span>
               <span className={`font-data text-sm font-bold uppercase tracking-wide whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-[#0E173D]'}`}>New conversation</span>
             </button>
+
+            {/* trailing spacer so the last/active column can center in the window */}
+            <div className="flex-shrink-0 w-[calc(50vw-350px)] max-[820px]:hidden" aria-hidden="true" />
           </div>
         )}
       </div>
