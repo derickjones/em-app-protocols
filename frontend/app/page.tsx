@@ -2106,8 +2106,8 @@ export default function Home() {
                       }
                     }}
                     rows={1}
-                    style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent', fieldSizing: 'content' } as React.CSSProperties}
-                    className={`p-0 w-[23.75rem] md:w-[31.25rem] max-w-full font-title font-medium bg-transparent resize-none focus:outline-none text-4xl md:text-5xl placeholder:opacity-100 focus:placeholder:text-transparent ${
+                    style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent', fieldSizing: 'content', whiteSpace: 'nowrap' } as React.CSSProperties}
+                    className={`p-0 min-w-[18rem] md:min-w-[30rem] max-w-full font-title font-medium bg-transparent resize-none overflow-hidden focus:outline-none text-4xl md:text-5xl placeholder:opacity-100 focus:placeholder:text-transparent ${
                       darkMode
                         ? 'text-white placeholder:text-white'
                         : 'text-[#0E173D] placeholder:text-[#0E173D]'
