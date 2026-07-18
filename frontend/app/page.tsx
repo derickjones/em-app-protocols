@@ -2281,33 +2281,38 @@ export default function Home() {
           </div>
         ) : (
           /* Results View — conversation columns; New conversation opens a column to the right */
-          <div className="flex items-start gap-6 overflow-x-auto pb-[40vh]">
-            {/* Other open conversations — static snapshots (click to resume) */}
-            {openPanels.filter((pid) => pid !== currentConversationId).map((pid) => {
+          <div className="flex items-start gap-6 overflow-x-auto pb-8">
+            {openPanels.map((pid) => {
               const pconv = conversations.find((c) => c.id === pid);
-              if (!pconv) return null;
-              return (
-                <button
-                  key={pid}
-                  onClick={() => loadConversation(pconv)}
-                  title="Resume this conversation"
-                  className={`flex-shrink-0 w-[320px] text-left rounded-[6px] border-2 overflow-hidden transition-colors hover:border-brand-primary ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-gray-300 bg-white'}`}
-                >
-                  <div className="px-4 py-2.5" style={{ backgroundColor: '#013DED' }}>
-                    <p className="text-white text-sm font-medium truncate">{pconv.question}</p>
-                  </div>
-                  <div className="p-4">
-                    <p className={`text-xs font-data line-clamp-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {(pconv.response?.answer || '').replace(/[#*`>\[\]()]/g, '').slice(0, 240) || '…'}
-                    </p>
-                    <p className="mt-3 text-[11px] font-data uppercase tracking-wide text-brand-primary">Click to resume →</p>
-                  </div>
-                </button>
-              );
-            })}
+              const isActive = pid === currentConversationId;
 
-            {/* Active conversation box (column) */}
-            <div className={`flex-shrink-0 w-full max-w-[680px] rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-brand-primary bg-white'}`}>
+              // Inactive column — static snapshot; clicking resumes it IN PLACE
+              if (!isActive) {
+                if (!pconv) return null;
+                return (
+                  <button
+                    key={pid}
+                    onClick={() => loadConversation(pconv)}
+                    title="Resume this conversation"
+                    className={`flex-shrink-0 w-[320px] text-left rounded-[6px] border-2 overflow-hidden transition-colors hover:border-brand-primary ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-gray-300 bg-white'}`}
+                  >
+                    <div className="px-4 py-2.5" style={{ backgroundColor: '#013DED' }}>
+                      <p className="text-white text-sm font-medium truncate">{pconv.question}</p>
+                    </div>
+                    <div className="p-4">
+                      <p className={`text-xs font-data line-clamp-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {(pconv.response?.answer || '').replace(/[#*`>\[\]()]/g, '').slice(0, 240) || '…'}
+                      </p>
+                      <p className="mt-3 text-[11px] font-data uppercase tracking-wide text-brand-primary">Click to resume →</p>
+                    </div>
+                  </button>
+                );
+              }
+
+              // Active (live) column — renders in its own position (resume in place),
+              // tall with internal scroll so multiple answers are readable at once.
+              return (
+                <div key={pid} className={`flex-shrink-0 w-full max-w-[680px] max-h-[82vh] overflow-y-auto rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-brand-primary bg-white'}`}>
             {activeIsEmpty ? (
               <div className="py-6">
                 <div className="flex items-baseline gap-1.5">
@@ -2893,6 +2898,8 @@ export default function Home() {
             </>
             )}
             </div>
+              );
+            })}
 
             {/* New conversation — opens a column to the right */}
             <button
