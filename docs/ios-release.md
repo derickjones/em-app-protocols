@@ -15,7 +15,17 @@ two one-time manual steps below.
    ASC_KEY_PATH=/absolute/path/to/AuthKey_XXXXX.p8
    ```
 2. **fastlane**: `brew install fastlane`
-3. **App Store Connect app record** — needs a human with **Account Holder**
+3. **CocoaPods**: `brew install cocoapods`, then `cd frontend/ios/App && pod
+   install`. Only needed for plugins without SPM packaging (currently just
+   `@capacitor-community/speech-recognition` — see
+   `frontend/ios/App/Podfile`/`LocalPods/`); the rest of the plugins link via
+   `CapApp-SPM/Package.swift` as before. This generates `App.xcworkspace` —
+   **open/build that from now on, not `App.xcodeproj` directly**, or Pods
+   won't be linked. `fastlane beta` re-resolves Pods automatically via its
+   `cocoapods` step, but a fresh clone/machine needs this run once manually
+   before the first `npm run ios:open`. Re-run manually any time you add,
+   remove, or upgrade a CocoaPods-based plugin.
+4. **App Store Connect app record** — needs a human with **Account Holder**
    access (not delegable to any Team API key role; Apple restricts
    `POST /v1/apps` to the account owner specifically). One time only:
    - Confirm the bundle ID is registered:
@@ -26,7 +36,7 @@ two one-time manual steps below.
      **+** → **New App** → bundle ID `app.emergencymedicine.ios`, name
      "Emergency Medicine App", primary language English, SKU
      `app-emergencymedicine-ios`. Takes about a minute.
-4. **Xcode account + Keychain** — needs a human with an interactive GUI
+5. **Xcode account + Keychain** — needs a human with an interactive GUI
    session (can't be scripted around):
    - Sign into Xcode once: Xcode → Settings → Accounts → add the Apple ID
      for this team. `xcodebuild`, even driven entirely through fastlane with
