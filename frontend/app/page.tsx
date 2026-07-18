@@ -2344,10 +2344,10 @@ export default function Home() {
                 <div className="mt-4 flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => toggleSource("wikem")}
-                    title="EM Universe — WikEM topics + PMC peer-reviewed literature"
-                    className={`inline-flex items-center justify-center w-8 h-8 rounded-[4px] ${globeActive ? 'bg-brand-primary text-white' : darkMode ? 'text-[#6B7699] border border-[#24305C]' : 'text-gray-400 border border-gray-300'}`}
+                    title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM"
+                    className={`px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${globeActive ? 'border-brand-primary bg-brand-primary text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'}`}
                   >
-                    <Globe className="w-4 h-4" />
+                    EM Universe
                   </button>
                   {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
                     <button
@@ -2876,12 +2876,12 @@ export default function Home() {
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => toggleSource("wikem")}
-                  title="EM Universe — WikEM topics + PMC peer-reviewed literature"
-                  className={`inline-flex items-center justify-center w-8 h-8 rounded-[4px] transition-all ${
-                    globeActive ? 'bg-brand-primary text-white' : darkMode ? 'text-[#6B7699] border border-[#24305C]' : 'text-gray-400 border border-gray-300'
+                  title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM"
+                  className={`px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
+                    globeActive ? 'border-brand-primary bg-brand-primary text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'
                   }`}
                 >
-                  <Globe className="w-4 h-4" />
+                  EM Universe
                 </button>
                 {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
                   <button
