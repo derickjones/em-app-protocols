@@ -2038,8 +2038,22 @@ export default function Home() {
       <main className={`app-main flex-1 min-w-0 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
         {/* Header */}
         <div className="app-header sticky top-0 z-30 w-full px-4 pt-4 pb-3 bg-transparent">
-          <div className="flex items-center">
-            {/* Left: EMA logo — returns to the main screen */}
+          <div className="flex items-center gap-3">
+            {/* Hamburger — opens the left drawer (conversations, settings, files) */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              title="Menu"
+              aria-label="Open menu"
+              className={`flex-shrink-0 p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'}`}
+            >
+              <div className="flex flex-col gap-1.5">
+                <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-[#0E173D]'}`} />
+                <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-[#0E173D]'}`} />
+                <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-[#0E173D]'}`} />
+              </div>
+            </button>
+
+            {/* EMA logo — returns to the main screen */}
             <button
               onClick={resetSearch}
               title="Home"
@@ -2054,28 +2068,6 @@ export default function Home() {
             </button>
 
             <div className="flex-1" />
-
-            {/* Right: primary nav */}
-            <nav className="flex items-center gap-2">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
-              >
-                Settings
-              </button>
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
-              >
-                History
-              </button>
-              <a
-                href="/personal"
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
-              >
-                My Files
-              </a>
-            </nav>
           </div>
         </div>
 
