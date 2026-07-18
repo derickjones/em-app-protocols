@@ -1236,8 +1236,10 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Conversation List — fixed height (~5 compact items), scrolls internally */}
-        <div className={`flex-shrink-0 max-h-[280px] overflow-y-auto px-2 py-2 space-y-1 border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
+        {/* Scrollable content — conversations then settings/account (one region) */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Conversation List */}
+        <div className="px-2 py-2 space-y-1">
           {conversations.length === 0 ? (
             <div className={`text-center py-6 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
               <MessageSquare className="w-7 h-7 mx-auto mb-2 opacity-50" />
@@ -1283,8 +1285,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Sidebar Footer — settings/sources/account (scrolls to fill remaining) */}
-        <div className={`flex-1 min-h-0 overflow-y-auto p-4 ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
+        {/* Sidebar Footer — settings/sources/account */}
+        <div className={`p-4 border-t ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
           {/* Settings collapse toggle */}
           <button
             onClick={() => setSettingsCollapsed(!settingsCollapsed)}
@@ -2030,6 +2032,7 @@ export default function Home() {
               <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Sign in with Google</span>
             </button>
           )}
+        </div>
         </div>
       </aside>
 
