@@ -138,9 +138,15 @@ def delete_from_rag_corpus(org_id: str, protocol_id: str) -> bool:
 
 # ----- Request/Response Models -----
 
+class HistoryTurn(BaseModel):
+    """One prior conversation turn, for multi-turn context."""
+    role: str = Field(..., description="'user' or 'assistant'")
+    content: str = Field(..., description="The turn's text")
+
 class QueryRequest(BaseModel):
     """Request model for protocol queries"""
     query: str = Field(..., description="The question to ask", min_length=3, max_length=500)
+    history: List[HistoryTurn] = Field(default=[], description="Prior conversation turns (oldest first) for multi-turn context")
     ed_ids: List[str] = Field(default=[], description="ED IDs to search within (empty = all user's EDs)")
     bundle_ids: List[str] = Field(default=["all"], description="Bundle IDs to search, or ['all'] for all bundles")
     include_images: bool = Field(default=True, description="Include relevant images in response")
@@ -953,6 +959,9 @@ async def query_protocols(
 
     personal_user_id = user.uid if user and "personal" in effective_sources else None
 
+    # Prior conversation turns for multi-turn context (cap to the most recent 6)
+    history = [{"role": t.role, "content": t.content} for t in request.history[-6:]]
+
     def event_stream():
         try:
             for event in rag_service.query_stream(
@@ -964,6 +973,7 @@ async def query_protocols(
                 ed_ids=ed_ids,
                 bundle_ids=request.bundle_ids,
                 personal_user_id=personal_user_id,
+                history=history,
             ):
                 if event["type"] == "chunk":
                     yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"

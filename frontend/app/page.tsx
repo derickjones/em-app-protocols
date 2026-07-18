@@ -112,14 +112,22 @@ interface QueryResponse {
   route?: string;
 }
 
+// One completed prior turn in a multi-turn thread (kept compact for the
+// transcript + for sending conversation history to the backend).
+interface Turn {
+  question: string;
+  answer: string;
+}
+
 interface Conversation {
   id: string;
   title: string;
   timestamp: string; // Changed to string for JSON serialization
-  question: string;
-  response: QueryResponse | null;
+  question: string;              // latest (current) turn's question
+  response: QueryResponse | null; // latest (current) turn's response
   mode?: string;
   protocolCards?: ProtocolCardData[];
+  turns?: Turn[];                // prior turns (before the current one)
 }
 
 interface BundleData {
@@ -189,6 +197,13 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  // Prior turns of the active conversation (rendered as a transcript above the
+  // current answer, and sent to the backend as history for multi-turn context).
+  const [priorTurns, setPriorTurns] = useState<Turn[]>([]);
+  // Conversations open as side-by-side columns (patient workspace). Oldest→newest,
+  // left→right. The active column (currentConversationId) is live; the rest are
+  // static snapshots you can click to resume.
+  const [openPanels, setOpenPanels] = useState<string[]>([]);
   const [darkMode, setDarkMode] = useState(false);
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
 
@@ -280,16 +295,22 @@ export default function Home() {
   // Is the globe "on"? (any external source is active)
   const globeActive = wikemEnabled || pmcEnabled || litflEnabled || rebelemEnabled || aliemEnabled;
 
+  // Display override: the "rochester" ED shows as "RST" in the UI (id/search
+  // unchanged). Cosmetic stopgap until Firestore is re-seeded with the new name.
+  const edLabel = (ed: { id: string; name: string }) => (ed.id === "rochester" ? "RST" : ed.name);
+
+  // The active conversation column is "empty" (a fresh New conversation) — show
+  // the prompt to type into rather than an (empty) answer thread.
+  const activeIsEmpty = !submittedQuestion && !response && !isStreaming && !loading && priorTurns.length === 0;
+
   // Data-source filter chip styling (Figma FILTERS row)
   const sourceChipClass = (active: boolean) =>
-    `inline-flex items-center gap-2 pl-2.5 ${active ? 'pr-1' : 'pr-2.5'} py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
+    `inline-flex items-center px-3 py-1.5 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
       active
-        ? darkMode
-          ? 'bg-[#0E173D] border-brand-primary text-brand-primary'
-          : 'bg-white border-brand-primary text-brand-primary'
+        ? 'bg-[#013DED] border-[#013DED] text-white'
         : darkMode
-          ? 'border-[#2A3763] text-gray-500 hover:border-brand-primary hover:text-brand-primary'
-          : 'border-gray-300 text-gray-400 hover:border-brand-primary hover:text-brand-primary'
+          ? 'bg-transparent border-[#24305C] text-[#6B7699] hover:border-[#013DED] hover:text-[#013DED]'
+          : 'bg-white border-gray-300 text-gray-500 hover:border-[#013DED] hover:text-[#013DED]'
     }`;
 
   // Save EM Universe preferences to localStorage
@@ -676,10 +697,33 @@ export default function Home() {
       return;
     }
 
+    // Build thread history from the active conversation BEFORE starting the new
+    // turn. The active conversation's question/response is the outgoing (current)
+    // turn; its `turns` are the turns before that. Together they are the context.
+    const activeConv = conversations.find(c => c.id === currentConversationId);
+    const threadPriorTurns: Turn[] = activeConv?.turns ? [...activeConv.turns] : [];
+    if (activeConv?.response && activeConv?.question) {
+      threadPriorTurns.push({ question: activeConv.question, answer: activeConv.response.answer });
+    }
+    const history = threadPriorTurns.flatMap(t => [
+      { role: "user" as const, content: t.question },
+      { role: "assistant" as const, content: t.answer },
+    ]);
+    setPriorTurns(threadPriorTurns);
+
     // Capture the question and clear the input immediately
     const submittedQuestion = question.trim();
     setSubmittedQuestion(submittedQuestion);
     setQuestion("");
+
+    // Contextualize follow-ups so the retrieval query is self-contained (a bare
+    // "for adults" retrieves nothing useful). Anchors on the thread's opening
+    // topic; keeps the displayed question as the raw follow-up. This makes
+    // multi-turn work even before the history-aware backend is deployed.
+    const topic = threadPriorTurns[0]?.question;
+    const apiQuery = topic && topic !== submittedQuestion
+      ? `${topic}. Follow-up: ${submittedQuestion}`.slice(0, 490)
+      : submittedQuestion;
     
     setLoading(true);
     setIsStreaming(false);
@@ -698,6 +742,8 @@ export default function Home() {
     if (!currentConversationId) {
       setCurrentConversationId(conversationId);
     }
+    // Ensure this conversation is an open column
+    setOpenPanels(prev => prev.includes(conversationId) ? prev : [...prev, conversationId]);
 
     // --- Q&A mode (existing logic) ---
     try {
@@ -711,8 +757,9 @@ export default function Home() {
       const queryFetch = fetch(`${API_URL}/query`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ 
-          query: submittedQuestion,
+        body: JSON.stringify({
+          query: apiQuery,
+          history,
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
           include_images: true,
@@ -729,7 +776,7 @@ export default function Home() {
             method: "POST",
             headers,
             body: JSON.stringify({
-              query: submittedQuestion,
+              query: apiQuery,
               ed_ids: Array.from(selectedEds),
               bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
               enterprise_id: enterprise?.id || undefined,
@@ -843,12 +890,13 @@ export default function Home() {
       const savedResponse = finalData || { answer: fullAnswer, images: [], citations: [], query_time_ms: 0 };
       const newConversation: Conversation = {
         id: conversationId,
-        title: submittedQuestion.slice(0, 50) + (submittedQuestion.length > 50 ? "..." : ""),
+        title: (threadPriorTurns[0]?.question || submittedQuestion).slice(0, 50) + ((threadPriorTurns[0]?.question || submittedQuestion).length > 50 ? "..." : ""),
         timestamp: new Date().toISOString(),
         question: submittedQuestion,
         response: savedResponse,
         mode: "qa",
         protocolCards: cards.length > 0 ? cards : undefined,
+        turns: threadPriorTurns.length > 0 ? threadPriorTurns : undefined,
       };
       
       setConversations(prev => {
@@ -871,24 +919,33 @@ export default function Home() {
   };
 
   const startNewConversation = () => {
+    // Open a fresh conversation as a new column to the right (don't leave the
+    // workspace). The new column shows the empty prompt to type into.
+    const newId = `conv-${Date.now()}`;
+    setOpenPanels(prev => [...prev, newId]);
+    setCurrentConversationId(newId);
     setQuestion("");
     setResponse(null);
     setStreamingAnswer("");
     setIsStreaming(false);
+    setLoading(false);
     setError(null);
-    setHasSearched(false);
-    setCurrentConversationId(null);
     setProtocolCards([]);
+    setPriorTurns([]);
+    setSubmittedQuestion("");
+    setHasSearched(true);
     setSidebarOpen(false);
   };
 
   const loadConversation = (conversation: Conversation) => {
-    setQuestion(conversation.question);
+    setQuestion("");
     setSubmittedQuestion(conversation.question);
     setResponse(conversation.response);
     setProtocolCards(conversation.protocolCards || []);
+    setPriorTurns(conversation.turns || []);
     setHasSearched(true);
     setCurrentConversationId(conversation.id);
+    setOpenPanels(prev => prev.includes(conversation.id) ? prev : [...prev, conversation.id]);
     setError(null);
     setSidebarOpen(false);
   };
@@ -916,10 +973,15 @@ export default function Home() {
   const resetSearch = () => {
     setQuestion("");
     setResponse(null);
+    setStreamingAnswer("");
+    setIsStreaming(false);
+    setLoading(false);
     setProtocolCards([]);
     setError(null);
     setHasSearched(false);
     setCurrentConversationId(null);
+    setPriorTurns([]);
+    setSubmittedQuestion("");
   };
 
   const handleSignOut = async () => {
@@ -1131,9 +1193,9 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--background)' }}>
         <div className="flex gap-1">
-          <div className="w-2 h-2 bg-brand-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-          <div className="w-2 h-2 bg-brand-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-          <div className="w-2 h-2 bg-brand-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+          <div className="w-2 h-2 bg-[#013DED] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+          <div className="w-2 h-2 bg-[#013DED] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+          <div className="w-2 h-2 bg-[#013DED] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
       </div>
     );
@@ -1152,24 +1214,24 @@ export default function Home() {
       {/* Sidebar */}
       <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 w-72 border-r transform transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } flex flex-col ${darkMode ? 'bg-[#0D0D0D] border-[#1E1E1E]' : 'bg-white border-gray-200'}`}
+      } flex flex-col ${darkMode ? 'bg-[#0B1535] border-[#131E4D]' : 'bg-white border-gray-200'}`}
         style={darkMode ? { boxShadow: 'inset -1px 0 0 rgba(37,99,235,0.08), 4px 0 24px rgba(0,0,0,0.5)' } : {}}
       >
         {/* Sidebar Header */}
-        <div className={`p-4 border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-200'}`}>
+        <div className={`p-4 border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className={`text-lg font-title font-semibold tracking-tight ${darkMode ? 'text-gray-100' : 'text-gray-800'}`}>Conversations</h2>
             <button 
               onClick={() => setSidebarOpen(false)}
-              className={`p-1 rounded ${darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-200'}`}
+              className={`p-1 rounded ${darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-200'}`}
             >
               <X className={`w-5 h-5 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
             </button>
           </div>
           <button
             onClick={startNewConversation}
-            className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl transition-colors font-medium ${
-              darkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-600/20' : 'bg-brand-primary text-white hover:bg-brand-primary-dark shadow-md'
+            className={`w-full flex items-center gap-2 px-4 py-3 rounded-[6px] transition-colors font-medium ${
+              darkMode ? 'bg-[#013DED] text-white hover:bg-[#012FB8] ' : 'bg-[#013DED] text-white hover:bg-[#012FB8] shadow-md'
             }`}
           >
             <Plus className="w-5 h-5" />
@@ -1177,47 +1239,48 @@ export default function Home() {
           </button>
         </div>
 
+        {/* Scrollable content — conversations then settings/account (one region) */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
         {/* Conversation List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="px-2 py-2 space-y-1">
           {conversations.length === 0 ? (
-            <div className={`text-center py-8 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <div className={`text-center py-6 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+              <MessageSquare className="w-7 h-7 mx-auto mb-2 opacity-50" />
               <p>No conversations yet</p>
-              <p className="text-xs mt-1">Start a new conversation above</p>
             </div>
           ) : (
             conversations.map((conv) => (
               <div
                 key={conv.id}
                 onClick={() => loadConversation(conv)}
-                className={`group w-full text-left px-4 py-3 rounded-xl transition-colors cursor-pointer ${
+                className={`group w-full text-left px-3 py-1.5 rounded-[6px] transition-colors cursor-pointer ${
                   currentConversationId === conv.id
-                    ? darkMode ? 'bg-[#1E1E1E] border border-[#2A2A2A]' : 'bg-blue-50 border border-blue-200'
-                    : darkMode ? 'hover:bg-[#1E1E1E] border border-transparent' : 'hover:bg-gray-50 border border-transparent'
+                    ? darkMode ? 'bg-[#131E4D] border border-[#24305C]' : 'bg-blue-50 border border-blue-200'
+                    : darkMode ? 'hover:bg-[#131E4D] border border-transparent' : 'hover:bg-gray-50 border border-transparent'
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <MessageSquare className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                    currentConversationId === conv.id ? 'text-blue-500' : darkMode ? 'text-gray-500' : 'text-gray-400'
+                <div className="flex items-center gap-2">
+                  <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${
+                    currentConversationId === conv.id ? 'text-[#013DED]' : darkMode ? 'text-gray-500' : 'text-gray-400'
                   }`} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium truncate ${
-                      currentConversationId === conv.id 
+                    <p className={`text-sm font-medium truncate leading-tight ${
+                      currentConversationId === conv.id
                         ? darkMode ? 'text-blue-300' : 'text-blue-900'
                         : darkMode ? 'text-gray-200' : 'text-gray-800'
                     }`}>
                       {conv.title}
                     </p>
-                    <p className={`text-xs mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <p className={`text-[11px] leading-tight ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                       {new Date(conv.timestamp).toLocaleDateString()} {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   <button
                     onClick={(e) => deleteConversation(conv.id, e)}
-                    className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-[#2A2A2A]' : 'hover:bg-red-100'}`}
+                    className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${darkMode ? 'hover:bg-[#24305C]' : 'hover:bg-red-100'}`}
                     title="Delete conversation"
                   >
-                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
                   </button>
                 </div>
               </div>
@@ -1225,8 +1288,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Sidebar Footer */}
-        <div className={`p-4 border-t ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-200'}`}>
+        {/* Sidebar Footer — settings/sources/account */}
+        <div className={`p-4 border-t ${darkMode ? 'border-[#24305C]' : 'border-gray-200'}`}>
           {/* Settings collapse toggle */}
           <button
             onClick={() => setSettingsCollapsed(!settingsCollapsed)}
@@ -1250,7 +1313,7 @@ export default function Home() {
             <button
               onClick={() => setDarkMode(!darkMode)}
               className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
-                darkMode ? 'bg-brand-primary' : 'bg-gray-300'
+                darkMode ? 'bg-[#013DED]' : 'bg-gray-300'
               }`}
             >
               <span
@@ -1263,7 +1326,7 @@ export default function Home() {
           </div>
 
           {/* EM Universe — Knowledge Sources */}
-          <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#1E1E1E] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
+          <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#131E4D] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
             <div className={`px-3 py-2 flex items-center gap-2`}>
               <Globe className={`w-3.5 h-3.5 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-gray-400'}`} />
               <span className={`text-xs font-semibold tracking-wider uppercase ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>
@@ -1276,8 +1339,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setWikemExpanded(!wikemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1306,8 +1369,8 @@ export default function Home() {
                   )}
                 </button>
                 {wikemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     Community-maintained EM knowledge base covering 1,899 clinical topics — diagnoses, procedures, and differentials.
                   </div>
@@ -1318,8 +1381,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setLitflExpanded(!litflExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1348,8 +1411,8 @@ export default function Home() {
                   )}
                 </button>
                 {litflExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     Life in the Fast Lane — 7,902 FOAMed articles covering ECG interpretation, critical care, toxicology, pharmacology, clinical cases, and eponymous medical terms. CC BY-NC-SA 4.0.
                   </div>
@@ -1360,8 +1423,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setRebelemExpanded(!rebelemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1390,8 +1453,8 @@ export default function Home() {
                   )}
                 </button>
                 {rebelemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     REBEL EM — 1,245 evidence-based reviews of recent emergency medicine literature with clinical bottom lines and critical appraisals. CC BY-NC-ND 4.0.
                   </div>
@@ -1402,8 +1465,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setAliemExpanded(!aliemExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1432,8 +1495,8 @@ export default function Home() {
                   )}
                 </button>
                 {aliemExpanded && (
-                  <div className={`ml-8 mt-1 px-2 py-2 rounded-lg text-xs leading-relaxed ${
-                    darkMode ? 'text-gray-400 bg-[#1E1E1E]/50' : 'text-gray-500 bg-gray-100/50'
+                  <div className={`ml-8 mt-1 px-2 py-2 rounded-[6px] text-xs leading-relaxed ${
+                    darkMode ? 'text-gray-400 bg-[#131E4D]/50' : 'text-gray-500 bg-gray-100/50'
                   }`}>
                     ALiEM — 258 PV Cards and MEdIC cases covering emergency medicine education, clinical decision-making, and academic development. CC BY-NC-ND 3.0.
                   </div>
@@ -1444,8 +1507,8 @@ export default function Home() {
               <div>
                 <button
                   onClick={() => setPmcExpanded(!pmcExpanded)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1521,7 +1584,7 @@ export default function Home() {
                             <button
                               onClick={() => toggleGroupExpanded(group.group)}
                               className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-                                darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                                darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                               }`}
                             >
                               <div
@@ -1566,7 +1629,7 @@ export default function Home() {
                                       key={j.key}
                                       onClick={() => toggleJournal(j.key)}
                                       className={`w-full flex items-center gap-2 px-2 py-0.5 rounded-md text-xs transition-colors ${
-                                        darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                                        darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                                       }`}
                                     >
                                       <div className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${
@@ -1604,7 +1667,7 @@ export default function Home() {
 
           {/* My Files — Personal RAG toggle */}
           {isSignedIn && (
-            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#1E1E1E] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
+            <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#131E4D] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
                 <div className="flex items-center gap-2 px-1 mb-2">
                   <FolderOpen className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-violet-400' : 'text-violet-600'}`} />
@@ -1615,8 +1678,8 @@ export default function Home() {
 
                 <button
                   onClick={() => setPersonalEnabled(!personalEnabled)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-sm transition-colors ${
+                    darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'
                   }`}
                 >
                   <div
@@ -1635,7 +1698,7 @@ export default function Home() {
 
                 <a
                   href="/personal"
-                  className={`mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                     darkMode
                       ? 'bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 border border-violet-600/30'
                       : 'bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200'
@@ -1650,7 +1713,7 @@ export default function Home() {
 
           {/* Mayo Protocols — Request Access (sidebar) */}
           {isSignedIn && !hasAccess && (
-            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#2A2A2A] bg-[#141414]/50' : 'border-gray-200 bg-gray-50/50'}`}>
+            <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#24305C] bg-[#0E173D]/50' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
                 <div className="flex items-center gap-2 px-1 mb-2">
                   <Building2 className={`w-4 h-4 flex-shrink-0 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
@@ -1684,9 +1747,9 @@ export default function Home() {
                     </p>
                     <button
                       onClick={() => setShowRequestForm(true)}
-                      className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                         darkMode
-                          ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
+                          ? 'bg-[#013DED]/20 text-blue-400 hover:bg-[#013DED]/30 border border-blue-600/30'
                           : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
                       }`}
                     >
@@ -1731,9 +1794,9 @@ export default function Home() {
                       onChange={(e) => setRequestName(e.target.value)}
                       placeholder="Full Name"
                       required
-                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${
+                      className={`w-full px-2.5 py-1.5 rounded-[6px] text-xs ${
                         darkMode
-                          ? 'bg-[#1E1E1E] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
+                          ? 'bg-[#131E4D] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
                           : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
                       } focus:outline-none focus:border-blue-500`}
                     />
@@ -1743,9 +1806,9 @@ export default function Home() {
                       onChange={(e) => setRequestEmail(e.target.value)}
                       placeholder="your.name@mayo.edu"
                       required
-                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${
+                      className={`w-full px-2.5 py-1.5 rounded-[6px] text-xs ${
                         darkMode
-                          ? 'bg-[#1E1E1E] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
+                          ? 'bg-[#131E4D] border border-[#3A3A3A] text-white placeholder-[#6B7280]'
                           : 'bg-white border border-gray-300 text-gray-800 placeholder-gray-400'
                       } focus:outline-none focus:border-blue-500`}
                     />
@@ -1753,14 +1816,14 @@ export default function Home() {
                       <button
                         type="submit"
                         disabled={requestLoading}
-                        className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-xs font-medium rounded-lg transition-colors"
+                        className="flex-1 px-3 py-1.5 bg-[#013DED] hover:bg-blue-700 disabled:bg-[#013DED]/50 text-white text-xs font-medium rounded-[6px] transition-colors"
                       >
                         {requestLoading ? "Submitting..." : "Submit"}
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowRequestForm(false); setRequestError(null); }}
-                        className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                        className={`px-3 py-1.5 text-xs rounded-[6px] transition-colors ${
                           darkMode ? 'text-[#9CA3AF] hover:text-white' : 'text-gray-500 hover:text-gray-700'
                         }`}
                       >
@@ -1781,7 +1844,7 @@ export default function Home() {
 
           {/* Enterprise + ED Selector */}
           {isSignedIn && hasAccess && enterprise && (
-            <div className={`mb-4 rounded-xl border ${darkMode ? 'border-[#1E1E1E] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
+            <div className={`mb-4 rounded-[6px] border ${darkMode ? 'border-[#131E4D] bg-[#111111]' : 'border-gray-200 bg-gray-50/50'}`}>
               <div className="p-3">
               {/* Enterprise selector (super_admin) or name (regular user) */}
               {enterprise.allEnterprises && enterprise.allEnterprises.length > 1 ? (
@@ -1793,9 +1856,9 @@ export default function Home() {
                     <select
                       value={enterprise.id}
                       onChange={(e) => switchEnterprise(e.target.value)}
-                      className={`w-full px-3 py-2 rounded-lg text-sm font-semibold appearance-none cursor-pointer pr-8 ${
+                      className={`w-full px-3 py-2 rounded-[6px] text-sm font-semibold appearance-none cursor-pointer pr-8 ${
                         darkMode
-                          ? 'bg-[#1E1E1E] text-gray-200 border border-[#2A2A2A] focus:border-blue-500'
+                          ? 'bg-[#131E4D] text-gray-200 border border-[#24305C] focus:border-blue-500'
                           : 'bg-white text-gray-700 border border-gray-200 focus:border-blue-400'
                       } focus:outline-none transition-colors`}
                     >
@@ -1834,7 +1897,7 @@ export default function Home() {
                                 ? 'bg-blue-900/40 text-blue-300'
                                 : 'bg-blue-50 text-blue-700'
                               : darkMode
-                                ? 'text-gray-400 hover:bg-[#1E1E1E]'
+                                ? 'text-gray-400 hover:bg-[#131E4D]'
                                 : 'text-gray-500 hover:bg-gray-100'
                           }`}
                         >
@@ -1845,7 +1908,7 @@ export default function Home() {
                           }`}>
                             {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
-                          <span className="flex-1 text-left text-xs font-medium">{ed.name}</span>
+                          <span className="flex-1 text-left text-xs font-medium">{edLabel(ed)}</span>
                           {ed.location && (
                             <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
                               {ed.location}
@@ -1866,9 +1929,9 @@ export default function Home() {
             <div className="mb-4">
               <button
                 onClick={saveUniversePreferences}
-                className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                   darkMode
-                    ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/30'
+                    ? 'bg-[#013DED]/20 text-blue-400 hover:bg-[#013DED]/30 border border-blue-600/30'
                     : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
                 }`}
               >
@@ -1885,7 +1948,7 @@ export default function Home() {
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${darkMode ? 'hover:bg-[#1E1E1E]' : 'hover:bg-gray-100'}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-[6px] transition-colors ${darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'}`}
               >
                 {user?.photoURL ? (
                   <img 
@@ -1914,8 +1977,8 @@ export default function Home() {
                     className="fixed inset-0 z-10" 
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-lg shadow-lg z-20 ${darkMode ? 'bg-[#141414] border-[#2A2A2A]' : 'bg-white border-gray-200'}`}>
-                    <div className={`px-4 py-3 border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-100'}`}>
+                  <div className={`absolute bottom-full left-0 right-0 mb-2 border rounded-[6px] shadow-lg z-20 ${darkMode ? 'bg-[#0E173D] border-[#24305C]' : 'bg-white border-gray-200'}`}>
+                    <div className={`px-4 py-3 border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-100'}`}>
                       <p className={`text-sm font-medium truncate ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{user?.email || userProfile?.email}</p>
                       {userProfile?.enterpriseName && (
                         <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{userProfile.enterpriseName}</p>
@@ -1932,7 +1995,7 @@ export default function Home() {
                         {userProfile.role === "super_admin" && (
                           <button
                             onClick={() => router.push("/owner")}
-                            className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#1E1E1E]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-100'}`}
+                            className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#131E4D]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-100'}`}
                           >
                             <Crown className="w-4 h-4" />
                             Owner Dashboard
@@ -1940,7 +2003,7 @@ export default function Home() {
                         )}
                         <button
                           onClick={() => router.push("/admin")}
-                          className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#1E1E1E]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#2A2A2A]' : 'border-gray-100'}`}
+                          className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${darkMode ? 'text-gray-300 hover:bg-[#131E4D]' : 'text-gray-600 hover:bg-gray-50'} border-b ${darkMode ? 'border-[#24305C]' : 'border-gray-100'}`}
                         >
                           <Shield className="w-4 h-4" />
                           Upload Protocols
@@ -1949,7 +2012,7 @@ export default function Home() {
                     )}
                     <button
                       onClick={handleSignOut}
-                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-[#1E1E1E]' : 'text-gray-600 hover:bg-gray-50'}`}
+                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors rounded-b-lg ${darkMode ? 'text-gray-300 hover:bg-[#131E4D]' : 'text-gray-600 hover:bg-gray-50'}`}
                     >
                       <LogOut className="w-4 h-4" />
                       Sign out
@@ -1961,7 +2024,7 @@ export default function Home() {
           ) : (
             <button
               onClick={() => router.push("/login")}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-colors ${darkMode ? 'border-[#2A2A2A] hover:bg-[#1E1E1E]' : 'border-gray-200 hover:bg-gray-100'}`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[6px] border transition-colors ${darkMode ? 'border-[#24305C] hover:bg-[#131E4D]' : 'border-gray-200 hover:bg-gray-100'}`}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -1973,55 +2036,48 @@ export default function Home() {
             </button>
           )}
         </div>
+        </div>
       </aside>
 
       {/* Main Content */}
       <main className={`app-main flex-1 min-w-0 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-0'}`}>
         {/* Header */}
         <div className="app-header sticky top-0 z-30 w-full px-4 pt-4 pb-3 bg-transparent">
-          <div className="flex items-center">
-            {/* Left: EMA logo doubles as the menu button */}
+          <div className="flex items-center gap-3">
+            {/* Hamburger — opens the left drawer (conversations, settings, files) */}
             <button
               onClick={() => setSidebarOpen(true)}
-              title="Open menu"
+              title="Menu"
               aria-label="Open menu"
+              className={`flex-shrink-0 p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-[#131E4D]' : 'hover:bg-gray-100'}`}
+            >
+              <div className="flex flex-col gap-1.5">
+                <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-[#0E173D]'}`} />
+                <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-[#0E173D]'}`} />
+                <span className={`block w-5 h-0.5 rounded-full ${darkMode ? 'bg-gray-300' : 'bg-[#0E173D]'}`} />
+              </div>
+            </button>
+
+            {/* EMA logo — returns to the main screen */}
+            <button
+              onClick={resetSearch}
+              title="Home"
+              aria-label="Home — EMA"
               className="flex-shrink-0 p-1 rounded-lg transition-transform duration-200 hover:scale-105"
             >
               <img
                 src={darkMode ? "/ema-logo-dark.svg" : "/ema-logo.svg"}
-                alt="EMA — open menu"
+                alt="EMA — home"
                 className={`w-auto transition-all duration-300 ${hasSearched ? "h-7" : "h-9"}`}
               />
             </button>
 
             <div className="flex-1" />
-
-            {/* Right: primary nav */}
-            <nav className="flex items-center gap-2">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
-              >
-                Settings
-              </button>
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
-              >
-                History
-              </button>
-              <a
-                href="/personal"
-                className="px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
-              >
-                My Files
-              </a>
-            </nav>
           </div>
         </div>
 
       {/* Main Content */}
-      <div className="w-full max-w-5xl mx-auto px-4 py-8">
+      <div className={`w-full px-4 py-8 ${hasSearched ? '' : 'max-w-5xl mx-auto'}`}>
         {!hasSearched ? (
           /* Initial Search View */
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -2059,16 +2115,8 @@ export default function Home() {
                   />
                 </div>
 
-                {/* Data sources — Figma FILTERS row */}
+                {/* Data sources — filled if active, outline if inactive */}
                 <div className="mt-4 flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setSidebarOpen(true)}
-                    title="Manage data sources & filters"
-                    className="inline-flex items-center px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-brand-primary text-white hover:bg-brand-primary-dark transition-colors"
-                  >
-                    Filters
-                  </button>
-
                   {/* EM Universe (WikEM, PMC, LITFL, REBEL EM, ALiEM) */}
                   <button
                     onClick={() => toggleSource("wikem")}
@@ -2076,7 +2124,6 @@ export default function Home() {
                     className={sourceChipClass(globeActive)}
                   >
                     EM Universe
-                    {globeActive && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                   </button>
 
                   {/* Enterprise EDs — e.g. Mayo Protocols, MCHS, RST */}
@@ -2086,11 +2133,10 @@ export default function Home() {
                       <button
                         key={ed.id}
                         onClick={() => toggleEdSelection(ed.id)}
-                        title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
+                        title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
                         className={sourceChipClass(active)}
                       >
-                        {ed.name}
-                        {active && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
+                        {edLabel(ed)}
                       </button>
                     );
                   })}
@@ -2103,7 +2149,6 @@ export default function Home() {
                       className={sourceChipClass(personalEnabled)}
                     >
                       My Files
-                      {personalEnabled && <span className="bg-brand-primary text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                     </button>
                   )}
 
@@ -2120,7 +2165,7 @@ export default function Home() {
                     onClick={handleSubmit}
                     disabled={!question.trim() || loading || isStreaming}
                     title="Submit (or press Enter)"
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-[4px] text-white bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 disabled:opacity-40"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-[4px] text-white bg-[#013DED] hover:bg-[#012FB8] transition-all duration-200 disabled:opacity-40"
                   >
                     {loading || isStreaming ? (
                       <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2263,13 +2308,112 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          /* Results View */
-          <div className="space-y-6 pb-[50vh]">
-            {/* User Question */}
-            <div className="flex justify-end">
-              <div className={`rounded-2xl px-5 py-3 max-w-[80%] ${darkMode ? 'bg-[#1E1E1E] border border-[#2A2A2A]' : 'bg-blue-50 border border-blue-100'}`}>
-                <p className={darkMode ? 'text-gray-100' : 'text-gray-800'}>{submittedQuestion}</p>
+          /* Results View — conversation columns; New conversation opens a column to the right */
+          <div className="flex items-start gap-6 overflow-x-auto pb-8">
+            {openPanels.map((pid) => {
+              const pconv = conversations.find((c) => c.id === pid);
+              const isActive = pid === currentConversationId;
+
+              // Inactive column — static snapshot; clicking resumes it IN PLACE
+              if (!isActive) {
+                if (!pconv) return null;
+                return (
+                  <button
+                    key={pid}
+                    onClick={() => loadConversation(pconv)}
+                    title="Resume this conversation"
+                    className={`flex-shrink-0 w-[320px] text-left rounded-[6px] border-2 overflow-hidden transition-colors hover:border-[#013DED] ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-gray-300 bg-white'}`}
+                  >
+                    <div className="px-4 py-2.5" style={{ backgroundColor: '#013DED' }}>
+                      <p className="text-white text-sm font-medium truncate">{pconv.question}</p>
+                    </div>
+                    <div className="p-4">
+                      <p className={`text-xs font-data line-clamp-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {(pconv.response?.answer || '').replace(/[#*`>\[\]()]/g, '').slice(0, 240) || '…'}
+                      </p>
+                      <p className="mt-3 text-[11px] font-data uppercase tracking-wide text-[#013DED]">Click to resume →</p>
+                    </div>
+                  </button>
+                );
+              }
+
+              // Active (live) column — renders in its own position (resume in place),
+              // tall with internal scroll so multiple answers are readable at once.
+              return (
+                <div key={pid} className={`flex-shrink-0 w-full max-w-[680px] max-h-[82vh] overflow-y-auto rounded-[6px] border-2 p-5 space-y-5 ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-[#013DED] bg-white'}`}>
+            {activeIsEmpty ? (
+              <div className="py-6">
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className={`font-title font-medium text-3xl md:text-4xl select-none flex-shrink-0 ${!question ? 'animate-caret' : ''}`}
+                    style={{ letterSpacing: 0, lineHeight: 1.19, color: '#013DED', transform: 'translateY(-0.09em)' }}
+                  >
+                    |
+                  </span>
+                  <textarea
+                    placeholder="What's the emergency?"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+                    rows={1}
+                    style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent' }}
+                    className={`flex-1 p-0 font-title font-medium bg-transparent resize-none focus:outline-none text-3xl md:text-4xl placeholder:opacity-100 focus:placeholder:text-transparent ${darkMode ? 'text-white placeholder:text-white' : 'text-[#0E173D] placeholder:text-[#0E173D]'}`}
+                  />
+                  <MicButton
+                    isSupported={micSupported}
+                    listening={micListening}
+                    permissionDenied={micPermissionDenied}
+                    onToggle={() => toggleMic(question, setQuestion)}
+                    darkMode={darkMode}
+                    size="md"
+                  />
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!question.trim() || loading || isStreaming}
+                    title="Submit (or press Enter)"
+                    className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-[#013DED] hover:bg-[#012FB8] disabled:opacity-40"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center gap-2 flex-wrap">
+                  <button onClick={() => toggleSource("wikem")} title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM" className={sourceChipClass(globeActive)}>
+                    EM Universe
+                  </button>
+                  {enterprise?.eds.map((ed) => (
+                    <button key={ed.id} onClick={() => toggleEdSelection(ed.id)} title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)} className={sourceChipClass(selectedEds.has(ed.id))}>
+                      {edLabel(ed)}
+                    </button>
+                  ))}
+                  {(user || userProfile) && (
+                    <button onClick={() => setPersonalEnabled(!personalEnabled)} title="Search your uploaded files" className={sourceChipClass(personalEnabled)}>
+                      My Files
+                    </button>
+                  )}
+                </div>
               </div>
+            ) : (
+              <>
+            {/* Prior turns transcript (multi-turn thread context) */}
+            {priorTurns.map((t, ti) => (
+              <div key={`turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-[#013DED]/40'}`}>
+                {/* Question banner (solid brand blue) */}
+                <div className="px-5 py-3" style={{ backgroundColor: '#013DED' }}>
+                  <p className="text-white font-medium">{t.question}</p>
+                </div>
+                {/* Answer */}
+                <div className={`p-6 ${darkMode ? 'bg-[#0E173D]' : 'bg-white'}`}>
+                  <div className={`prose prose-sm max-w-none leading-relaxed font-data ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{t.answer}</ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* User Question (current turn) — solid brand blue banner */}
+            <div className="rounded-[6px] px-5 py-3" style={{ backgroundColor: '#013DED' }}>
+              <p className="text-white font-medium">{submittedQuestion}</p>
             </div>
 
             {/* Response */}
@@ -2285,11 +2429,11 @@ export default function Home() {
                 </span>
               </div>
             ) : error ? (
-              <div className={`rounded-2xl px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
+              <div className={`rounded-[6px] px-5 py-4 ${darkMode ? 'bg-red-950 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
                 <p className={darkMode ? 'text-red-300' : 'text-red-700'}>{error}</p>
               </div>
             ) : (isStreaming || response) ? (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {/* Query Time — only after stream finishes */}
                 {response && (
                   <div className={`flex flex-wrap items-center gap-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -2304,8 +2448,8 @@ export default function Home() {
                 )}
 
                 {routeDisplay && (
-                  <div className={`-mt-2 rounded-2xl px-4 py-3 text-sm ${darkMode ? 'bg-[#111827]/40 border border-[#1F2937] text-gray-300' : 'bg-blue-50 border border-blue-100 text-gray-700'}`}>
-                    <span className={`font-medium ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                  <div className={`rounded-[6px] px-4 py-3 text-sm border ${darkMode ? 'bg-[#0E173D] border-[#24305C] text-gray-300' : 'bg-white border-[#013DED] text-[#0E173D]'}`}>
+                    <span className="font-semibold text-[#013DED]">
                       Searched: {routeDisplay.label}
                     </span>
                     <span className="ml-2">{routeDisplay.detail}</span>
@@ -2314,10 +2458,10 @@ export default function Home() {
 
                 {/* Local Protocol Cards — highlighted box above answer */}
                 {protocolCards.length > 0 && (
-                  <div className={`rounded-2xl overflow-hidden border-l-4 ${
+                  <div className={`rounded-[6px] overflow-hidden border-l-4 border-l-[#013DED] border ${
                     darkMode
-                      ? 'border-l-blue-500 bg-[#0A0A0A]/30 border border-blue-900/40'
-                      : 'border-l-blue-500 bg-blue-50/70 border border-blue-200/60'
+                      ? 'bg-[#0E173D] border-[#24305C]'
+                      : 'bg-white border-[#013DED]'
                   }`}>
                     <div className="px-5 pt-4 pb-2">
                       <h3 className={`text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
@@ -2383,8 +2527,8 @@ export default function Home() {
                 )}
 
                 {/* Answer — streaming or final */}
-                <div className={`rounded-2xl p-6 shadow-sm ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-white border border-gray-200'}`}>
-                  <div className={`prose prose-sm max-w-none leading-relaxed ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
+                <div className={`rounded-[6px] p-6 ${darkMode ? 'bg-[#0E173D] border border-[#24305C]' : 'bg-white border border-[#013DED]/40'}`}>
+                  <div className={`prose prose-sm max-w-none leading-relaxed font-data ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{response ? response.answer : streamingAnswer}</ReactMarkdown>
                   </div>
 
@@ -2566,7 +2710,7 @@ export default function Home() {
 
                 {/* Citations */}
                 {response && response.citations.length > 0 && (
-                  <div className={`rounded-2xl p-5 ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-gray-50 border border-gray-200'}`}>
+                  <div className={`rounded-[6px] p-5 ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-gray-50 border border-gray-200'}`}>
                     <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -2721,73 +2865,33 @@ export default function Home() {
                 )}
               </div>
             ) : null}
-          </div>
-        )}
-      </div>
 
-      {/* Pinned Input (when searching) */}
-      {hasSearched && (
-        <div className={`app-promptbar fixed bottom-0 right-0 border-t px-4 py-4 z-40 transition-all duration-300 ${sidebarOpen ? 'left-72' : 'left-0'} ${darkMode ? 'bg-[#0A0A0A] border-[#2A2A2A]' : 'bg-white border-gray-100'}`}>
-          <div className={`max-w-3xl mx-auto border-2 rounded-3xl shadow-lg transition-all duration-200 ${
-            darkMode 
-              ? 'bg-[#0F0F0F] border-[#3A3A3A] focus-within:border-blue-500 focus-within:ring-3 focus-within:ring-blue-500/25 focus-within:shadow-[0_0_30px_rgba(37,99,235,0.15)]' 
-              : 'bg-gray-50 border-gray-300 focus-within:border-blue-400 focus-within:ring-3 focus-within:ring-blue-100'
-          }`}>
-            <textarea
-              placeholder="Ask a follow-up question..."
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              rows={1}
-              className={`w-full p-4 pl-5 pr-4 rounded-t-3xl text-sm resize-none focus:outline-none bg-transparent ${
-                darkMode 
-                  ? 'text-gray-100 placeholder-gray-500' 
-                  : 'text-gray-800'
-              }`}
-            />
-
-            {/* Bottom bar */}
-            <div className="flex items-center justify-between px-4 pb-3 pt-0">
-              {/* Source toggles + ED filters */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => toggleSource("wikem")}
-                  title="EM Universe — WikEM topics + PMC peer-reviewed literature"
-                  className={`p-1.5 rounded-lg transition-all duration-200 ${
-                    globeActive
-                      ? darkMode
-                        ? 'bg-blue-600/20 text-blue-400'
-                        : 'bg-blue-50 text-blue-600'
-                      : darkMode
-                        ? 'text-[#6B7280] hover:text-gray-300 hover:bg-[#1E1E1E]'
-                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                  }`}
+            {/* Follow-up reply — matches the "| Anything else?" prompt */}
+            <div className="mt-2 pt-2">
+              <div className="flex items-baseline gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className={`font-title font-medium text-2xl md:text-3xl select-none flex-shrink-0 ${!question ? 'animate-caret' : ''}`}
+                  style={{ letterSpacing: 0, lineHeight: 1.19, color: '#013DED', transform: 'translateY(-0.09em)' }}
                 >
-                  <Globe className="w-4 h-4" />
-                </button>
-                {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
-                    <button
-                      key={ed.id}
-                      onClick={() => toggleEdSelection(ed.id)}
-                      title={ed.location ? `${ed.name} — ${ed.location}` : ed.name}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
-                        darkMode
-                          ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                          : 'bg-blue-50 text-blue-600 border border-blue-200'
-                      }`}
-                    >
-                      {ed.name}
-                    </button>
-                ))}
-              </div>
-
-              {/* Right side */}
-              <div className="flex items-center gap-2">
+                  |
+                </span>
+                <textarea
+                  placeholder="Anything else?"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  rows={1}
+                  style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent' }}
+                  className={`flex-1 p-0 font-title font-medium bg-transparent resize-none focus:outline-none text-2xl md:text-3xl placeholder:opacity-100 focus:placeholder:text-transparent ${
+                    darkMode ? 'text-white placeholder:text-white' : 'text-[#0E173D] placeholder:text-[#0E173D]'
+                  }`}
+                />
                 <MicButton
                   isSupported={micSupported}
                   listening={micListening}
@@ -2799,8 +2903,8 @@ export default function Home() {
                 <button
                   onClick={handleSubmit}
                   disabled={!question.trim() || loading || isStreaming}
-                  title="Submit"
-                  className="w-8 h-8 rounded-lg text-white flex items-center justify-center bg-brand-primary hover:bg-brand-primary-dark transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                  title="Submit (or press Enter)"
+                  className="self-center inline-flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-[4px] text-white bg-[#013DED] hover:bg-[#012FB8] transition-all duration-200 disabled:opacity-40"
                 >
                   {loading || isStreaming ? (
                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2809,10 +2913,43 @@ export default function Home() {
                   )}
                 </button>
               </div>
+              {/* Source chips */}
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <button onClick={() => toggleSource("wikem")} title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM" className={sourceChipClass(globeActive)}>
+                  EM Universe
+                </button>
+                {enterprise?.eds.map((ed) => (
+                  <button key={ed.id} onClick={() => toggleEdSelection(ed.id)} title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)} className={sourceChipClass(selectedEds.has(ed.id))}>
+                    {edLabel(ed)}
+                  </button>
+                ))}
+                {(user || userProfile) && (
+                  <button onClick={() => setPersonalEnabled(!personalEnabled)} title="Search your uploaded files" className={sourceChipClass(personalEnabled)}>
+                    My Files
+                  </button>
+                )}
+              </div>
             </div>
+            </>
+            )}
+            </div>
+              );
+            })}
+
+            {/* New conversation — opens a column to the right */}
+            <button
+              onClick={startNewConversation}
+              title="Start a new conversation"
+              className="flex-shrink-0 inline-flex items-center gap-2"
+            >
+              <span className="w-9 h-9 rounded-[6px] flex items-center justify-center text-white" style={{ backgroundColor: '#013DED' }}>
+                <Plus className="w-5 h-5" />
+              </span>
+              <span className={`font-data text-sm font-bold uppercase tracking-wide whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-[#0E173D]'}`}>New conversation</span>
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Image Lightbox Modal */}
       {lightboxImage && (
