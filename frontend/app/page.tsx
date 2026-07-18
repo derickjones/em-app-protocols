@@ -302,14 +302,12 @@ export default function Home() {
 
   // Data-source filter chip styling (Figma FILTERS row)
   const sourceChipClass = (active: boolean) =>
-    `inline-flex items-center gap-2 pl-2.5 ${active ? 'pr-1' : 'pr-2.5'} py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
+    `inline-flex items-center px-3 py-1.5 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
       active
-        ? darkMode
-          ? 'bg-[#0E173D] border-[#013DED] text-[#013DED]'
-          : 'bg-white border-[#013DED] text-[#013DED]'
+        ? 'bg-[#013DED] border-[#013DED] text-white'
         : darkMode
-          ? 'border-[#2A3763] text-gray-500 hover:border-[#013DED] hover:text-[#013DED]'
-          : 'border-gray-300 text-gray-400 hover:border-[#013DED] hover:text-[#013DED]'
+          ? 'bg-transparent border-[#24305C] text-[#6B7699] hover:border-[#013DED] hover:text-[#013DED]'
+          : 'bg-white border-gray-300 text-gray-500 hover:border-[#013DED] hover:text-[#013DED]'
     }`;
 
   // Save EM Universe preferences to localStorage
@@ -2094,16 +2092,8 @@ export default function Home() {
                   />
                 </div>
 
-                {/* Data sources — Figma FILTERS row */}
+                {/* Data sources — filled if active, outline if inactive */}
                 <div className="mt-4 flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setSidebarOpen(true)}
-                    title="Manage data sources & filters"
-                    className="inline-flex items-center px-3 py-1.5 rounded-[4px] text-xs font-data font-bold uppercase tracking-wide bg-[#013DED] text-white hover:bg-[#012FB8] transition-colors"
-                  >
-                    Filters
-                  </button>
-
                   {/* EM Universe (WikEM, PMC, LITFL, REBEL EM, ALiEM) */}
                   <button
                     onClick={() => toggleSource("wikem")}
@@ -2111,7 +2101,6 @@ export default function Home() {
                     className={sourceChipClass(globeActive)}
                   >
                     EM Universe
-                    {globeActive && <span className="bg-[#013DED] text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                   </button>
 
                   {/* Enterprise EDs — e.g. Mayo Protocols, MCHS, RST */}
@@ -2125,7 +2114,6 @@ export default function Home() {
                         className={sourceChipClass(active)}
                       >
                         {edLabel(ed)}
-                        {active && <span className="bg-[#013DED] text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                       </button>
                     );
                   })}
@@ -2138,7 +2126,6 @@ export default function Home() {
                       className={sourceChipClass(personalEnabled)}
                     >
                       My Files
-                      {personalEnabled && <span className="bg-[#013DED] text-white inline-flex items-center justify-center w-[18px] h-[18px] rounded-[2px] text-[10px] leading-none">X</span>}
                     </button>
                   )}
 
@@ -2351,22 +2338,19 @@ export default function Home() {
                   </button>
                 </div>
                 <div className="mt-4 flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => toggleSource("wikem")}
-                    title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM"
-                    className={`px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${globeActive ? 'border-[#013DED] bg-[#013DED] text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'}`}
-                  >
+                  <button onClick={() => toggleSource("wikem")} title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM" className={sourceChipClass(globeActive)}>
                     EM Universe
                   </button>
-                  {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
-                    <button
-                      key={ed.id}
-                      onClick={() => toggleEdSelection(ed.id)}
-                      className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-[#013DED] text-[#013DED]"
-                    >
+                  {enterprise?.eds.map((ed) => (
+                    <button key={ed.id} onClick={() => toggleEdSelection(ed.id)} title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)} className={sourceChipClass(selectedEds.has(ed.id))}>
                       {edLabel(ed)}
                     </button>
                   ))}
+                  {(user || userProfile) && (
+                    <button onClick={() => setPersonalEnabled(!personalEnabled)} title="Search your uploaded files" className={sourceChipClass(personalEnabled)}>
+                      My Files
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -2883,25 +2867,19 @@ export default function Home() {
               </div>
               {/* Source chips */}
               <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => toggleSource("wikem")}
-                  title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM"
-                  className={`px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] transition-colors ${
-                    globeActive ? 'border-[#013DED] bg-[#013DED] text-white' : darkMode ? 'border-[#24305C] text-[#6B7699]' : 'border-gray-300 text-gray-400'
-                  }`}
-                >
+                <button onClick={() => toggleSource("wikem")} title="EM Universe — WikEM, PMC, LITFL, REBEL EM, ALiEM" className={sourceChipClass(globeActive)}>
                   EM Universe
                 </button>
-                {enterprise?.eds.filter((ed) => selectedEds.has(ed.id)).map((ed) => (
-                  <button
-                    key={ed.id}
-                    onClick={() => toggleEdSelection(ed.id)}
-                    title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)}
-                    className="px-2.5 py-1 rounded-[4px] text-xs font-data font-semibold uppercase tracking-wide border-[1.5px] border-[#013DED] text-[#013DED]"
-                  >
+                {enterprise?.eds.map((ed) => (
+                  <button key={ed.id} onClick={() => toggleEdSelection(ed.id)} title={ed.location ? `${edLabel(ed)} — ${ed.location}` : edLabel(ed)} className={sourceChipClass(selectedEds.has(ed.id))}>
                     {edLabel(ed)}
                   </button>
                 ))}
+                {(user || userProfile) && (
+                  <button onClick={() => setPersonalEnabled(!personalEnabled)} title="Search your uploaded files" className={sourceChipClass(personalEnabled)}>
+                    My Files
+                  </button>
+                )}
               </div>
             </div>
             </>
