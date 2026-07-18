@@ -714,6 +714,15 @@ export default function Home() {
     const submittedQuestion = question.trim();
     setSubmittedQuestion(submittedQuestion);
     setQuestion("");
+
+    // Contextualize follow-ups so the retrieval query is self-contained (a bare
+    // "for adults" retrieves nothing useful). Anchors on the thread's opening
+    // topic; keeps the displayed question as the raw follow-up. This makes
+    // multi-turn work even before the history-aware backend is deployed.
+    const topic = threadPriorTurns[0]?.question;
+    const apiQuery = topic && topic !== submittedQuestion
+      ? `${topic}. Follow-up: ${submittedQuestion}`.slice(0, 490)
+      : submittedQuestion;
     
     setLoading(true);
     setIsStreaming(false);
@@ -748,7 +757,7 @@ export default function Home() {
         method: "POST",
         headers,
         body: JSON.stringify({
-          query: submittedQuestion,
+          query: apiQuery,
           history,
           ed_ids: Array.from(selectedEds),
           bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
@@ -766,7 +775,7 @@ export default function Home() {
             method: "POST",
             headers,
             body: JSON.stringify({
-              query: submittedQuestion,
+              query: apiQuery,
               ed_ids: Array.from(selectedEds),
               bundle_ids: selectedBundles.size > 0 ? Array.from(selectedBundles) : ["all"],
               enterprise_id: enterprise?.id || undefined,
