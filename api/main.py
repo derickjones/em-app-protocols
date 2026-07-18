@@ -7,13 +7,20 @@ import os
 import json
 import asyncio
 import uuid
+import secrets
+from urllib.parse import urlencode
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import time
 import requests
+
+# Load variables from api/.env into the environment (Epic credentials, etc.).
+# Safe no-op if the file is missing (e.g. on Cloud Run, where env vars are set directly).
+load_dotenv()
 import google.auth
 import google.auth.transport.requests
 from google.cloud import storage
@@ -2659,6 +2666,224 @@ async def personal_download(file_id: str, user: UserProfile = Depends(get_verifi
         raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Epic SMART on FHIR integration (sandbox / testing)
+#
+# Flow (standard SMART "EHR launch"):
+#   1. Epic's EHR opens /api/epic/launch?iss=<fhir base>&launch=<opaque token>
+#   2. We redirect the browser to Epic's authorize endpoint with our scopes + a
+#      random `state` value (CSRF protection).
+#   3. The user authorizes; Epic redirects back to /api/epic/callback?code=...&state=...
+#   4. We verify `state`, then exchange `code` for an access token at Epic's token
+#      endpoint using our client ID + secret.
+#   5. With the access token (and the patient ID Epic returns), fetch_epic_patient_bundle()
+#      pulls the patient's FHIR resources and assembles them into one dict.
+#
+# NOTE ON ROUTE PATHS: these routes use the `/api/epic/...` prefix (per the paths
+# registered with Epic), which differs from this app's otherwise flat routes
+# (e.g. /query, /personal/upload). The /callback path MUST match the path in your
+# EPIC_REDIRECT_URI. If you'd rather match the flat style, rename BOTH routes to
+# /epic/launch and /epic/callback and update EPIC_REDIRECT_URI to match.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Credentials come from api/.env (see load_dotenv() at the top of this file).
+# They are intentionally read as plain env vars so Cloud Run can inject them too.
+EPIC_CLIENT_ID = os.environ.get("EPIC_CLIENT_ID", "")
+EPIC_SANDBOX_CLIENT_SECRET = os.environ.get("EPIC_SANDBOX_CLIENT_SECRET", "")
+EPIC_REDIRECT_URI = os.environ.get("EPIC_REDIRECT_URI", "")
+
+# Epic sandbox endpoints (hard-coded per spec). In a fully production-grade SMART
+# app these would be *discovered* from the launch `iss` via its
+# {iss}/.well-known/smart-configuration document rather than hard-coded, because
+# each Epic customer has a different FHIR base URL.
+EPIC_AUTHORIZE_URL = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/authorize"
+EPIC_TOKEN_URL = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
+EPIC_FHIR_BASE_URL = "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4"
+
+# Scopes we request. `launch` = use the EHR launch context (i.e. the patient the
+# clinician has open); `openid`/`fhirUser` identify the logged-in user; and
+# `patient/*.read` grants read access to that patient's data.
+EPIC_SCOPES = "launch openid fhirUser patient/*.read"
+
+# ─── CSRF `state` storage ─────────────────────────────────────────────────────
+# PLACEHOLDER — NOT production-ready.
+# We generate a random `state` at /launch and must confirm the same value comes
+# back at /callback (this is what stops an attacker from forging a callback).
+# Here we keep the outstanding states in a plain in-memory set. That is fine for
+# single-process sandbox testing, but a real deployment must NOT rely on this
+# because: (a) it's lost on every restart, and (b) it doesn't work across
+# multiple server instances (Cloud Run runs several). Production should store
+# `state` in a signed cookie / server-side session tied to the user's browser.
+_pending_epic_states: set[str] = set()
+
+
+@app.get("/api/epic/launch")
+async def epic_launch(
+    iss: str = Query(..., description="FHIR base URL of the launching EHR (Epic)"),
+    launch: str = Query(..., description="Opaque launch token issued by Epic"),
+):
+    """
+    Step 1→2 of the SMART EHR launch: Epic opens this URL, and we redirect the
+    browser to Epic's authorize endpoint to begin the OAuth2 flow.
+    """
+    if not EPIC_CLIENT_ID or not EPIC_REDIRECT_URI:
+        # Fail loudly if the app hasn't been configured yet (empty .env values).
+        raise HTTPException(
+            status_code=500,
+            detail="Epic integration not configured: set EPIC_CLIENT_ID and EPIC_REDIRECT_URI in api/.env",
+        )
+
+    # Generate a cryptographically-random CSRF token and remember it so we can
+    # verify it at the callback. (See the _pending_epic_states placeholder note.)
+    state = secrets.token_urlsafe(32)
+    _pending_epic_states.add(state)
+
+    # Build the authorize request. `aud` (audience) must be the FHIR base URL the
+    # token will be used against — SMART requires it — so we pass through `iss`.
+    params = {
+        "response_type": "code",
+        "client_id": EPIC_CLIENT_ID,
+        "redirect_uri": EPIC_REDIRECT_URI,
+        "scope": EPIC_SCOPES,
+        "state": state,
+        "aud": iss,
+        "launch": launch,
+    }
+    authorize_redirect = f"{EPIC_AUTHORIZE_URL}?{urlencode(params)}"
+    return RedirectResponse(url=authorize_redirect)
+
+
+@app.get("/api/epic/callback")
+async def epic_callback(
+    code: str = Query(..., description="Authorization code returned by Epic"),
+    state: str = Query(..., description="CSRF token we issued at /launch"),
+):
+    """
+    Step 3→4 of the flow: Epic redirects here with an authorization `code`. We
+    verify `state`, then exchange the code for an access token.
+    """
+    # ─── CSRF state check ───
+    # The `state` coming back MUST be one we issued at /launch. If it isn't, this
+    # could be a forged/replayed callback, so we reject it. We also remove it so a
+    # single state can't be reused (one-time use).
+    if state not in _pending_epic_states:
+        raise HTTPException(status_code=400, detail="Invalid or expired state (possible CSRF).")
+    _pending_epic_states.discard(state)
+
+    # Exchange the authorization code for tokens. Epic's token endpoint expects
+    # form-encoded data. This is a confidential client, so we send our client_id
+    # and client_secret in the body.
+    token_payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": EPIC_REDIRECT_URI,
+        "client_id": EPIC_CLIENT_ID,
+        "client_secret": EPIC_SANDBOX_CLIENT_SECRET,
+    }
+    token_resp = requests.post(
+        EPIC_TOKEN_URL,
+        data=token_payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=30,
+    )
+    if token_resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Epic token exchange failed ({token_resp.status_code}): {token_resp.text}",
+        )
+
+    # PLACEHOLDER — returning the raw token response (which includes access_token,
+    # patient ID, etc.) straight to the caller is fine for testing but is NOT how
+    # a production app should behave: tokens are secrets and should be stored
+    # server-side (session / secure store) and NOT handed back to the browser.
+    # A production callback would typically store the token, then redirect the
+    # user to the app UI. The token response also contains a `patient` field —
+    # pass that plus access_token into fetch_epic_patient_bundle() below.
+    return token_resp.json()
+
+
+def fetch_epic_patient_bundle(access_token: str, patient_id: str) -> Dict[str, Any]:
+    """
+    Given a valid Epic access token and a patient ID, pull the patient's core
+    FHIR R4 resources and assemble them into a single dict for the rest of the
+    app to consume.
+
+    Returns a dict shaped like:
+        {
+          "Patient": {...},                # the Patient resource itself
+          "Encounter": [...],              # lists = FHIR search "bundle" entries
+          "Condition": [...],
+          ... etc ...
+          "errors": {"Observation": "404 ..."}   # any resource that failed to load
+        }
+
+    NOTE: this is a straightforward sequential fetch (one HTTP call per resource
+    type). That's clear and fine for testing; if latency matters later these could
+    be parallelized. No pagination is followed — for resource types with many
+    entries Epic returns a first page only (enough for sandbox testing).
+    """
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        # FHIR servers return JSON when asked via this Accept header.
+        "Accept": "application/fhir+json",
+    }
+
+    # Patient is fetched by ID directly (/Patient/{id}); every other resource is a
+    # search scoped to that patient (/{Resource}?patient={id}).
+    search_resource_types = [
+        "Encounter",
+        "Condition",
+        "Observation",
+        "MedicationRequest",
+        "AllergyIntolerance",
+        "DiagnosticReport",
+        "ServiceRequest",
+        "DocumentReference",
+    ]
+
+    bundle: Dict[str, Any] = {"errors": {}}
+
+    # ─── Patient resource ───
+    try:
+        patient_resp = requests.get(
+            f"{EPIC_FHIR_BASE_URL}/Patient/{patient_id}", headers=headers, timeout=30
+        )
+        if patient_resp.status_code == 200:
+            bundle["Patient"] = patient_resp.json()
+        else:
+            bundle["Patient"] = None
+            bundle["errors"]["Patient"] = f"{patient_resp.status_code}: {patient_resp.text}"
+    except requests.RequestException as e:
+        bundle["Patient"] = None
+        bundle["errors"]["Patient"] = str(e)
+
+    # ─── Patient-scoped searches ───
+    for resource_type in search_resource_types:
+        try:
+            resp = requests.get(
+                f"{EPIC_FHIR_BASE_URL}/{resource_type}",
+                headers=headers,
+                params={"patient": patient_id},
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                # A FHIR search returns a "Bundle"; the actual resources are under
+                # `entry[].resource`. We flatten to a plain list per type.
+                search_bundle = resp.json()
+                bundle[resource_type] = [
+                    entry.get("resource", {})
+                    for entry in search_bundle.get("entry", [])
+                ]
+            else:
+                bundle[resource_type] = []
+                bundle["errors"][resource_type] = f"{resp.status_code}: {resp.text}"
+        except requests.RequestException as e:
+            bundle[resource_type] = []
+            bundle["errors"][resource_type] = str(e)
+
+    return bundle
 
 
 # Run with: uvicorn main:app --reload
