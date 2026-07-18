@@ -210,6 +210,7 @@ class PersonalService:
         }
         payload = {
             "contents": [{
+                "role": "user",
                 "parts": [
                     {"text": "Describe this medical/clinical image or document page in detail. Extract all visible text, labels, data, and clinical information. Be thorough and structured."},
                     {"inline_data": {"mime_type": mime, "data": b64}},
