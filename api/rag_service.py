@@ -75,8 +75,8 @@ class RAGService:
                 auth_req = google.auth.transport.requests.Request()
                 self._credentials.refresh(auth_req)
             return self._credentials.token
-        return credentials.token
-    
+
+
     def _retrieve_contexts(self, query: str, corpus_name: str = None, top_k: int = 5) -> List[Dict]:
         """Retrieve relevant contexts from a RAG corpus.
         
