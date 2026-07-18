@@ -1236,8 +1236,10 @@ export default function Home() {
           </button>
         </div>
 
+        {/* Scrollable content — conversations + settings/account */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
         {/* Conversation List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="p-3 space-y-2">
           {conversations.length === 0 ? (
             <div className={`text-center py-8 text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -2031,6 +2033,7 @@ export default function Home() {
               <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Sign in with Google</span>
             </button>
           )}
+        </div>
         </div>
       </aside>
 
