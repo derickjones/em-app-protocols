@@ -2360,6 +2360,14 @@ export default function Home() {
                     style={{ letterSpacing: 0, lineHeight: 1.19, caretColor: 'transparent' }}
                     className={`flex-1 p-0 font-title font-medium bg-transparent resize-none focus:outline-none text-3xl md:text-4xl placeholder:opacity-100 focus:placeholder:text-transparent ${darkMode ? 'text-white placeholder:text-white' : 'text-[#0E173D] placeholder:text-[#0E173D]'}`}
                   />
+                  <MicButton
+                    isSupported={micSupported}
+                    listening={micListening}
+                    permissionDenied={micPermissionDenied}
+                    onToggle={() => toggleMic(question, setQuestion)}
+                    darkMode={darkMode}
+                    size="md"
+                  />
                   <button
                     onClick={handleSubmit}
                     disabled={!question.trim() || loading || isStreaming}
