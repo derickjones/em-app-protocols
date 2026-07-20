@@ -1,300 +1,376 @@
-# PMC Sharding Workstream
+# PMC Curated 3-Corpus Workstream
 
-**Status:** Ready to implement
-**Owner:** (assign)
-**Tracking:** Linear EMA-97 (Experiment 9 = root cause; this doc = the fix)
+**Status:** In progress — `pmc-em` corpus built and imported, backend/frontend
+integration not yet started. **Speed is not confirmed fixed — read §2 before
+doing anything else.**
+**Tracking:** Linear EMA-97
 **Prereq reading:** `docs/SPEED_AND_SOURCE_STRATEGY.md`
 
-This is a self-contained implementation spec. It assumes no prior context. Follow
-the phases in order; each has explicit, verifiable **Success Criteria** — do not
-advance a phase until its criteria pass.
+This is a self-contained implementation spec — assume no prior context. Follow
+phases in order; each has explicit **Success Criteria**. **Read §1 and §2 in
+full before touching anything** — this project has already gone through two
+prior attempts and a real, still-unresolved finding that changes how you should
+approach verification.
 
 ---
 
-## 1. Problem & goal
+## 1. Problem & history (read this first)
 
-PMC retrieval takes ~9-10s; every other corpus takes <1-2s. Root cause is
-**confirmed and documented, not inferred**: the PMC RAG corpus has **56,156 files**,
-~5.6x past Google's stated **10,000-file threshold** for the default exact-KNN
-vector backend (`ragManagedDb` + `knn`) that all corpora use. Per Google's docs,
-KNN "is good for corpora under 10,000 files"; past that, latency climbs with size.
-LITFL (7,892 files, same backend) retrieves in ~0.6-1.5s — proof that a corpus in
-that size range is fast on KNN.
+PMC retrieval takes ~9-10s; every other corpus takes <1-2s. Root cause:
+PMC's original corpus has 56,156 files, ~5.6x past Google's documented
+10,000-file threshold for the default exact-KNN vector backend
+(`ragManagedDb` + `knn`) every corpus in this project uses.
 
-An ANN (Vector Search 2.0) migration was investigated and **rejected**: ANN is only
-in `us-central1`, and creating a corpus there requires switching the whole project
-to Serverless mode — a project-wide change with undocumented effect on the 6
-existing `us-west4` corpora. Too risky.
+**Attempt 1 (superseded): shard all 56,156 files into 9 correctly-sized KNN
+corpora, no content dropped.** Built and imported successfully — every count
+verified exact. But isolated speed tests on the fresh shards came back
+**slow (7-19s, no better than the original oversized corpus)**, even fully
+isolated with zero concurrency, even hours after import (checked at 2h and
+4h+, no improvement). Investigation found the whole project runs RAG Engine's
+managed Spanner on **Basic tier** — a tiny, fixed 0.1-node (100 processing
+unit) instance **shared by every corpus in the region**. The paid fix (Scaled
+tier, autoscaling 1-10 nodes) costs **$657-$6,570/month** — rejected as too
+expensive. Vector Search 2.0 (the ANN alternative) is *not* meaningfully
+cheaper (~$700-800/mo). Pinecone serverless would likely be far cheaper but
+needs real integration research — parked, not chosen.
 
-**Goal:** split PMC into multiple smaller KNN corpora ("shards"), each kept **below
-10,000 files with a safety margin (target ≤7,500)**, all remaining in `us-west4` on
-the same proven backend. PMC retrieval then becomes ~9 fast parallel calls instead
-of one slow call. **The design must be scalable** — future journal/content
-additions must follow the same pattern with minimal effort — **and must connect
-cleanly to the existing frontend journal selection.**
+**Attempt 2 (this workstream): don't shard everything — curate down to only
+the highest-value journals, in 3 clean, non-split corpora, dropping ~60% of
+PMC's content by design.** Content curation is valuable independent of the
+speed question (better signal-to-noise for EM-relevant queries; JAMA Netw
+Open alone is 9,943 broad-general-medicine articles, ~18% of all of PMC, with
+no EM focus). **Built and speed-tested the first corpus (`pmc-em`) as a
+decision gate before building the rest — see §2, the result was NOT the clean
+pass we hoped for.**
 
-### Success definition for the whole workstream
-1. PMC retrieval contribution to `/query` drops from ~10s to ~1-2s.
-2. No loss of content (sharded total file count == original 56,156) or citation/
-   journal-filter behavior.
-3. Adding new PMC content later requires only re-running the shard tool + a deploy —
-   no hand-editing of shard assignments in app code.
-4. Frontend journal selection drives which shards are queried (deselected journals'
-   shards are skipped) and remains correct for any selection.
+## 2. Honest status of the speed question — READ THIS
 
----
+A single, freshly-created, correctly-sized (6,959 of 6,960 files, well under
+every threshold) corpus (`pmc-em`, corpus ID `1578511669393358848`, `us-west4`,
+identical KNN config to every proven-fast corpus) was built and speed-tested
+in complete isolation. Result:
 
-## 2. Three-layer model (read this before coding)
-
-Keep these distinct — conflating them is the main way this goes wrong:
-
-- **Shard** — physical unit. One Vertex RAG corpus, KNN, `us-west4`, capped at
-  **≤7,500 files** (target; 10,000 is the hard limit). ~9 shards total.
-- **Journal** — logical unit the user selects (37 journals today). A journal lives
-  in exactly one shard, *except* a journal larger than the cap, which is split
-  across consecutive shards (only "JAMA Netw Open" at 9,943 today).
-- **UI group** — display grouping (4 today). Shards never span UI groups, so
-  selecting a group maps to a small, contiguous set of shards.
-
-**Bridge between them: the shard registry** (`scrapers/PMC/pmc_shard_registry.json`,
-created in Phase 1). Single source of truth. Shape:
-```json
-{
-  "target_cap": 7500,
-  "reshard_watermark": 8500,
-  "location": "us-west4",
-  "embedding_model": "text-embedding-005",
-  "chunk_size": 1024,
-  "chunk_overlap": 200,
-  "shards": [
-    {"id": "shard_00", "corpus_id": "<filled in Phase 2>", "file_count": 6928,
-     "ui_group": "Emergency Medicine", "journals": ["The Western Journal of Emergency Medicine", "..."]}
-  ],
-  "journal_to_shards": {
-    "The Western Journal of Emergency Medicine": ["shard_00"],
-    "JAMA Netw Open": ["shard_03", "shard_04"]
-  },
-  "ui_groups": [
-    {"group": "Emergency Medicine",
-     "journals": [{"key": "The Western Journal of Emergency Medicine", "label": "Western J EM", "count": 2066}]}
-  ]
-}
 ```
-The backend reads this at runtime for: (a) the list of PMC shard corpus IDs to
-query, (b) mapping selected journals → shards, (c) serving the journal registry to
-the frontend. **Because the app reads the registry dynamically, adding a shard later
-needs no app code change — just regenerate the registry and redeploy.**
+Run 1: ConnectionError after 13.58s — "Remote end closed connection without response"
+Run 2: 11.83s, succeeded
+Run 3: 9.96s, succeeded
+```
+
+**This rules out "too many simultaneous new corpora" and "corpus too big" as
+complete explanations.** A single corpus, correctly sized, behaves identically
+to the 9-shard attempt: slow, and in this run, one call didn't even get a
+proper response.
+
+The pattern that fits *all* evidence gathered across both attempts: corpora
+created **months ago** (LITFL — 7,892 files, comparable size to `pmc-em`'s
+6,959 — WikEM, REBEL EM, ALiEM, local) are consistently fast. Corpora created
+**today** (the original 9 shards, and now `pmc-em`) are consistently slow —
+**regardless of size or count**. The strongest working hypothesis is
+**creation recency**, not file count — but this is unconfirmed, and testing
+2 and 4+ hours of wait time on `shard_00` showed no improvement. We do not
+know the true settling period, or whether one exists at all.
+
+**Decision made anyway: proceed with building all 3 curated corpora.**
+Content curation has value independent of whether it fixes speed, and the
+infrastructure can be revisited later (e.g. if a much longer wait resolves
+it, if Pinecone research pans out, or if the cost calculus on Scaled tier
+changes). **Do not assume this workstream fixes the ~10s PMC latency.**
+Treat speed verification in Phase 5 as informational, not a hard blocker —
+if it's still slow, that is a known, already-anticipated outcome, not a
+surprise requiring you to unwind everything. Report it and move on to
+deciding next steps with the user, don't silently declare success either way.
+
+**Practical guardrail this finding exposes:** `RAGService._retrieve_contexts`
+(`api/rag_service.py`, `_get_access_token` region) issues its
+`requests.post(...)` call to Vertex's `retrieveContexts` endpoint with **no
+timeout**. During testing this once hung for 18+ minutes on an established
+connection with no response. Consider adding an explicit `timeout=` (e.g. 30s)
+to this call as part of this workstream's backend work (Phase 3) — currently
+a slow/hung PMC shard could block a request indefinitely with no bound.
 
 ---
 
-## 3. Ground-truth facts (verified live — trust these over stale files)
+## 3. The curated content set (confirmed with the user)
 
-**Corpora (all `us-west4`, KNN):**
-| Corpus | ID | Files | Action |
+| Corpus | Journals kept | Files | Status |
 |---|---|---|---|
-| PMC (live) | `7377459139586293760` | 56,156 | **Keep as rollback** until new shards verified; delete in Phase 6 |
-| PMC (abandoned, empty) | `459930111945211904` | ~0 | Delete in Phase 6 |
-| local / em-protocols | `2305843009213693952` | 353 | Untouched (stays KNN) |
-| wikem | `3379951520341557248` | 1,899 | Untouched |
-| litfl | `7991637538768945152` | 7,892 | Untouched |
-| rebelem | `1152921504606846976` | 1,245 | Untouched |
-| aliem | `4611686018427387904` | 258 | Untouched |
-| personal | `2842897264777625600` | — | Untouched |
+| **pmc-em** | All 12 Emergency Medicine journals: Western J EM, JACEP Open, Am J Emerg Med, Annals of EM, Acad Emerg Med, J Emerg Med, Pediatric Emerg Care, CJEM, Adv J Emerg Med, Prehosp Emerg Care, Eur J Emerg Med, Air Med Journal | 6,960 | **Built.** Corpus ID `1578511669393358848`. Imported 6,959/6,960 (1-file gap — same transient-failure pattern as Attempt 1's 122-file gap, likely fixable with a retry; see Phase 1 remaining task). |
+| **pmc-critical-care** | Chest, Crit Care Med, Resuscitation Plus, Shock, Resuscitation, J Intensive Care Med (**dropped: Am J Respir Crit Care Med**, 4,464 files — most pulm-focused, least EM-specific, and the single largest journal in the group) | 6,972 | Not yet built |
+| **pmc-high-impact** | Lancet, BMJ, N Engl J Med, Lancet Infect Dis (**dropped: Ann Intern Med, Lancet Respir Med, Mayo Clin Proc, Lancet Neurol** — 2,946 files combined) | 8,706 | Not yet built |
+| **Excluded entirely** | **JAMA Family, all 10 journals** (JAMA Netw Open, JAMA, JAMA Intern Med, JAMA Oncol, JAMA Pediatr, JAMA Surg, JAMA Neurol, JAMA Ophthalmol, JAMA Cardiol, JAMA Otolaryngol) — 26,108 files — **plus** Am J Respir Crit Care Med, Ann Intern Med, Lancet Respir Med, Mayo Clin Proc, Lancet Neurol — 7,410 files | **33,518 total excluded** | By design |
+| **Total indexed (3 corpora)** | | **22,638** (40% of original PMC's 56,156) | |
+
+Every corpus is well under the 10,000 hard limit and the original 7,500-per-shard
+safety target, with **no journal ever split across corpora** — simpler than
+Attempt 1's bin-packing, no `journal → [multiple shards]` mapping needed.
+
+This is a real, deliberate content-coverage tradeoff, confirmed with the user —
+33,518 articles, more than half of PMC's original content, become unsearchable.
+Files are preserved in GCS (moved to a clearly-labeled excluded location, not
+deleted), so this is reversible in principle later.
+
+---
+
+## 4. Ground-truth facts (verified live — trust these over stale files)
+
+**Corpora that exist right now (`us-west4`, all KNN/Basic tier):**
+| Corpus | ID | Files | Status |
+|---|---|---|---|
+| Original PMC (live, in production) | `7377459139586293760` | 56,156 | **Keep untouched** — the rollback path until this whole workstream is verified and trusted |
+| Abandoned empty PMC dupe | `459930111945211904` | ~0 | Delete during Phase 5 cleanup |
+| Attempt 1's 9 shards | `shard_00`–`shard_08`, IDs in the (now-superseded) `pmc_shard_registry.json` — **read that file before overwriting it, to get the exact deletion list** | 56,156 combined | Obsolete once this workstream's 3 corpora are verified; delete during Phase 5 cleanup |
+| **pmc-em** (this workstream) | `1578511669393358848` | 6,959/6,960 | **Built** — verify/retry the 1-file gap, otherwise ready to use |
+| local / wikem / litfl / rebelem / aliem / personal | unchanged | — | Untouched by any of this |
 
 **Landmine:** `scrapers/PMC/pmc_rag_config.json` points at corpus
-`6512768011131158528`, which **no longer exists**. Do NOT trust it. Do NOT run
-`scrapers/PMC/pmc_reindex.py`'s `reindex()` — its delete-first logic targets that
-dead ID and its region/config assumptions are stale. **Reuse its helper functions,
-not its entrypoints.**
+`6512768011131158528`, which doesn't exist. Ignore it; remove/fix in Phase 5.
+**Do not** run `scrapers/PMC/pmc_reindex.py`'s `reindex()` — delete-first logic
+targeting the wrong corpus.
 
 **GCS:**
 - Bucket `gs://clinical-assistant-457902-pmc` (`us-west4`).
-- Processed markdown: `gs://.../processed/` (currently in `batch_00`–`batch_05`).
-- Per-article metadata: `gs://.../metadata/{pmcid}.json`, each has a `journal`
-  field (and `title`, `year`, `images`, `pmcid`). Read by
-  `RAGService._get_pmc_metadata` (`api/rag_service.py:521`).
+- Attempt 1 already reorganized all 56,156 files into `processed/shard_00/`
+  through `processed/shard_08/` (NOT the original flat `batch_00`-`batch_05`
+  layout anymore — that reorg already happened and doesn't need repeating).
+  **`processed/shard_00/` IS the Emergency Medicine group** (used as-is for
+  `pmc-em`'s import, see below) — the other 8 shard folders contain a
+  bin-packed mix of Critical Care/JAMA/High-Impact journals that need to be
+  re-split for this workstream's 2 remaining corpora (see Phase 2).
+- Per-article metadata: `gs://.../metadata/{pmcid}.json`, each with a `journal`
+  field. Read by `RAGService._get_pmc_metadata` (`api/rag_service.py:521`).
+  **Critical guardrail, already learned the hard way:** this lookup is
+  filename-driven only (`sourceUri`'s last path segment → pmcid →
+  `metadata/{pmcid}.json`), NOT folder-path-driven. Any GCS reorg in this
+  workstream must preserve filenames exactly and never touch/reorganize the
+  `metadata/` prefix, or citation images/titles/journals silently break with
+  no error (`_get_pmc_metadata` just returns `None` on a miss).
 
-**Journal distribution (37 journals, 4 UI groups; counts from April 2026 scrape,
-mirrored in `frontend/app/page.tsx:30-88`):**
+**Already-built reusable artifacts** (`scrapers/PMC/`), don't rebuild these:
+- `pmc_journal_manifest.json` — full `{pmcid: journal}` map for all 56,156
+  files, already cached. Reuse directly; no need to re-read GCS metadata.
+- `pmc_shard_assignments.json` — Attempt 1's `{shard_id: [pmcids]}`. `shard_00`
+  is exactly the Emergency Medicine group's pmcid list (already used to build
+  `pmc-em`). The other shards' pmcid lists are a mixed bag from Attempt 1's
+  bin-packer and are **not** directly reusable for this workstream's group
+  boundaries — recompute the Critical Care and High-Impact pmcid lists fresh
+  from `pmc_journal_manifest.json` instead (filter by the confirmed journal
+  lists in §3).
+- `pmc_shard_registry.json` — Attempt 1's registry (9-shard schema). Superseded
+  by this workstream's simpler schema (§Phase 2 step 4) — read it once for the
+  shard corpus IDs (needed for Phase 5 cleanup), then it can be replaced.
+- `pmc_create_one.py` — the script used to build `pmc-em`. Reuse its
+  create-corpus and import-with-polling pattern for the other 2 corpora
+  (generalize it to take a display name + GCS source URI, rather than writing
+  new one-off scripts per corpus).
+- `pmc_shard_migrate.py` — Attempt 1's GCS-move + create + import script.
+  Useful reference for the parallel move pattern (`ThreadPoolExecutor`,
+  copy_blob + delete, resumable-by-checking-destination-exists) — reuse the
+  *pattern*, not the shard-specific logic.
 
-| UI group | Total files | Notes |
-|---|---|---|
-| Emergency Medicine (12 journals) | 6,962 | fits in 1 shard |
-| Critical Care & Resuscitation (7) | 11,436 | → 2 shards (AJRCCM alone is 4,464) |
-| JAMA Family (10) | 26,108 | → 4 shards (JAMA Netw Open 9,943 splits across 2) |
-| High-Impact General (8) | 11,652 | → 2 shards |
-| **Total** | **56,158** | ~9 shards |
-
-(The exact per-journal counts are the source-of-truth `count` fields in
-`frontend/app/page.tsx:30-88`; the Phase 1 tool recomputes them live from GCS
-metadata rather than trusting these.)
-
-**Concurrency is already cleared as a risk.** A live test fired 5→30 concurrent
-`retrieveContexts` calls at the project: **zero throttling errors at every level**
-(no 429 / RESOURCE_EXHAUSTED); ~16 concurrent (this design's common case) finished
-in ~1.9s wall. So the increase from ~7 to ~16 parallel corpus calls is safe.
-
-**Existing reusable machinery** (`scrapers/PMC/`):
-- `pmc_reindex.py`: `_poll_operation()`, `create_corpus()` (KNN default payload),
-  `import_gcs_to_corpus()`, `_reorganize_gcs_into_batches()`, parallel GCS ops via
-  `ThreadPoolExecutor(max_workers=20)`, auth helpers.
-- `import_to_corpus.py`: per-batch import + polling pattern.
-
-**Backend integration points** (`api/rag_service.py`):
-- Config block (PMC_CORPUS_ID etc.): lines ~17-34.
-- `_retrieve_contexts(query, corpus_name, top_k)`: ~80. Builds the retrieval URL
-  from `self.location`; corpus resource region is embedded in `corpus_name`. All
-  shards are `us-west4`, so no region change needed.
-- `_retrieve_multi_source`: ~907. `ThreadPoolExecutor(max_workers=7)` fan-out with a
-  `fetch_pmc()` closure; results merged by score. **This is where shard fan-out
-  goes.**
-- Journal post-filter (Step 1.5a): ~1080 and ~1174 — filters PMC chunks by
-  `pmc_journals`. Keep as the correctness backstop.
-- `query_stream`: ~1151.
+**Backend integration points** (`api/rag_service.py`, from Attempt 1's partial
+build — still present in the working tree, needs updating not rewriting):
+- Config block (~line 17-34): `PMC_USE_SHARDS`, `PMC_SHARD_REGISTRY_PATH`.
+- `__init__` (~line 48-90): loads the registry, builds `self.pmc_shards`,
+  `self.pmc_journal_to_shards`, `self.pmc_ui_groups`, computes
+  `self._retrieval_pool_size`.
+- `_load_pmc_shard_registry()`: parses the registry JSON — **needs updating**
+  for this workstream's simpler schema (§Phase 2 step 4: `journal_to_corpus`
+  is a single string per journal, not a list).
+- `_relevant_pmc_shards(pmc_journals)`: shard-selection logic — **simplifies**
+  under the new schema (straight lookup + dedupe, no union-of-lists).
+- `fetch_pmc_shard(shard)` + the `ThreadPoolExecutor` fan-out in
+  `_retrieve_multi_source` (~line 1096): **unchanged in shape**, just fans out
+  over 3 corpora instead of 9.
+- `_get_images_from_contexts`, journal post-filter (Step 1.5a, ~line 1080 &
+  1174): **unchanged** — both are already source/shard-agnostic.
+- `GET /pmc/journals` endpoint already added to `api/main.py` — update the
+  response to reflect only the 3 corpora's journals once the registry changes.
 
 **Frontend integration points** (`frontend/app/page.tsx`):
-- `PMC_JOURNAL_GROUPS`: :30 (hardcoded registry — to be served from backend).
-- `selectedJournals` state: :233. `getEffectivePmcJournals()`: :291 (returns
-  `undefined` when all selected = no filter, else the selected list).
+- `PMC_JOURNAL_GROUPS` (line ~30): hardcoded, includes all 37 journals —
+  **must be updated or replaced** (Phase 4) since 15 of those journals will no
+  longer be indexed anywhere; leaving it as-is would offer filter options for
+  content that doesn't exist.
+- `selectedJournals` state (~233), `getEffectivePmcJournals()` (~291): no
+  contract change needed.
 
 ---
 
-## 4. Phased implementation
+## 5. Phased implementation
 
-### Phase 1 — Shard planner (dry-run, no mutations)
-**Goal:** compute the shard layout and write the registry, changing nothing live.
+### Phase 1 — Finish `pmc-em` (mostly done)
 
-Create `scrapers/PMC/pmc_shard.py`:
-1. Build a `pmcid → journal` manifest by reading `gs://.../metadata/*.json` in
-   parallel (reuse the `ThreadPoolExecutor` pattern from `pmc_reindex.py`). Cache the
-   manifest to disk/GCS so reruns are fast.
-2. Compute per-journal live counts; group journals by their UI group.
-3. **Group-aligned first-fit-decreasing bin-packing**, cap = `target_cap` (7,500):
-   within each UI group, sort journals desc and pack into shards; if a single
-   journal exceeds the cap, split its files across consecutive shards in the same
-   group. Never mix UI groups in a shard.
-4. Write `pmc_shard_registry.json` (Section 2 shape) with `corpus_id: null` for now.
-5. `--dry-run` (default) prints the plan; nothing is created/moved.
+1. Investigate the 1-file import gap (6,959 of 6,960). Use the same method as
+   Attempt 1's 122-file investigation: list actual indexed files via the
+   `ragFiles` list endpoint (paginate with a delay between pages — Attempt 1
+   hit a 429 quota error pacing too fast), diff against
+   `pmc_shard_assignments.json["shard_00"]`, retry the missing file's specific
+   GCS URI via a small `ragFiles:import` call.
+2. Re-verify count == 6,960.
 
 **Success criteria:**
-- [ ] `pmc_shard.py --dry-run` prints a shard plan where **every shard ≤7,500 files**
-      and **no shard >10,000**.
-- [ ] Sum of all shard file counts **== 56,156** (± known dupes; investigate any gap
-      >10).
-- [ ] Every one of the 37 journals appears in `journal_to_shards`; each journal maps
-      to ≥1 shard; split journals (JAMA Netw Open) map to >1 shard **all within the
-      same UI group**.
-- [ ] No shard contains journals from more than one UI group.
-- [ ] Registry file validates against the Section 2 schema.
+- [ ] `pmc-em` corpus `ragFilesCount == 6960`.
 
-### Phase 2 — Create shards + import (the long step)
-**Goal:** materialize the shards in Vertex and import the files.
-1. Reorganize GCS: move each `.md` into `processed/shard_NN/` per the registry
-   (adapt `_reorganize_gcs_into_batches`; parallel). Keep the originals' `batch_*`
-   layout untouched OR move from it — either works as long as the live corpus isn't
-   re-imported. **Do not touch the live corpus `7377459139586293760`.**
-2. Create one KNN corpus per shard in `us-west4` (reuse `create_corpus()`'s payload:
-   default `ragManagedDb`, `text-embedding-005`, no `vector_db_config` override).
-3. Import each `processed/shard_NN/` folder into its corpus (chunk 1024 / overlap
-   200), poll each to completion (reuse `import_gcs_to_corpus` / `_poll_operation`).
-4. Write the real `corpus_id`s back into the registry.
+### Phase 2 — Build `pmc-critical-care` and `pmc-high-impact`
 
-**Success criteria:**
-- [ ] ~9 new corpora exist in `us-west4`; each shows `corpusStatus.state == ACTIVE`.
-- [ ] Each shard's `ragFilesCount` matches its planned count (±dupes) and is ≤7,500.
-- [ ] **Sum of all shards' `ragFilesCount` == 56,156** (± known dupes).
-- [ ] Registry `corpus_id` fields are all populated (no nulls).
-- [ ] The old PMC corpus `7377459139586293760` is untouched (still 56,156 files).
-
-### Phase 3 — Backend: registry-driven multi-shard PMC
-**Goal:** query the shards (smart-skipping by journal selection); keep everything
-else identical.
-1. Load `pmc_shard_registry.json` at `RAGService.__init__` (bundle the file with the
-   API image, e.g. copy into `api/` and reference by path; alternative: read from
-   GCS at startup). Replace the single `PMC_CORPUS_ID` usage with the shard list.
-2. In `_retrieve_multi_source`, when `pmc` is an active source, expand PMC into one
-   `_retrieve_contexts` call per **relevant** shard:
-   - if `pmc_journals` is None → all shards;
-   - else → union of `journal_to_shards[j]` for selected `j`.
-   Tag every result `source_type: "pmc"` (existing score-sort, journal post-filter,
-   slot allocation, citations then need **no change**).
-3. Raise the fan-out pool: `ThreadPoolExecutor(max_workers=...)` from 7 to
-   **≥ (non-PMC corpora + max PMC shards)**, ~20.
-4. Keep a fallback: an env flag (e.g. `PMC_USE_SHARDS=false` + legacy
-   `PMC_CORPUS_ID`) that reverts to querying the single old corpus, for instant
-   rollback.
-5. Add a lightweight endpoint (e.g. `GET /pmc/journals`) returning the registry's
-   `ui_groups` for the frontend.
+1. From `pmc_journal_manifest.json`, compute the pmcid lists for each corpus
+   using the confirmed journal sets in §3 (simple filter, no bin-packing).
+2. Reorganize GCS: move each corpus's `.md` files into
+   `processed/pmc-critical-care/` and `processed/pmc-high-impact/`
+   respectively (files currently live somewhere under Attempt 1's
+   `processed/shard_01/` through `shard_08/` — build a
+   `pmcid → current location` map by listing those prefixes, same pattern as
+   Attempt 1's `pmc_shard_migrate.py:build_current_location_map`). Move the
+   33,518 excluded-journal files to `processed/pmc-excluded/` (preserve, don't
+   delete). **Preserve filenames exactly; never touch `metadata/`** (§4).
+3. Create both corpora (reuse/generalize `pmc_create_one.py`'s pattern — same
+   KNN config, `text-embedding-005`, chunk 1024/overlap 200).
+4. Import each, verify counts (6,972 / 8,706).
+5. Write `scrapers/PMC/pmc_shard_registry.json` (**overwrite** — Attempt 1's
+   version is superseded; you already extracted the old shard IDs for cleanup
+   in §4). Simplified schema:
+   ```json
+   {
+     "location": "us-west4",
+     "corpora": [
+       {"id": "pmc_em", "corpus_id": "1578511669393358848", "file_count": 6960, "journals": ["The Western Journal of Emergency Medicine", "..."]},
+       {"id": "pmc_critical_care", "corpus_id": "<new id>", "file_count": 6972, "journals": ["Chest", "..."]},
+       {"id": "pmc_high_impact", "corpus_id": "<new id>", "file_count": 8706, "journals": ["Lancet", "..."]}
+     ],
+     "journal_to_corpus": {"The Western Journal of Emergency Medicine": "pmc_em", "Chest": "pmc_critical_care", "...": "..."},
+     "excluded_journals": ["JAMA Netw Open", "JAMA", "...", "Am J Respir Crit Care Med", "Ann Intern Med", "Lancet Respir Med", "Mayo Clin Proc", "Lancet Neurol"],
+     "ui_groups": [
+       {"group": "Emergency Medicine", "journals": [{"key": "...", "count": 2064}, "..."]},
+       {"group": "Critical Care & Resuscitation", "journals": [...]},
+       {"group": "High-Impact General", "journals": [...]}
+     ]
+   }
+   ```
+   Note: **every journal maps to exactly one corpus (a string)**, not a list —
+   this is the key simplification vs. Attempt 1's schema.
 
 **Success criteria:**
-- [ ] Unit/local run: a query with `sources=["pmc"]` and no journal filter fans out
-      to all shards and returns merged, score-ordered PMC contexts.
-- [ ] A query with a **subset** of journals selected: logs show **only the shards
-      containing those journals were queried** (others skipped), and returned chunks
-      are **only** from selected journals (post-filter intact).
-- [ ] `GET /pmc/journals` returns the 4 groups / 37 journals with counts.
-- [ ] Setting `PMC_USE_SHARDS=false` reverts to the old single-corpus path.
-- [ ] `max_workers` ≥ total corpus count; a full all-sources query runs without
-      thread starvation (all corpora truly concurrent).
+- [ ] `pmc-critical-care` and `pmc-high-impact` corpora created, `ragFilesCount`
+      6,972 and 8,706 respectively.
+- [ ] Sum of all 3 corpora + excluded count == 56,156 (no files unaccounted for).
+- [ ] Spot-check `_get_pmc_metadata()` resolves correctly for ~10 pmcids sampled
+      across all 3 corpora (the metadata/filename guardrail from §4).
+- [ ] New registry validates: every journal in §3's kept lists appears in
+      `journal_to_corpus`; every excluded journal appears in `excluded_journals`;
+      no journal appears in both.
 
-### Phase 4 — Frontend: dynamic journal registry
-**Goal:** stop hardcoding journals so future additions need no frontend edit.
-1. Fetch `GET /pmc/journals` and render the selection UI from the response, replacing
-   the hardcoded `PMC_JOURNAL_GROUPS` (`frontend/app/page.tsx:30`). Keep sending the
-   selected journal keys exactly as today (`getEffectivePmcJournals()`).
-2. Graceful fallback to the existing hardcoded list if the endpoint fails.
+### Phase 3 — Backend integration
+
+Update (not rewrite) the existing scaffolding in `api/rag_service.py` (§4):
+1. `_load_pmc_shard_registry()`: parse the new schema — `corpora` list,
+   `journal_to_corpus` single-value map.
+2. `_relevant_pmc_shards(pmc_journals)`: simplify to — no filter → all 3
+   corpora; else → `{journal_to_corpus[j] for j in pmc_journals if j in
+   journal_to_corpus}` (excluded journals silently contribute nothing, which
+   is correct — they were never indexed).
+3. **Add an explicit timeout** to the `retrieveContexts` call in
+   `_retrieve_contexts` (currently has none — see §2's practical guardrail;
+   the 18-minute hang observed during testing should not be possible in
+   production code). Something like `timeout=30` on the `requests.post` call,
+   with a clear exception path (log + return empty results for that source,
+   same pattern as the existing per-corpus `try/except` in
+   `_retrieve_multi_source`'s fetch closures) rather than letting a single
+   slow/hung PMC corpus block the whole request.
+4. `_retrieval_pool_size`: recompute (6 non-PMC + up to 3 PMC + headroom —
+   can shrink back from Attempt 1's ~20 since concurrency is no longer a
+   concern at 3 corpora).
+5. `GET /pmc/journals` (`api/main.py`): confirm it now returns only the 3
+   corpora's journals via the updated registry.
 
 **Success criteria:**
-- [ ] Journal selector renders from the backend response; selecting/deselecting
-      journals and groups still produces the same `pmc_journals` payload shape.
-- [ ] Adding a journal to the backend registry makes it appear in the UI **with no
-      frontend code change**.
+- [ ] A query with `sources=["pmc"]`, no journal filter, fans out to exactly
+      3 corpora and returns merged, score-ordered results.
+- [ ] A query with a journal subset selected only queries the corpus/corpora
+      containing those journals (check `[rag-timing]` logs for which `pmc:*`
+      keys appear).
+- [ ] Selecting an excluded journal (e.g. `"JAMA"`) returns zero PMC results
+      without error (correctly a no-op, not a crash).
+- [ ] The new timeout is verified to actually trigger: simulate or test
+      against a slow/unresponsive endpoint and confirm the request fails
+      gracefully within the timeout window rather than hanging.
+- [ ] `GET /pmc/journals` returns exactly 3 groups matching §3's kept lists.
 
-### Phase 5 — Deploy & verify (the payoff)
-1. Deploy backend: `gcloud run deploy em-protocol-api --source . --region us-central1
-   --project clinical-assistant-457902` (set `PMC_USE_SHARDS=true`).
-2. Run the isolation timing check (method from EMA-97 Experiment 4): measure PMC's
-   parallel-shard retrieval contribution.
+### Phase 4 — Frontend
+
+1. Fetch `GET /pmc/journals` and render the selector dynamically, replacing
+   the hardcoded `PMC_JOURNAL_GROUPS` (`frontend/app/page.tsx:30`). Graceful
+   fallback if the endpoint fails.
+2. Keep `getEffectivePmcJournals()`'s contract unchanged (still sends selected
+   keys, `undefined` when everything's selected).
 
 **Success criteria:**
-- [ ] PMC retrieval contribution drops from ~10s to **~1-2s** (max of the parallel
-      shard calls).
-- [ ] A real `/query` with PMC selected streams an answer with correct PMC citations
-      and images; other corpora unaffected.
-- [ ] A `/query` with a journal subset returns only those journals and is at least as
-      fast.
-- [ ] Rollback verified once: `PMC_USE_SHARDS=false` restores prior behavior.
+- [ ] Journal selector shows only the 3 corpora's journals (EM's 12, Critical
+      Care's 6, High-Impact's 4) — 22 total, not 37.
+- [ ] Selecting/deselecting still produces the same `pmc_journals` payload shape
+      as before.
 
-### Phase 6 — Cleanup (only after Phase 5 stable in prod for a few days)
+### Phase 5 — Deploy, verify, clean up
+
+1. Deploy: `gcloud run deploy em-protocol-api --source . --region us-central1
+   --project clinical-assistant-457902`.
+2. **Speed check — informational, not a blocking gate** (§2): run the same
+   isolated + full-fan-out timing tests used throughout this investigation.
+   Report honestly whether it's fast or still slow. If still slow, that
+   confirms §2's finding rather than being a new failure — do not treat it as
+   something to silently fix or hide; report it and let the user decide next
+   steps (accept as-is with the content-curation benefit alone, wait longer,
+   revisit Pinecone, or reconsider Scaled tier).
+3. Correctness verification (regardless of speed outcome): a real `/query`
+   with PMC selected returns correct citations/images from the 3 curated
+   corpora; journal-filtered queries behave correctly; other corpora
+   unaffected.
+4. **Cleanup**, only after this workstream is confirmed stable in production
+   for a few days:
+   - Delete Attempt 1's 9 obsolete shard corpora (IDs from the old registry,
+     extracted in §4).
+   - Delete the abandoned empty PMC dupe corpus (`459930111945211904`).
+   - Keep the original live PMC corpus (`7377459139586293760`) as rollback
+     until full confidence in the new setup; delete only after that.
+   - Fix/remove the stale `scrapers/PMC/pmc_rag_config.json`.
+
 **Success criteria:**
-- [ ] Old PMC corpus `7377459139586293760` deleted; abandoned `459930111945211904`
-      deleted.
-- [ ] `scrapers/PMC/pmc_rag_config.json` removed or updated so it no longer points at
-      a dead corpus.
-- [ ] `docs/SPEED_AND_SOURCE_STRATEGY.md` / EMA-97 updated noting PMC is now sharded.
+- [ ] Deployed and serving.
+- [ ] Correctness criteria in step 3 all pass.
+- [ ] Speed outcome is measured and reported honestly, whatever it is.
+- [ ] Cleanup only performed after explicit confirmation the new setup is
+      trusted — not automatic.
 
 ---
 
-## 5. Future-growth runbook (the scalability contract)
+## 6. Future-growth runbook
 
-When PMC is re-scraped or new journals/content are added later:
-1. Upload new `.md` + `metadata/*.json` to GCS (existing `pmc_reindex.py` upload
-   helpers already do parallel, incremental upload).
-2. Re-run `pmc_shard.py`. It recomputes counts and repacks. If any existing shard
-   would exceed the **8,500 reshard watermark**, it spills into a new shard and
-   updates the registry; otherwise new files append to shards with room.
-3. Import only the changed/new shard folders.
-4. Redeploy the backend (it re-reads the registry).
-The frontend needs no change — it renders from `GET /pmc/journals`. **This same
-pattern applies to any future corpus that outgrows 10,000 files** (e.g. if LITFL
-grows past the limit): give it a registry + shard fan-out the same way.
+If PMC content is revisited later (adding journals back, or adding wholly new
+ones): update `pmc_journal_manifest.json` (or re-derive from GCS metadata),
+decide which corpus a new/returning journal belongs to (or whether it needs a
+new 4th corpus, keeping each under the 7,500-9,000 range that's worked so
+far), update `journal_to_corpus` and `ui_groups` in the registry, move its
+files into the right GCS folder, import, redeploy. The registry-driven design
+means the backend needs no code changes for this — only Phase 4's frontend
+fetch already handles new groups/journals dynamically.
 
-## 6. Guardrails / do-not-do
+**If the speed question ever gets resolved** (much longer wait proves
+sufficient, Pinecone research pans out, or Scaled tier becomes acceptable),
+the previously-excluded 33,518 articles in `processed/pmc-excluded/` are
+still there, ready to be re-indexed without re-scraping.
+
+## 7. Guardrails / do-not-do
+
 - Do **not** run `pmc_reindex.py reindex()` (deletes the wrong/dead corpus).
-- Do **not** delete or re-import the live corpus `7377459139586293760` before Phase
-  6.
-- Do **not** switch the project to Serverless mode or use `us-central1` for these
-  corpora — the whole point is staying on the proven `us-west4` KNN setup.
-- Do **not** let any shard exceed 10,000 files; keep ≤7,500 target.
-- Keep the journal post-filter (Step 1.5a) even with smart shard-skip — a shard can
-  hold both selected and unselected journals.
+- Do **not** touch the live corpus `7377459139586293760` until Phase 5
+  cleanup, and only after explicit confirmation.
+- Do **not** switch the project to Serverless mode or use `us-central1` —
+  same reasoning as Attempt 1, still applies.
+- Do **not** rename files during any GCS move, and never reorganize
+  `metadata/*.json` — breaks citation images/titles/journals silently (§4).
+- Do **not** treat a fast Phase 5 speed check as proof the underlying Basic-
+  tier issue is solved, and do **not** treat a slow one as a reason to revert
+  everything — §2 already established this is a known, open question
+  independent of this workstream's content-curation goal.
+- Do **not** skip adding the `retrieveContexts` timeout (Phase 3, step 3) —
+  a real 18-minute hang was observed during this investigation with no
+  timeout in place.

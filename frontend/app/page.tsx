@@ -22,8 +22,15 @@ const ED_KEY = "em-protocol-selected-eds";
 const UNIVERSE_KEY = "em-protocol-ed-universe";
 const FAVORITES_KEY = "em-protocol-favorites";
 
-// PMC Journal registry — key is the exact string stored in GCS metadata
-// Organized into groups for the UI; counts from April 2026 scrape
+// PMC Journal registry — key is the exact string stored in GCS metadata.
+// Reflects the CURATED PMC corpus set (docs/pmc-sharding-workstream.md): only
+// the 22 journals actually indexed across the 3 curated corpora (pmc-em,
+// pmc-critical-care, pmc-high-impact). JAMA Family (all 10), Am J Respir Crit
+// Care Med, Ann Intern Med, Lancet Respir Med, Mayo Clin Proc, and Lancet
+// Neurol were dropped and are NOT searchable — so they must not be offered as
+// filter options here. Counts from the July 2026 manifest.
+// (Future: serve this from GET /pmc/journals so re-scrapes don't need a code
+// edit; deferred because the backend registry doesn't yet carry display labels.)
 interface PmcJournal { key: string; label: string; count: number }
 interface PmcJournalGroup { group: string; journals: PmcJournal[] }
 
@@ -31,7 +38,7 @@ const PMC_JOURNAL_GROUPS: PmcJournalGroup[] = [
   {
     group: "Emergency Medicine",
     journals: [
-      { key: "The Western Journal of Emergency Medicine", label: "Western J EM", count: 2066 },
+      { key: "The Western Journal of Emergency Medicine", label: "Western J EM", count: 2064 },
       { key: "Journal of the American College of Emergency Physicians Open", label: "JACEP Open", count: 1587 },
       { key: "The American Journal of Emergency Medicine", label: "Am J Emerg Med", count: 877 },
       { key: "Annals of Emergency Medicine", label: "Annals of EM", count: 674 },
@@ -48,7 +55,6 @@ const PMC_JOURNAL_GROUPS: PmcJournalGroup[] = [
   {
     group: "Critical Care & Resuscitation",
     journals: [
-      { key: "Am J Respir Crit Care Med", label: "AJRCCM", count: 4464 },
       { key: "Chest", label: "CHEST", count: 2838 },
       { key: "Crit Care Med", label: "Crit Care Med", count: 1469 },
       { key: "Resuscitation Plus", label: "Resuscitation Plus", count: 1205 },
@@ -58,31 +64,12 @@ const PMC_JOURNAL_GROUPS: PmcJournalGroup[] = [
     ],
   },
   {
-    group: "JAMA Family",
-    journals: [
-      { key: "JAMA Netw Open", label: "JAMA Network Open", count: 9943 },
-      { key: "JAMA", label: "JAMA", count: 3284 },
-      { key: "JAMA Intern Med", label: "JAMA Internal Med", count: 2149 },
-      { key: "JAMA Oncol", label: "JAMA Oncology", count: 1881 },
-      { key: "JAMA Pediatr", label: "JAMA Pediatrics", count: 1827 },
-      { key: "JAMA Surg", label: "JAMA Surgery", count: 1551 },
-      { key: "JAMA Neurol", label: "JAMA Neurology", count: 1511 },
-      { key: "JAMA Ophthalmol", label: "JAMA Ophthalmology", count: 1458 },
-      { key: "JAMA Cardiol", label: "JAMA Cardiology", count: 1335 },
-      { key: "JAMA Otolaryngol Head Neck Surg", label: "JAMA Otolaryngology", count: 1169 },
-    ],
-  },
-  {
     group: "High-Impact General",
     journals: [
       { key: "Lancet", label: "The Lancet", count: 2667 },
       { key: "BMJ", label: "BMJ", count: 2598 },
       { key: "N Engl J Med", label: "NEJM", count: 1822 },
       { key: "Lancet Infect Dis", label: "Lancet Infect Dis", count: 1619 },
-      { key: "Ann Intern Med", label: "Ann Internal Med", count: 1046 },
-      { key: "Lancet Respir Med", label: "Lancet Respir Med", count: 821 },
-      { key: "Mayo Clin Proc", label: "Mayo Clinic Proc", count: 719 },
-      { key: "Lancet Neurol", label: "Lancet Neurology", count: 360 },
     ],
   },
 ];

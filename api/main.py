@@ -1097,6 +1097,26 @@ async def track_image_click(req: ImageClickRequest):
         return {"status": "ok"}
 
 
+class PmcJournalEntry(BaseModel):
+    key: str
+    count: int
+
+class PmcJournalGroup(BaseModel):
+    group: str
+    journals: List[PmcJournalEntry]
+
+class PmcJournalRegistryResponse(BaseModel):
+    groups: List[PmcJournalGroup]
+
+@app.get("/pmc/journals", response_model=PmcJournalRegistryResponse)
+async def get_pmc_journals():
+    """
+    PMC journal registry (groups, labels, counts) for the frontend journal
+    selector — served dynamically so re-scrapes don't require a frontend
+    code change. Empty groups list if PMC isn't sharded.
+    """
+    return PmcJournalRegistryResponse(groups=rag_service.get_pmc_journal_registry())
+
 @app.get("/protocols", response_model=ProtocolListResponse)
 async def list_protocols(
     enterprise_id: str = Query(default="mayo-clinic", description="Enterprise ID"),

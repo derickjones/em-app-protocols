@@ -1,0 +1,194 @@
+{
+  "location": "us-west4",
+  "corpora": [
+    {
+      "id": "pmc_em",
+      "corpus_id": "1578511669393358848",
+      "file_count": 6960,
+      "journals": [
+        "The Western Journal of Emergency Medicine",
+        "Journal of the American College of Emergency Physicians Open",
+        "The American Journal of Emergency Medicine",
+        "Annals of Emergency Medicine",
+        "Acad Emerg Med",
+        "The Journal of Emergency Medicine",
+        "Pediatric Emergency Care",
+        "CJEM",
+        "Advanced Journal of Emergency Medicine",
+        "Prehospital Emergency Care",
+        "Eur J Emerg Med",
+        "Air Medical Journal"
+      ]
+    },
+    {
+      "id": "pmc_critical_care",
+      "corpus_id": "8496040697034440704",
+      "file_count": 6972,
+      "journals": [
+        "Chest",
+        "Crit Care Med",
+        "Resuscitation Plus",
+        "Shock",
+        "Resuscitation",
+        "J Intensive Care Med"
+      ]
+    },
+    {
+      "id": "pmc_high_impact",
+      "corpus_id": "3307893926303629312",
+      "file_count": 8706,
+      "journals": [
+        "Lancet",
+        "BMJ",
+        "N Engl J Med",
+        "Lancet Infect Dis"
+      ]
+    }
+  ],
+  "journal_to_corpus": {
+    "The Western Journal of Emergency Medicine": "pmc_em",
+    "Journal of the American College of Emergency Physicians Open": "pmc_em",
+    "The American Journal of Emergency Medicine": "pmc_em",
+    "Annals of Emergency Medicine": "pmc_em",
+    "Acad Emerg Med": "pmc_em",
+    "The Journal of Emergency Medicine": "pmc_em",
+    "Pediatric Emergency Care": "pmc_em",
+    "CJEM": "pmc_em",
+    "Advanced Journal of Emergency Medicine": "pmc_em",
+    "Prehospital Emergency Care": "pmc_em",
+    "Eur J Emerg Med": "pmc_em",
+    "Air Medical Journal": "pmc_em",
+    "Chest": "pmc_critical_care",
+    "Crit Care Med": "pmc_critical_care",
+    "Resuscitation Plus": "pmc_critical_care",
+    "Shock": "pmc_critical_care",
+    "Resuscitation": "pmc_critical_care",
+    "J Intensive Care Med": "pmc_critical_care",
+    "Lancet": "pmc_high_impact",
+    "BMJ": "pmc_high_impact",
+    "N Engl J Med": "pmc_high_impact",
+    "Lancet Infect Dis": "pmc_high_impact"
+  },
+  "excluded_journals": [
+    "Am J Respir Crit Care Med",
+    "Ann Intern Med",
+    "JAMA",
+    "JAMA Cardiol",
+    "JAMA Intern Med",
+    "JAMA Netw Open",
+    "JAMA Neurol",
+    "JAMA Oncol",
+    "JAMA Ophthalmol",
+    "JAMA Otolaryngol Head Neck Surg",
+    "JAMA Pediatr",
+    "JAMA Surg",
+    "Lancet Neurol",
+    "Lancet Respir Med",
+    "Mayo Clin Proc"
+  ],
+  "ui_groups": [
+    {
+      "group": "Emergency Medicine",
+      "journals": [
+        {
+          "key": "The Western Journal of Emergency Medicine",
+          "count": 2064
+        },
+        {
+          "key": "Journal of the American College of Emergency Physicians Open",
+          "count": 1587
+        },
+        {
+          "key": "The American Journal of Emergency Medicine",
+          "count": 877
+        },
+        {
+          "key": "Annals of Emergency Medicine",
+          "count": 674
+        },
+        {
+          "key": "Acad Emerg Med",
+          "count": 590
+        },
+        {
+          "key": "The Journal of Emergency Medicine",
+          "count": 259
+        },
+        {
+          "key": "Pediatric Emergency Care",
+          "count": 246
+        },
+        {
+          "key": "CJEM",
+          "count": 212
+        },
+        {
+          "key": "Advanced Journal of Emergency Medicine",
+          "count": 146
+        },
+        {
+          "key": "Prehospital Emergency Care",
+          "count": 111
+        },
+        {
+          "key": "Eur J Emerg Med",
+          "count": 108
+        },
+        {
+          "key": "Air Medical Journal",
+          "count": 86
+        }
+      ]
+    },
+    {
+      "group": "Critical Care & Resuscitation",
+      "journals": [
+        {
+          "key": "Chest",
+          "count": 2838
+        },
+        {
+          "key": "Crit Care Med",
+          "count": 1469
+        },
+        {
+          "key": "Resuscitation Plus",
+          "count": 1205
+        },
+        {
+          "key": "Shock",
+          "count": 691
+        },
+        {
+          "key": "Resuscitation",
+          "count": 525
+        },
+        {
+          "key": "J Intensive Care Med",
+          "count": 244
+        }
+      ]
+    },
+    {
+      "group": "High-Impact General",
+      "journals": [
+        {
+          "key": "Lancet",
+          "count": 2667
+        },
+        {
+          "key": "BMJ",
+          "count": 2598
+        },
+        {
+          "key": "N Engl J Med",
+          "count": 1822
+        },
+        {
+          "key": "Lancet Infect Dis",
+          "count": 1619
+        }
+      ]
+    }
+  ]
+}

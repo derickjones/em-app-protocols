@@ -35,6 +35,14 @@ REBELEM_BUCKET = f"{PROJECT_ID}-rebelem"
 ALIEM_BUCKET = f"{PROJECT_ID}-aliem"
 PERSONAL_BUCKET = os.environ.get("PERSONAL_BUCKET", f"{PROJECT_ID}-personal")
 
+# PMC sharding (see docs/pmc-sharding-workstream.md, EMA-97): PMC outgrew the
+# single-corpus KNN performance threshold (~10K files; PMC has 56K+), so it's
+# split into N smaller KNN corpora ("shards") described by a registry bundled
+# with this image. PMC_USE_SHARDS=false falls back to the single legacy
+# PMC_CORPUS_ID corpus for instant rollback.
+PMC_USE_SHARDS = os.environ.get("PMC_USE_SHARDS", "true").lower() == "true"
+PMC_SHARD_REGISTRY_PATH = os.path.join(os.path.dirname(__file__), "pmc_shard_registry.json")
+
 
 class RAGService:
     """Service for RAG queries and answer generation"""
@@ -61,6 +69,51 @@ class RAGService:
         self._metadata_cache = {}
         self._credentials = None
         self._token_lock = threading.Lock()
+
+        # PMC shards (see docs/pmc-sharding-workstream.md, EMA-97)
+        self.pmc_shards: List[Dict] = []
+        self.pmc_journal_to_shards: Dict[str, List[str]] = {}
+        self.pmc_ui_groups: List[Dict] = []
+        if PMC_USE_SHARDS:
+            self._load_pmc_shard_registry()
+
+        # Retrieval fan-out pool size: one worker per non-PMC corpus (local,
+        # wikem, litfl, rebelem, aliem, personal) plus one per PMC shard (or 1
+        # for the legacy single-corpus fallback), with a little headroom.
+        non_pmc_corpora = 6
+        pmc_workers = len(self.pmc_shards) if self.pmc_shards else 1
+        self._retrieval_pool_size = non_pmc_corpora + pmc_workers + 2
+
+    def _load_pmc_shard_registry(self):
+        """Load the curated PMC corpus registry bundled with this image. Falls
+        back to the single legacy PMC corpus (self.pmc_shards stays empty) if the
+        registry is missing or malformed — never crashes startup over this.
+
+        Schema (docs/pmc-sharding-workstream.md): a `corpora` list, and a
+        `journal_to_corpus` map where each journal points at exactly ONE corpus
+        id (a string). Excluded journals simply don't appear in the map."""
+        try:
+            with open(PMC_SHARD_REGISTRY_PATH) as f:
+                registry = json.load(f)
+            location = registry.get("location", RAG_LOCATION)
+            shards = []
+            for c in registry.get("corpora", []):
+                if not c.get("corpus_id"):
+                    continue
+                shards.append({
+                    "id": c["id"],
+                    "corpus_name": f"projects/{PROJECT_NUMBER}/locations/{location}/ragCorpora/{c['corpus_id']}",
+                    "journals": c.get("journals", []),
+                })
+            self.pmc_shards = shards
+            # journal -> single corpus id (string). Kept in an attr named
+            # *_to_shards for continuity with the fan-out code.
+            self.pmc_journal_to_shards = registry.get("journal_to_corpus", {})
+            self.pmc_ui_groups = registry.get("ui_groups", [])
+            print(f"[rag-pmc-shards] Loaded {len(self.pmc_shards)} PMC corpora, {len(self.pmc_journal_to_shards)} journals")
+        except Exception as e:
+            print(f"[rag-pmc-shards] Failed to load registry ({e}) — falling back to single PMC_CORPUS_ID")
+            self.pmc_shards = []
 
     def _get_access_token(self) -> str:
         """Get OAuth2 access token, cached until near expiry.
@@ -101,9 +154,14 @@ class RAGService:
             "query": {"text": query, "similarityTopK": top_k},
             "vertex_rag_store": {"rag_corpora": [corpus_name]}
         }
-        
-        response = requests.post(url, headers=headers, json=payload)
-        
+
+        # Explicit timeout: without one, a slow/unresponsive corpus can hang the
+        # request indefinitely (observed an 18-minute hang on an established
+        # connection during PMC investigation — see docs/pmc-sharding-workstream.md).
+        # Callers in _retrieve_multi_source already wrap this in try/except and
+        # a future timeout, so a raised exception here just drops that one source.
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+
         if response.status_code != 200:
             raise Exception(f"RAG retrieval failed: {response.status_code} - {response.text}")
         
@@ -973,16 +1031,47 @@ ANSWER:"""
                     images.append(img_dict)
 
         return images
-    
-    def _retrieve_multi_source(self, query: str, sources: List[str] = None, personal_user_id: str = None) -> List[Dict]:
+
+    def get_pmc_journal_registry(self) -> List[Dict]:
+        """UI-facing journal groups (label/count), served to the frontend so
+        it doesn't have to hardcode the journal list. Empty if PMC isn't
+        sharded (legacy single-corpus mode)."""
+        return self.pmc_ui_groups
+
+    def _relevant_pmc_shards(self, pmc_journals: Optional[List[str]] = None) -> List[Dict]:
+        """Which PMC corpora to query for a given journal selection.
+
+        None (no filter, the common case) -> all corpora. Otherwise, the set of
+        corpora containing any selected journal (each journal maps to exactly
+        one corpus). A selected journal that isn't in the map (e.g. an excluded
+        one) simply contributes nothing.
+        """
+        if not self.pmc_shards:
+            return []
+        if pmc_journals is None:
+            return self.pmc_shards
+        wanted_ids = set()
+        for journal in pmc_journals:
+            corpus_id = self.pmc_journal_to_shards.get(journal)
+            if corpus_id:
+                wanted_ids.add(corpus_id)
+        return [s for s in self.pmc_shards if s["id"] in wanted_ids]
+
+    def _retrieve_multi_source(self, query: str, sources: List[str] = None, personal_user_id: str = None,
+                                pmc_journals: Optional[List[str]] = None) -> List[Dict]:
         """
         Retrieve contexts from multiple corpora in parallel.
         Each context is tagged with source_type ('local', 'wikem', 'pmc', 'personal', etc.).
         Results are merged and sorted by relevance score.
+
+        pmc_journals: if PMC is sharded and a journal selection is given, only
+        the shards containing a selected journal are queried (smart-skip) —
+        the journal post-filter downstream still applies as the correctness
+        backstop, since a shard can hold both selected and unselected journals.
         """
         if sources is None:
             sources = ["local", "wikem"]
-        
+
         all_contexts: List[Dict] = []
         
         def fetch_local():
@@ -1006,6 +1095,7 @@ ANSWER:"""
                 return []
         
         def fetch_pmc():
+            """Legacy single-corpus fallback (PMC_USE_SHARDS=false, or registry failed to load)."""
             try:
                 if self.pmc_corpus_name:
                     contexts = self._retrieve_contexts(query, self.pmc_corpus_name, top_k=5)
@@ -1016,7 +1106,17 @@ ANSWER:"""
             except Exception as e:
                 print(f"PMC corpus query failed: {e}")
                 return []
-        
+
+        def fetch_pmc_shard(shard: Dict):
+            try:
+                contexts = self._retrieve_contexts(query, shard["corpus_name"], top_k=5)
+                for ctx in contexts:
+                    ctx["source_type"] = "pmc"
+                return contexts
+            except Exception as e:
+                print(f"PMC shard {shard['id']} query failed: {e}")
+                return []
+
         def fetch_litfl():
             try:
                 if self.litfl_corpus_name:
@@ -1069,32 +1169,46 @@ ANSWER:"""
                 return []
         
         import time as _time
-        with ThreadPoolExecutor(max_workers=7) as executor:
+        with ThreadPoolExecutor(max_workers=self._retrieval_pool_size) as executor:
             futures = {}
+            submit_times = {}
+
+            def _submit(key, fn, *fn_args):
+                futures[key] = executor.submit(fn, *fn_args)
+                submit_times[key] = _time.time()
+
             if "local" in sources:
-                futures["local"] = executor.submit(fetch_local)
+                _submit("local", fetch_local)
             if "wikem" in sources:
-                futures["wikem"] = executor.submit(fetch_wikem)
+                _submit("wikem", fetch_wikem)
             if "pmc" in sources:
-                futures["pmc"] = executor.submit(fetch_pmc)
+                if self.pmc_shards:
+                    for shard in self._relevant_pmc_shards(pmc_journals):
+                        _submit(f"pmc:{shard['id']}", fetch_pmc_shard, shard)
+                else:
+                    _submit("pmc", fetch_pmc)
             if "litfl" in sources:
-                futures["litfl"] = executor.submit(fetch_litfl)
+                _submit("litfl", fetch_litfl)
             if "rebelem" in sources:
-                futures["rebelem"] = executor.submit(fetch_rebelem)
+                _submit("rebelem", fetch_rebelem)
             if "aliem" in sources:
-                futures["aliem"] = executor.submit(fetch_aliem)
+                _submit("aliem", fetch_aliem)
             if "personal" in sources and personal_user_id:
-                futures["personal"] = executor.submit(fetch_personal)
-            
-            t0 = _time.time()
+                _submit("personal", fetch_personal)
+
+            # Per-future elapsed time, measured from when THAT future was
+            # submitted — not a shared start point read in iteration order.
+            # (The old shared-t0 version made fast corpora checked after a
+            # slow one in the loop look just as slow as it — see EMA-97
+            # Experiment 5.)
             for key, future in futures.items():
                 try:
                     results = future.result(timeout=30)
-                    elapsed = _time.time() - t0
+                    elapsed = _time.time() - submit_times[key]
                     print(f"[rag-timing] {key}: {len(results)} results in {elapsed:.2f}s")
                     all_contexts.extend(results)
                 except Exception as e:
-                    elapsed = _time.time() - t0
+                    elapsed = _time.time() - submit_times[key]
                     print(f"[rag-timing] {key}: FAILED in {elapsed:.2f}s — {type(e).__name__}: {e}")
         
         # Sort by score (lower = more relevant in Vertex AI RAG)
@@ -1122,7 +1236,7 @@ ANSWER:"""
             dict with answer, images, citations
         """
         # Step 1: Retrieve contexts from all corpora in parallel
-        contexts = self._retrieve_multi_source(query, sources, personal_user_id=personal_user_id)
+        contexts = self._retrieve_multi_source(query, sources, personal_user_id=personal_user_id, pmc_journals=pmc_journals)
         
         if not contexts:
             return {
@@ -1218,7 +1332,7 @@ ANSWER:"""
         start = _time.time()
 
         # Step 1: Retrieve contexts (same as non-streaming)
-        contexts = self._retrieve_multi_source(query, sources, personal_user_id=personal_user_id)
+        contexts = self._retrieve_multi_source(query, sources, personal_user_id=personal_user_id, pmc_journals=pmc_journals)
 
         if not contexts:
             yield {"type": "chunk", "text": "No relevant protocols found for this query."}
