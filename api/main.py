@@ -30,6 +30,7 @@ from protocol_service import ProtocolService
 from auth_service import get_current_user, get_verified_user, get_optional_user, UserProfile, require_ed_access, require_admin, verify_firebase_token, check_email_verified
 from personal_service import PersonalService
 from query_router import route_query
+from agents import registry as agent_registry, Tier
 import analytics_service
 import firebase_admin
 from firebase_admin import auth as firebase_auth
@@ -1139,6 +1140,24 @@ async def list_all_hospitals():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agents")
+async def list_agents(tier: Optional[str] = Query(default=None, description="Filter by product tier: 'lite' (EM App) or 'platform' (EM Agents)")):
+    """
+    List the agents available to a product surface.
+
+    EM App (the free/lite front door) calls this with ?tier=lite; EM Agents (the
+    full platform) with ?tier=platform. This is how the two products stay one
+    codebase — they differ by which agents they expose, not by forked logic.
+    """
+    selected_tier = None
+    if tier:
+        try:
+            selected_tier = Tier(tier)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown tier '{tier}'. Use 'lite' or 'platform'.")
+    return {"agents": [spec.as_dict() for spec in agent_registry.list(selected_tier)]}
 
 
 @app.get("/enterprises")

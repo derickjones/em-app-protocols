@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from local_protocol_agent import select_relevant_protocols
+from agents.local_protocol import select_relevant_protocols
 
 # Configuration
 PROJECT_ID = os.environ.get("PROJECT_ID", "clinical-assistant-457902")

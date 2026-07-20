@@ -13,13 +13,31 @@ cutoff. If the LLM call or its output can't be used, the caller falls back to
 that cutoff, so protocol suggestions can never break.
 
 The input is just text (a typed question today, a patient's chief complaint from
-Epic later), so the same agent serves both without changes. The Gemini call is
-injected as `generate` to keep this module decoupled and easy to test.
+Epic later), so the same agent serves both EM App and EM Agents without changes.
+The Gemini call is injected as `generate` to keep this module decoupled and easy
+to test.
 """
 
 import json
 import re
 from typing import Callable, Dict, List
+
+from .base import AgentSpec, Tier, registry
+
+# Register this agent in the platform catalog. It works from plain query text, so
+# it's available in both products and needs no patient context.
+SPEC = registry.register(
+    AgentSpec(
+        id="local_protocol",
+        name="Local Protocol Agent",
+        description=(
+            "Suggests the department's own ED protocols that are genuinely "
+            "relevant to a question or a patient's chief complaint."
+        ),
+        tiers=(Tier.LITE, Tier.PLATFORM),
+        requires_patient_context=False,
+    )
+)
 
 
 def _build_prompt(query: str, candidates: List[Dict]) -> str:
