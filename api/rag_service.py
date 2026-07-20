@@ -14,6 +14,8 @@ from typing import Dict, List, Optional
 from google.cloud import storage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from agents.local_protocol import select_relevant_protocols
+
 # Configuration
 PROJECT_ID = os.environ.get("PROJECT_ID", "clinical-assistant-457902")
 PROJECT_NUMBER = os.environ.get("PROJECT_NUMBER", "930035889332")
@@ -1313,14 +1315,31 @@ ANSWER:"""
         # Step 4: Rank by best score (lower = more relevant in Vertex AI RAG) and take top_k
         ranked = sorted(protocol_chunks.values(), key=lambda p: p["max_score"])[:top_k]
 
-        # Step 4.5: Apply adaptive relevance threshold to drop low-relevance cards.
-        # Vertex AI RAG scores are distances (lower = more relevant). Keep only
-        # protocols close to the best match so off-topic protocols (e.g. a
-        # respiratory protocol for an ortho query) don't leak in.
-        if ranked:
-            best_score = ranked[0]["max_score"]
-            cutoff = min(max(best_score * 1.5, 0.05), best_score + 0.12)
-            ranked = [p for p in ranked if p["max_score"] <= cutoff]
+        # Step 4.5: Local Protocol Agent — have Gemini judge which of the retrieved
+        # candidates are GENUINELY relevant to the question / chief complaint, and
+        # keep only those (plus a short "why"). This replaces the blunt distance
+        # cutoff so off-topic matches (e.g. a respiratory protocol for a chest-pain
+        # question) don't leak in. If the agent call/output can't be used, fall
+        # back to the old adaptive score cutoff so suggestions never break.
+        agent_reasons: Dict[str, str] = {}
+        try:
+            candidates = [
+                {
+                    "protocol_id": p["protocol_id"],
+                    "text": " ".join(c["text"] for c in p["chunks"][:3]),
+                }
+                for p in ranked
+            ]
+            selected = select_relevant_protocols(query, candidates, self._agent_generate)
+            # Respect the agent's judgment, including "none relevant" (empty).
+            ranked = [p for p in ranked if p["protocol_id"] in selected]
+            agent_reasons = selected
+        except Exception as agent_err:
+            print(f"Local Protocol Agent unavailable, using score cutoff: {agent_err}")
+            if ranked:
+                best_score = ranked[0]["max_score"]
+                cutoff = min(max(best_score * 1.5, 0.05), best_score + 0.12)
+                ranked = [p for p in ranked if p["max_score"] <= cutoff]
 
         if not ranked:
             yield {"type": "error", "message": "No sufficiently relevant protocols found for your query."}
@@ -1379,10 +1398,31 @@ Write a concise 2-3 sentence summary of what this protocol covers and how it rel
                 "pdf_url": pdf_url,
                 "images": images,
                 "relevance_score": round(proto["max_score"], 4),
+                "why_relevant": agent_reasons.get(protocol_id, ""),
             }
 
         elapsed = int((_time.time() - start) * 1000)
         yield {"type": "done", "total_protocols": len(ranked), "query_time_ms": elapsed}
+
+    def _agent_generate(self, prompt: str) -> str:
+        """
+        Deterministic Gemini call for the Local Protocol Agent (temperature 0 for
+        stable JSON, a bit more headroom than the summary call). Returns raw text.
+        """
+        url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
+        headers = {
+            "Authorization": f"Bearer {self._get_access_token()}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 512},
+        }
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code != 200:
+            raise Exception(f"Local Protocol Agent generation failed: {response.status_code}")
+        result = response.json()
+        return result["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     def _generate_summary(self, prompt: str) -> str:
         """Generate a short summary with Gemini (non-streaming, low token count)."""

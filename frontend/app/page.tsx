@@ -110,6 +110,7 @@ interface QueryResponse {
   }[];
   query_time_ms: number;
   route?: string;
+  sources?: string[];
 }
 
 // One completed prior turn in a multi-turn thread (kept compact for the
@@ -157,30 +158,38 @@ interface EnterpriseData {
 }
 
 
-function getRouteDisplay(route?: string) {
-  if (route === "local_protocol") {
-    return {
-      label: "Department protocols",
-      detail: "Searched your local protocol library only.",
-    };
-  }
+function getRouteDisplay(route?: string, sources?: string[]) {
+  // Base the "restricted search" note on what was ACTUALLY searched (sources),
+  // not the keyword route. The word "protocol" no longer forces local-only, so
+  // only claim a restricted search when the sources were genuinely limited.
+  const only = sources && sources.length === 1 ? sources[0] : null;
 
-  if (route === "personal") {
+  if (only === "personal" || route === "personal") {
     return {
       label: "Your uploaded files",
       detail: "Searched your personal files only.",
     };
   }
 
-  if (route === "general_clinical") {
+  if (only === "local") {
     return {
-      label: "General clinical references",
-      detail: "Searched the broader clinical reference set.",
+      label: "Department protocols",
+      detail: "Searched your local protocol library only.",
     };
   }
 
-  return null;
+  // Broad, multi-source search (incl. queries containing "protocol"): don't
+  // claim local-only — the Sources list shows the mix that was searched.
+  return {
+    label: "All selected sources",
+    detail: "Searched your protocols and selected clinical references.",
+  };
 }
+
+// Keep at most this many conversations open as full swipeable columns. Older
+// ones drop out of the column row but remain in the left drawer's history and
+// reopen (as a column) on click.
+const MAX_OPEN_PANELS = 5;
 
 export default function Home() {
   const [question, setQuestion] = useState("");
@@ -195,6 +204,8 @@ export default function Home() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // References/Sources are collapsed by default; expand on demand.
+  const [showSources, setShowSources] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   // Prior turns of the active conversation (rendered as a transcript above the
@@ -382,7 +393,7 @@ export default function Home() {
   const [requestLoading, setRequestLoading] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
 
-  const routeDisplay = getRouteDisplay(response?.route);
+  const routeDisplay = getRouteDisplay(response?.route, response?.sources);
 
   // Load theme from localStorage on mount
   useEffect(() => {
@@ -755,7 +766,7 @@ export default function Home() {
       setCurrentConversationId(conversationId);
     }
     // Ensure this conversation is an open column
-    setOpenPanels(prev => prev.includes(conversationId) ? prev : [...prev, conversationId]);
+    setOpenPanels(prev => prev.includes(conversationId) ? prev : [...prev, conversationId].slice(-MAX_OPEN_PANELS));
 
     // --- Q&A mode (existing logic) ---
     try {
@@ -877,6 +888,7 @@ export default function Home() {
                 citations: event.citations || [],
                 query_time_ms: event.query_time_ms || 0,
                 route: event.route,
+                sources: event.sources,
               };
             } else if (event.type === "error") {
               throw new Error(event.message);
@@ -934,7 +946,7 @@ export default function Home() {
     // Open a fresh conversation as a new column to the right (don't leave the
     // workspace). The new column shows the empty prompt to type into.
     const newId = `conv-${Date.now()}`;
-    setOpenPanels(prev => [...prev, newId]);
+    setOpenPanels(prev => [...prev, newId].slice(-MAX_OPEN_PANELS));
     setCurrentConversationId(newId);
     setQuestion("");
     setResponse(null);
@@ -957,7 +969,7 @@ export default function Home() {
     setPriorTurns(conversation.turns || []);
     setHasSearched(true);
     setCurrentConversationId(conversation.id);
-    setOpenPanels(prev => prev.includes(conversation.id) ? prev : [...prev, conversation.id]);
+    setOpenPanels(prev => prev.includes(conversation.id) ? prev : [...prev, conversation.id].slice(-MAX_OPEN_PANELS));
     setError(null);
     setSidebarOpen(false);
   };
@@ -2328,26 +2340,42 @@ export default function Home() {
               const pconv = conversations.find((c) => c.id === pid);
               const isActive = pid === currentConversationId;
 
-              // Inactive column — static snapshot; clicking resumes it IN PLACE
+              // Inactive column — full, readable transcript (read-only). Stays
+              // open so you can swipe between conversations; click anywhere to
+              // make it active and reply.
               if (!isActive) {
                 if (!pconv) return null;
                 return (
-                  <button
+                  <div
                     key={pid}
                     onClick={() => loadConversation(pconv)}
-                    title="Resume this conversation"
-                    className={`flex-shrink-0 w-[320px] text-left rounded-[6px] border-2 overflow-hidden transition-colors hover:border-[#013DED] ${darkMode ? 'border-[#24305C] bg-[#0B1535]' : 'border-gray-300 bg-white'}`}
+                    title="Click to make active and reply"
+                    className={`flex-shrink-0 w-[86vw] max-w-[560px] max-h-[82vh] overflow-y-auto rounded-[6px] border-2 p-5 space-y-4 cursor-pointer transition-colors ${darkMode ? 'border-[#24305C] bg-[#0B1535] hover:border-[#33407A]' : 'border-gray-300 bg-white hover:border-[#013DED]'}`}
                   >
-                    <div className="px-4 py-2.5" style={{ backgroundColor: '#013DED' }}>
-                      <p className="text-white text-sm font-medium truncate">{pconv.question}</p>
+                    {(pconv.turns || []).map((t, ti) => (
+                      <div key={`snap-turn-${ti}`} className={`rounded-[6px] overflow-hidden border ${darkMode ? 'border-[#24305C]' : 'border-[#013DED]/40'}`}>
+                        <div className="px-5 py-3" style={{ backgroundColor: '#013DED' }}>
+                          <p className="text-white font-medium">{t.question}</p>
+                        </div>
+                        <div className={`p-6 ${darkMode ? 'bg-[#0E173D]' : 'bg-white'}`}>
+                          <div className={`prose prose-sm max-w-none leading-relaxed font-data ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{t.answer}</ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="rounded-[6px] px-5 py-3" style={{ backgroundColor: '#013DED' }}>
+                      <p className="text-white font-medium">{pconv.question}</p>
                     </div>
-                    <div className="p-4">
-                      <p className={`text-xs font-data line-clamp-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {(pconv.response?.answer || '').replace(/[#*`>\[\]()]/g, '').slice(0, 240) || '…'}
-                      </p>
-                      <p className="mt-3 text-[11px] font-data uppercase tracking-wide text-[#013DED]">Click to resume →</p>
-                    </div>
-                  </button>
+                    {pconv.response?.answer && (
+                      <div className={`rounded-[6px] p-6 border ${darkMode ? 'border-[#24305C] bg-[#0E173D]' : 'border-[#013DED]/40 bg-white'}`}>
+                        <div className={`prose prose-sm max-w-none leading-relaxed font-data ${darkMode ? 'prose-invert text-gray-200' : 'text-gray-800'}`}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={citationComponents}>{pconv.response.answer}</ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[11px] font-data uppercase tracking-wide text-[#013DED]">Click to reply →</p>
+                  </div>
                 );
               }
 
@@ -2725,13 +2753,22 @@ export default function Home() {
                 {/* Citations */}
                 {response && response.citations.length > 0 && (
                   <div className={`rounded-[6px] p-5 ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-gray-50 border border-gray-200'}`}>
-                    <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <button
+                      onClick={() => setShowSources(v => !v)}
+                      title={showSources ? "Hide sources" : "Show sources"}
+                      className={`w-full text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
+                    >
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       Sources
-                    </h3>
-                    <div className="space-y-2">
+                      <span className={`text-xs font-normal ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>({response.citations.length})</span>
+                      <svg className={`w-4 h-4 ml-auto transition-transform ${showSources ? 'rotate-180' : ''} ${darkMode ? 'text-gray-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {showSources && (<>
+                    <div className="space-y-2 mt-4">
                       {response.citations.map((cite, idx) => {
                         const isWikEM = cite.source_type === "wikem";
                         const isPMC = cite.source_type === "pmc";
@@ -2875,6 +2912,7 @@ export default function Home() {
                         Web citations are external sources returned by the current search path for this answer.
                       </p>
                     )}
+                    </>)}
                   </div>
                 )}
               </div>
