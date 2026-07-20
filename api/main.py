@@ -960,9 +960,11 @@ async def query_protocols(
 
     query_route = route_query(request.query)
     effective_sources = request.sources
-    if query_route == "local_protocol":
-        effective_sources = ["local"]
-    elif query_route == "personal" and user:
+    # "My files" questions search personal uploads only. We intentionally do NOT
+    # force local-only when the word "protocol" appears anymore: it silently
+    # dropped the user's other selected sources, and the Local Protocol Agent now
+    # surfaces relevant local protocols alongside every answer regardless.
+    if query_route == "personal" and user:
         effective_sources = ["personal"]
 
     personal_user_id = user.uid if user and "personal" in effective_sources else None
