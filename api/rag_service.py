@@ -769,6 +769,59 @@ ANSWER:"""
             print(f"Error getting personal images for {source_uri}: {e}")
             return []
 
+    def _protocol_id_from_source(self, source: str) -> Optional[str]:
+        """Parse the protocol_id out of a local context's GCS source path."""
+        parts = source.replace("gs://", "").split("/")
+        if len(parts) >= 6:
+            pid = parts[4]
+        elif len(parts) >= 5:
+            pid = parts[3]
+        else:
+            return None
+        return None if pid == "extracted_text" else pid
+
+    def _filter_local_contexts_by_relevance(self, query: str, contexts: List[Dict]) -> List[Dict]:
+        """
+        Drop LOCAL protocol contexts the Local Protocol Agent judges irrelevant,
+        so a coincidental local match (e.g. a migraine protocol for a seizure
+        question) doesn't surface diagrams. This is the ONLY reliable way to
+        handle "no relevant local protocol exists" — a score cutoff can't, since
+        the lone irrelevant match is by definition the best-scoring local one.
+
+        Non-local contexts (WikEM/PMC/etc.) always pass through. On any agent
+        failure we keep everything, so images never break.
+        """
+        local = [c for c in contexts if c.get("source_type", "local") == "local"]
+        if not local:
+            return contexts
+
+        candidates_by_id: Dict[str, List[str]] = {}
+        for c in local:
+            pid = self._protocol_id_from_source(c.get("source", ""))
+            if pid:
+                candidates_by_id.setdefault(pid, []).append(c.get("text", ""))
+        if not candidates_by_id:
+            return contexts
+
+        candidates = [
+            {"protocol_id": pid, "text": " ".join(txts[:3])}
+            for pid, txts in candidates_by_id.items()
+        ]
+        try:
+            relevant_ids = set(
+                select_relevant_protocols(query, candidates, self._agent_generate).keys()
+            )
+        except Exception as e:
+            print(f"Local Protocol Agent (images) unavailable, keeping all: {e}")
+            return contexts
+
+        return [
+            c
+            for c in contexts
+            if c.get("source_type", "local") != "local"
+            or self._protocol_id_from_source(c.get("source", "")) in relevant_ids
+        ]
+
     def _get_images_from_contexts(self, contexts: List[Dict], all_contexts: List[Dict] = None) -> List[Dict]:
         """Extract images from context sources - maintains protocol relevance order.
 
@@ -1218,10 +1271,15 @@ ANSWER:"""
         for text_chunk in self.generate_answer_stream(query, contexts, history=history):
             yield {"type": "chunk", "text": text_chunk}
 
-        # Step 3: Get images
+        # Step 3: Get images — gate LOCAL protocols by the Local Protocol Agent so
+        # irrelevant local protocols (e.g. migraine for a seizure question) don't
+        # surface diagrams. Runs after the answer has streamed, so it adds no delay
+        # to the answer itself. Citations are intentionally left unfiltered so the
+        # answer's inline [n] references keep their numbering.
         images = []
         if include_images:
-            images = self._get_images_from_contexts(contexts, all_contexts=all_contexts)
+            image_contexts = self._filter_local_contexts_by_relevance(query, contexts)
+            images = self._get_images_from_contexts(image_contexts, all_contexts=all_contexts)
 
         # Step 4: Build citations (order matches context order: local → personal → foam → literature)
         citations = [
