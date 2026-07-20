@@ -204,6 +204,8 @@ export default function Home() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // References/Sources are collapsed by default; expand on demand.
+  const [showSources, setShowSources] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   // Prior turns of the active conversation (rendered as a transcript above the
@@ -2751,13 +2753,22 @@ export default function Home() {
                 {/* Citations */}
                 {response && response.citations.length > 0 && (
                   <div className={`rounded-[6px] p-5 ${darkMode ? 'bg-[#141414] border border-[#2A2A2A]' : 'bg-gray-50 border border-gray-200'}`}>
-                    <h3 className={`text-sm font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <button
+                      onClick={() => setShowSources(v => !v)}
+                      title={showSources ? "Hide sources" : "Show sources"}
+                      className={`w-full text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
+                    >
                       <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       Sources
-                    </h3>
-                    <div className="space-y-2">
+                      <span className={`text-xs font-normal ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>({response.citations.length})</span>
+                      <svg className={`w-4 h-4 ml-auto transition-transform ${showSources ? 'rotate-180' : ''} ${darkMode ? 'text-gray-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {showSources && (<>
+                    <div className="space-y-2 mt-4">
                       {response.citations.map((cite, idx) => {
                         const isWikEM = cite.source_type === "wikem";
                         const isPMC = cite.source_type === "pmc";
@@ -2901,6 +2912,7 @@ export default function Home() {
                         Web citations are external sources returned by the current search path for this answer.
                       </p>
                     )}
+                    </>)}
                   </div>
                 )}
               </div>
