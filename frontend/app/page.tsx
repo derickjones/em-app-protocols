@@ -18,6 +18,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://em-protocol-api-9300
 const STORAGE_KEY = "em-protocol-conversations";
 const THEME_KEY = "em-protocol-theme";
 const BUNDLE_KEY = "em-protocol-selected-bundles";
+// Tracks which bundle IDs this client has already seen, so a newly-added bundle
+// (e.g. "whiteboard") auto-joins an existing user's selection instead of being
+// silently excluded by their stale saved selection. See fetchEnterprise().
+const KNOWN_BUNDLE_KEY = "em-protocol-known-bundles";
 const ED_KEY = "em-protocol-selected-eds";
 const UNIVERSE_KEY = "em-protocol-ed-universe";
 const FAVORITES_KEY = "em-protocol-favorites";
@@ -218,6 +222,9 @@ export default function Home() {
   const [enterprise, setEnterprise] = useState<EnterpriseData | null>(null);
   const [selectedEds, setSelectedEds] = useState<Set<string>>(new Set());
   const [selectedBundles, setSelectedBundles] = useState<Set<string>>(new Set());
+  // Guards the bundle→localStorage save effect so it doesn't clobber the saved
+  // selection with the initial empty set before fetchEnterprise reconciles it.
+  const bundlesInitialized = useRef(false);
   const [expandedHospitals, setExpandedHospitals] = useState<Set<string>>(new Set());
 
   // EM Universe state
@@ -550,17 +557,36 @@ export default function Home() {
           setSelectedEds(new Set(data.eds.map(ed => ed.id)));
         }
 
-        // Default all bundles to selected if no saved preference
+        // Reconcile bundle selection against the live bundle list. There is no
+        // bundle-picker UI, so selectedBundles is otherwise frozen at whatever
+        // existed on a user's first load — meaning a later-added bundle (e.g.
+        // "whiteboard") would be silently excluded from their queries forever.
+        // Fix: auto-include any bundle this client hasn't seen before.
+        const allBundleIds = new Set<string>();
+        for (const ed of data.eds) {
+          for (const b of ed.bundles) {
+            allBundleIds.add(b.id);
+          }
+        }
         const savedBundles = localStorage.getItem(BUNDLE_KEY);
         if (!savedBundles) {
-          const allBundleIds = new Set<string>();
-          for (const ed of data.eds) {
-            for (const b of ed.bundles) {
-              allBundleIds.add(b.id);
-            }
-          }
+          // First-time user: select everything.
           setSelectedBundles(allBundleIds);
+        } else {
+          // Existing user: keep their saved selection, but add bundles that are
+          // new since we last saw them. "Known" seeds from their saved selection
+          // on first migration, so genuinely-new bundles get auto-included.
+          const saved: string[] = JSON.parse(savedBundles);
+          const knownRaw = localStorage.getItem(KNOWN_BUNDLE_KEY);
+          const known = new Set<string>(knownRaw ? JSON.parse(knownRaw) : saved);
+          const merged = new Set<string>(saved);
+          for (const id of allBundleIds) {
+            if (!known.has(id)) merged.add(id);
+          }
+          setSelectedBundles(merged);
         }
+        localStorage.setItem(KNOWN_BUNDLE_KEY, JSON.stringify(Array.from(allBundleIds)));
+        bundlesInitialized.current = true;
       }
     } catch (err) {
       console.error("Failed to fetch enterprise:", err);
@@ -611,23 +637,16 @@ export default function Home() {
     fetchHighlighted();
   }, [enterprise?.id, getIdToken]);
 
-  // Load selected bundles from localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(BUNDLE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setSelectedBundles(new Set(parsed));
-        } catch (e) {
-          console.error("Failed to parse saved bundles:", e);
-        }
-      }
-    }
-  }, []);
+  // (Bundle selection is initialized + reconciled in fetchEnterprise, which has
+  // the live bundle list needed to auto-include newly-added bundles. A separate
+  // mount effect that loaded the raw saved set used to race with — and clobber —
+  // that reconciliation, re-excluding new bundles; it was removed.)
 
-  // Save selected bundles to localStorage
+  // Save selected bundles to localStorage (only after fetchEnterprise has
+  // reconciled them — otherwise the initial empty set would clobber the saved
+  // selection before it's read).
   useEffect(() => {
+    if (!bundlesInitialized.current) return;
     if (typeof window !== 'undefined') {
       localStorage.setItem(BUNDLE_KEY, JSON.stringify(Array.from(selectedBundles)));
     }
