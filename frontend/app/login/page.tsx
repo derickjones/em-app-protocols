@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [showCorporate, setShowCorporate] = useState(false);
+  const [loadingMethod, setLoadingMethod] = useState<"google" | "email" | null>(null);
   const [corporateEmail, setCorporateEmail] = useState("");
 
   const { user, userProfile, signInWithGoogle, corporateLogin, error: authError } = useAuth();
@@ -23,12 +23,14 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setLocalError(null);
     setIsLoading(true);
+    setLoadingMethod("google");
     try {
       await signInWithGoogle();
     } catch {
       // Error is set in auth context
     } finally {
       setIsLoading(false);
+      setLoadingMethod(null);
     }
   };
 
@@ -36,6 +38,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLocalError(null);
     setIsLoading(true);
+    setLoadingMethod("email");
     try {
       await corporateLogin(corporateEmail);
       router.push("/");
@@ -43,6 +46,7 @@ export default function LoginPage() {
       // Error is set in auth context
     } finally {
       setIsLoading(false);
+      setLoadingMethod(null);
     }
   };
 
@@ -56,7 +60,7 @@ export default function LoginPage() {
   const displayError = localError || authError;
 
   return (
-    <div className="min-h-screen bg-[#0B1535] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-black flex items-center justify-center px-4 py-10">
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="flex flex-col items-center text-center mb-8">
@@ -70,16 +74,26 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Card */}
-        <div className="bg-[#0E173D] rounded-2xl p-8 border border-[#24305C]">
-          {/* Error Display */}
-          {displayError && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-              {displayError}
-            </div>
-          )}
+        {/* Error Display */}
+        {displayError && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+            {displayError}
+          </div>
+        )}
 
-          {/* Google Sign In */}
+        {/* Option 1 — Mayo staff via Google */}
+        <div className="bg-[#0C0C0C] rounded-2xl p-6 border border-white/10">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">
+              1
+            </span>
+            <h2 className="text-white font-semibold text-[15px]">Mayo Clinic staff</h2>
+          </div>
+          <p className="text-gray-400 text-xs leading-relaxed mb-4 pl-[34px]">
+            Sign in with your{" "}
+            <span className="font-semibold text-blue-400">@mayo.edu</span>{" "}
+            Google account for instant access to your department protocols.
+          </p>
           <button
             onClick={handleGoogleSignIn}
             disabled={isLoading}
@@ -103,46 +117,46 @@ export default function LoginPage() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            {isLoading && !showCorporate ? "Signing in..." : "Sign in with Google"}
+            {loadingMethod === "google" ? "Signing in..." : "Sign in with Google"}
           </button>
+        </div>
 
-          {/* Info */}
-          <p className="mt-4 text-center text-gray-400 text-sm">
-            Sign in with your <span className="font-semibold text-blue-400">@mayo.edu</span> account for instant access to department protocols.
-          </p>
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-white/10" />
+          <span className="text-gray-500 text-xs font-medium tracking-wide">OR</span>
+          <div className="flex-1 h-px bg-white/10" />
+        </div>
 
-          {/* Corporate Login Toggle */}
-          <div className="mt-6 border-t border-white/10 pt-4">
-            <button
-              onClick={() => setShowCorporate(!showCorporate)}
-              className="w-full text-center text-sm text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              {showCorporate ? "Hide" : "Or sign in with email"}
-            </button>
-
-            {showCorporate && (
-              <form onSubmit={handleCorporateLogin} className="mt-4 space-y-3">
-                <p className="text-xs text-gray-500">
-                  Enter your email to sign in without Google.
-                </p>
-                <input
-                  type="email"
-                  placeholder="your.name@email.com"
-                  value={corporateEmail}
-                  onChange={(e) => setCorporateEmail(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 bg-[#131314] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading || !corporateEmail}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-medium rounded-lg transition-colors text-sm"
-                >
-                  {isLoading && showCorporate ? "Signing in..." : "Sign in with email"}
-                </button>
-              </form>
-            )}
+        {/* Option 2 — Email sign-in + request access */}
+        <div className="bg-[#0C0C0C] rounded-2xl p-6 border border-white/10">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10 text-white text-xs font-bold shrink-0">
+              2
+            </span>
+            <h2 className="text-white font-semibold text-[15px]">Sign in with email</h2>
           </div>
+          <p className="text-gray-400 text-xs leading-relaxed mb-4 pl-[34px]">
+            Use your Mayo Clinic email if Google sign-in is blocked. Once in, request
+            access to Mayo protocols from the sidebar.
+          </p>
+          <form onSubmit={handleCorporateLogin} className="space-y-3">
+            <input
+              type="email"
+              placeholder="your.name@mayo.edu"
+              value={corporateEmail}
+              onChange={(e) => setCorporateEmail(e.target.value)}
+              required
+              className="w-full px-4 py-3 bg-black border border-white/15 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !corporateEmail}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/40 text-white font-medium rounded-lg transition-colors text-sm"
+            >
+              {loadingMethod === "email" ? "Signing in..." : "Sign in with email"}
+            </button>
+          </form>
         </div>
       </div>
     </div>

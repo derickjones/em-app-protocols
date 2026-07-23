@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ArrowUp, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star, Bookmark } from "lucide-react";
+import { Sparkles, LogOut, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ArrowUp, Plus, MessageSquare, X, Trash2, Building2, Check, Crown, Shield, Globe, FileText, BookOpen, Save, ThumbsUp, ThumbsDown, Upload, FolderOpen, Star, Bookmark } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
@@ -229,6 +229,7 @@ export default function Home() {
 
   // EM Universe state
   const [settingsCollapsed, setSettingsCollapsed] = useState(false); // settings panel default open
+  const [conversationsExpanded, setConversationsExpanded] = useState(false); // collapse long list so settings stay visible
   const [wikemEnabled, setWikemEnabled] = useState(true);
   const [pmcEnabled, setPmcEnabled] = useState(true);
   const [litflEnabled, setLitflEnabled] = useState(true);
@@ -1279,7 +1280,7 @@ export default function Home() {
               <p>No conversations yet</p>
             </div>
           ) : (
-            conversations.map((conv) => (
+            (conversationsExpanded ? conversations : conversations.slice(0, 5)).map((conv) => (
               <div
                 key={conv.id}
                 onClick={() => loadConversation(conv)}
@@ -1315,6 +1316,22 @@ export default function Home() {
                 </div>
               </div>
             ))
+          )}
+
+          {/* Show more / less — keeps the list short so settings below stay visible */}
+          {conversations.length > 5 && (
+            <button
+              onClick={() => setConversationsExpanded(!conversationsExpanded)}
+              className={`w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
+                darkMode ? 'text-gray-400 hover:bg-[#131E4D]' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {conversationsExpanded ? (
+                <>Show less <ChevronUp className="w-3.5 h-3.5" /></>
+              ) : (
+                <>Show all {conversations.length} <ChevronDown className="w-3.5 h-3.5" /></>
+              )}
+            </button>
           )}
         </div>
 
