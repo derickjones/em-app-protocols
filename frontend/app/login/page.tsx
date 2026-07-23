@@ -137,8 +137,8 @@ export default function LoginPage() {
             <h2 className="text-white font-semibold text-[15px]">Sign in with email</h2>
           </div>
           <p className="text-gray-400 text-xs leading-relaxed mb-4 pl-[34px]">
-            Use your Mayo Clinic email if Google sign-in is blocked. Once in, request
-            access to Mayo protocols from the sidebar.
+            Use your Mayo Clinic email if you don&apos;t have an enterprise Google
+            account set up. Once in, request access to Mayo protocols from the sidebar.
           </p>
           <form onSubmit={handleCorporateLogin} className="space-y-3">
             <input
